@@ -1825,6 +1825,8 @@ class BaseLoaderSet(object):
                                                           cpu_idx, ks_idx, profile, stress_cmd))
                     setup_thread.daemon = True
                     setup_thread.start()
+                    if loader_idx == 0 and cpu_idx == 0:
+                        time.sleep(30)
 
         return queue
 
