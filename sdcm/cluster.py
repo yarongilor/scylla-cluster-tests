@@ -1813,6 +1813,8 @@ class BaseLoaderSet(object):
                     setup_thread.start()
                     if loader_idx == 0 and cpu_idx == 0:
                         time.sleep(30)
+                    else:
+                        time.sleep(30)
 
         return queue
 
