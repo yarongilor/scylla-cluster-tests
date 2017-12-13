@@ -513,6 +513,9 @@ class BaseNode(object):
         for i in glob.glob('data_dir/grafana/*.%s.json' % scylla_version):
             json_mapping[i.replace('data_dir/', '')] = 'dashboards/db'
 
+        for i in glob.glob('data_dir/scylla-dash-per-server-nemesis.%s.json' % scylla_version):
+            json_mapping[i.replace('data_dir/', '')] = 'dashboards/db'
+
         for grafana_json in json_mapping:
             url = 'http://%s:3000/api/%s' % (self.public_ip_address, json_mapping[grafana_json])
             wait.wait_for(_register_grafana_json, step=10,
