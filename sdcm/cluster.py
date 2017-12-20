@@ -82,6 +82,7 @@ IP_SSH_CONNECTIONS = 'public'
 TASK_QUEUE = 'task_queue'
 RES_QUEUE = 'res_queue'
 
+logger = logging.getLogger(__name__)
 
 def set_ip_ssh_connections(ip_type):
     global IP_SSH_CONNECTIONS
@@ -1867,6 +1868,9 @@ class BaseLoaderSet(object):
             value = line[split_idx + 1:].split()[0]
             results[key] = value
 
+        if not enable_parse:
+            logger.warning('Cannot find summary in c-stress results: %s', lines)
+            return {}
         return results
 
     @staticmethod
@@ -2035,7 +2039,9 @@ class BaseLoaderSet(object):
         for node, result in results:
             output = result.stdout + result.stderr
             lines = output.splitlines()
-            cs_summary.append(self._parse_cs_summary(lines))
+            node_cs_res = self._parse_cs_summary(lines)
+            if node_cs_res:
+                cs_summary.append(node_cs_res)
             for line in lines:
                 if 'java.io.IOException' in line:
                     errors += ['%s: %s' % (node, line.strip())]
@@ -2055,7 +2061,9 @@ class BaseLoaderSet(object):
         for node, result in results:
             output = result.stdout + result.stderr
             lines = output.splitlines()
-            ret.append(self._parse_cs_summary(lines))
+            node_cs_res = self._parse_cs_summary(lines)
+            if node_cs_res:
+                ret.append(node_cs_res)
 
         return ret
 
