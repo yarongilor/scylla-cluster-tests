@@ -44,8 +44,11 @@ class LongevityTest(ClusterTester):
 
         # prepare write workload
         prepare_write_cmd = self.params.get('prepare_write_cmd')
+        n_keyspaces = self.params.get('n_keyspaces')
+        if not n_keyspaces:
+            n_keyspaces = 1
         if prepare_write_cmd:
-            write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd)
+            write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=n_keyspaces)
             self.db_cluster.wait_total_space_used_per_node()
             self.db_cluster.start_nemesis(interval=self.params.get('nemesis_interval'))
             self.verify_stress_thread(queue=write_queue)
@@ -55,7 +58,7 @@ class LongevityTest(ClusterTester):
         if stress_multiplier > 1:
             stress_cmds *= stress_multiplier
         for stress_cmd in stress_cmds:
-            params = {'stress_cmd': stress_cmd}
+            params = {'stress_cmd': stress_cmd, 'keyspace_num': n_keyspaces}
             if 'counter_' in stress_cmd:
                 self._create_counter_table()
             if 'profile' in stress_cmd:
