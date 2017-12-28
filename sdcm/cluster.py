@@ -1705,6 +1705,8 @@ class BaseLoaderSet(object):
                 node.remoter.run("echo 'export PATH=$PATH:/usr/local/go/bin' >> $HOME/.bashrc")
                 node.remoter.run("source $HOME/.bashrc")
                 node.remoter.run("go get github.com/pdziepak/scylla-bench")
+                node.remoter.run(cmd='sudo sed -i -e "s/-server -ea/-Xms4096m -Xmx8192m -server -ea/g" /bin/cassandra-stress')
+
 
             queue.put(node)
             queue.task_done()
