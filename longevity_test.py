@@ -44,11 +44,21 @@ class LongevityTest(ClusterTester):
 
         # prepare write workload
         prepare_write_cmd = self.params.get('prepare_write_cmd')
-        n_keyspaces = self.params.get('n_keyspaces')
-        if not n_keyspaces:
-            n_keyspaces = 1
+        keyspace_num = self.params.get('keyspace_num')
+        round_robin = self.params.get('keyspace_name')
+        if not keyspace_num:
+            keyspace_num = 1
+        if not round_robin:
+            round_robin = 'false'
         if prepare_write_cmd:
-            write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=n_keyspaces)
+            # If the test load is too heavy for one lader (e.g. many keyspaces), the load should be splitted evenly
+            # across the loaders (round_robin).
+            if keyspace_num > 1 and round_robin == 'true':
+                for i in xrange(1, keyspace_num):
+                    keyspace_name = 'keyspace{}'.format(i)
+                    write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_name=keyspace_name)
+            else:
+                write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=keyspace_num)
             self.db_cluster.wait_total_space_used_per_node()
             self.db_cluster.start_nemesis(interval=self.params.get('nemesis_interval'))
             self.verify_stress_thread(queue=write_queue)
@@ -58,7 +68,7 @@ class LongevityTest(ClusterTester):
         if stress_multiplier > 1:
             stress_cmds *= stress_multiplier
         for stress_cmd in stress_cmds:
-            params = {'stress_cmd': stress_cmd, 'keyspace_num': n_keyspaces}
+            params = {'stress_cmd': stress_cmd, 'keyspace_num': keyspace_num}
             if 'counter_' in stress_cmd:
                 self._create_counter_table()
             if 'profile' in stress_cmd:
