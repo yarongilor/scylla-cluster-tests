@@ -1807,6 +1807,7 @@ class BaseLoaderSet(object):
             # cancel stress_num
             stress_num = 1
             loaders = [self.get_loader()]
+            self.log.debug("Round-Robin through loaders, Selected loader is {} ".format(loaders))
         else:
             loaders = self.nodes
 

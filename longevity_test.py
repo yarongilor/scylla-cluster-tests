@@ -15,6 +15,7 @@
 
 import os
 import re
+import time
 from avocado import main
 
 from sdcm.tester import ClusterTester
@@ -41,6 +42,7 @@ class LongevityTest(ClusterTester):
                                     test_type=self.test_type,
                                     test_id=self.test_id)
         stress_queue = list()
+        write_queue = list()
 
         # prepare write workload
         prepare_write_cmd = self.params.get('prepare_write_cmd')
@@ -54,9 +56,11 @@ class LongevityTest(ClusterTester):
             # If the test load is too heavy for one lader (e.g. many keyspaces), the load should be splitted evenly
             # across the loaders (round_robin).
             if keyspace_num > 1 and round_robin == 'true':
+                self.log.debug("Using round_robin for multiple Keyspaces...")
                 for i in xrange(1, keyspace_num):
                     keyspace_name = 'keyspace{}'.format(i)
-                    write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_name=keyspace_name)
+                    write_queue.append(self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_name=keyspace_name))
+                    time.sleep(30)
             else:
                 write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=keyspace_num)
             self.db_cluster.wait_total_space_used_per_node()
