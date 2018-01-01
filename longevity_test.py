@@ -46,16 +46,12 @@ class LongevityTest(ClusterTester):
 
         # prepare write workload
         prepare_write_cmd = self.params.get('prepare_write_cmd')
-        keyspace_num = self.params.get('keyspace_num')
-        round_robin = self.params.get('keyspace_name')
-        if not keyspace_num:
-            keyspace_num = 1
-        if not round_robin:
-            round_robin = 'false'
+        keyspace_num = self.params.get('keyspace_num', default=1)
+
         if prepare_write_cmd:
             # If the test load is too heavy for one lader (e.g. many keyspaces), the load should be splitted evenly
             # across the loaders (round_robin).
-            if keyspace_num > 1 and round_robin == 'true':
+            if keyspace_num > 1 and self.params.get('round_robin', default='').lower() == 'true':
                 self.log.debug("Using round_robin for multiple Keyspaces...")
                 for i in xrange(1, keyspace_num):
                     keyspace_name = 'keyspace{}'.format(i)
