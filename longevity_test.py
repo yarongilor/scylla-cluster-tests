@@ -61,7 +61,7 @@ class LongevityTest(ClusterTester):
                     write_queue.append(self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_name=keyspace_name))
                     time.sleep(5)
             else:
-                write_queue = self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=keyspace_num)
+                write_queue.append(self.run_stress_thread(stress_cmd=prepare_write_cmd, keyspace_num=keyspace_num))
             self.db_cluster.wait_total_space_used_per_node()
             self.db_cluster.start_nemesis(interval=self.params.get('nemesis_interval'))
             for stress in write_queue:
