@@ -50,17 +50,30 @@ class LongevityTest(ClusterTester):
                 cs_profile = re.search('profile=(.*)yaml', stress_cmd).group(1) + 'yaml'
                 cs_profile = os.path.join(os.path.dirname(__file__), 'data_dir', os.path.basename(cs_profile))
                 params.update({'profile': cs_profile})
+
+            if 'compression' in stress_cmd:
+                if 'keyspace_name' not in params:
+                        keyspace_name = "keyspace_{}".format(re.search('compression=(.*)Compressor', stress_cmd).group(1))
+                        params.update({'keyspace_name': keyspace_name})
+
             self.log.debug('stress cmd: {}'.format(stress_cmd))
             stress_queue.append(self.run_stress_thread(**params))
             if 'profile' in params:
                 del params['profile']
+
+            if 'keyspace_name' in params:
+                del params['keyspace_name']
 
         self.db_cluster.wait_total_space_used_per_node()
         stress_read_cmd = self.params.get('stress_read_cmd', default=None)
         if stress_read_cmd:
             for stress_cmd in stress_read_cmd:
                 self.log.debug('stress read cmd: {}'.format(stress_cmd))
-                stress_queue.append(self.run_stress_thread(stress_cmd=stress_cmd))
+                if 'compression' in stress_cmd:
+                    keyspace_name = "keyspace_{}".format(re.search('compression=(.*)Compressor', stress_cmd).group(1))
+                    stress_queue.append(self.run_stress_thread(stress_cmd=stress_cmd, keyspace_name=keyspace_name))
+                else:
+                    stress_queue.append(self.run_stress_thread(stress_cmd=stress_cmd))
 
         self.db_cluster.start_nemesis(interval=self.params.get('nemesis_interval'))
 
