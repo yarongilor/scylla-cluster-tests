@@ -226,6 +226,7 @@ class GCECluster(cluster.BaseCluster):
                                                               ex_network=self._gce_network,
                                                               ex_disks_gce_struct=gce_disk_struct)
             self.log.info('Created instance %s', instance)
+            self.log.debug('GCE instance extra info: %s', instance.extra)
             cluster.GCE_INSTANCES.append(instance)
             try:
                 n = GCENode(gce_instance=instance,
