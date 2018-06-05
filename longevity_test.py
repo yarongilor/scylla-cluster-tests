@@ -125,7 +125,8 @@ class LongevityTest(ClusterTester):
             self._flush_all_nodes()
 
             # In case we would like to verify all keys were written successfully before we start other stress / nemesis
-            if self.params.get('prepare_verify_cmd'):
+            prepare_verify_cmd = self.params.get('prepare_verify_cmd', default=None)
+            if prepare_verify_cmd:
                 verify_queue.append(self.run_stress_thread(stress_cmd=prepare_verify_cmd, keyspace_num=keyspace_num))
 
                 for stress in verify_queue:
