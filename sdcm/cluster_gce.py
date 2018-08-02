@@ -200,7 +200,7 @@ class GCECluster(cluster.BaseCluster):
                 },
                 "autoDelete": True}
 
-    def add_nodes(self, count, ec2_user_data='', dc_idx=0):
+    def add_nodes(self, count, ec2_user_data='', dc_idx=0, enable_auto_bootstrap=False):
         nodes = []
         for node_index in range(self._node_index + 1, self._node_index + count + 1):
             name = "%s-%s-%s" % (self.node_prefix, dc_idx, node_index)
@@ -245,7 +245,7 @@ class GCECluster(cluster.BaseCluster):
 
                 local_nodes = [n for n in self.nodes if n.dc_idx == dc_idx]
                 if len(local_nodes) > len(nodes):
-                    n.is_addition = True
+                    n.enable_auto_bootstrap = True
 
         assert len(nodes) == count, 'Fail to create {} instances'.format(count)
         self.log.info('added nodes: %s', nodes)

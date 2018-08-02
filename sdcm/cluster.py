@@ -308,8 +308,8 @@ class BaseNode(object):
         self.start_backtrace_thread()
         # We should disable bootstrap when we create nodes to establish the cluster,
         # if we want to add more nodes when the cluster already exists, then we should
-        # enable bootstrap. So addition means not the first set of node.
-        self.is_addition = False
+        # enable bootstrap.
+        self.enable_auto_bootstrap = False
         self.scylla_version = ''
         self.is_enterprise = None
 
@@ -1011,19 +1011,25 @@ WantedBy=multi-user.target
             scylla_yaml_contents = p.sub('endpoint_snitch: "{0}"'.format(endpoint_snitch),
                                          scylla_yaml_contents)
 
-        if self.is_addition:
+        if self.enable_auto_bootstrap:
             if 'auto_bootstrap' in scylla_yaml_contents:
+                if re.findall("auto_bootstrap: False", scylla_yaml_contents):
+                    self.log.debug('auto_bootstrap is not set as expected, update it to `True`.')
                 p = re.compile('auto_bootstrap:.*')
                 scylla_yaml_contents = p.sub('auto_bootstrap: True',
                                              scylla_yaml_contents)
             else:
+                self.log.debug('auto_bootstrap is missing, set it `True`.')
                 scylla_yaml_contents += "\nauto_bootstrap: True\n"
         else:
             if 'auto_bootstrap' in scylla_yaml_contents:
+                if re.findall("auto_bootstrap: True", scylla_yaml_contents):
+                    self.log.debug('auto_bootstrap is not set as expected, update it to `False`.')
                 p = re.compile('auto_bootstrap:.*')
                 scylla_yaml_contents = p.sub('auto_bootstrap: False',
                                              scylla_yaml_contents)
             else:
+                self.log.debug('auto_bootstrap is missing, set it `False`.')
                 scylla_yaml_contents += "\nauto_bootstrap: False\n"
 
         if authenticator in ['AllowAllAuthenticator', 'PasswordAuthenticator']:
@@ -1183,7 +1189,7 @@ class BaseCluster(object):
             if node.n_coredumps > 0:
                 self.coredumps[node.name] = node.n_coredumps
 
-    def add_nodes(self, count, ec2_user_data='', dc_idx=0):
+    def add_nodes(self, count, ec2_user_data='', dc_idx=0, enable_auto_bootstrap=False):
         pass
 
     def get_node_private_ips(self):
