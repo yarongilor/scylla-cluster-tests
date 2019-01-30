@@ -1146,6 +1146,8 @@ server_encryption_options:
             self.remoter.run('sudo supervisorctl start scylla-manager')
         else:
             self.remoter.run('sudo systemctl restart scylla-manager.service')
+        time.sleep(5)
+
 
     def install_mgmt(self, scylla_repo, scylla_mgmt_repo, manager_backend_client_encrypt=None):
         self.log.debug('Install scylla-manager')
@@ -1228,6 +1230,8 @@ server_encryption_options:
 
         if not res or "Active: failed" in res.stdout:
             raise ScyllaManagerError("Scylla-Manager is not properly installed or not running: {}".format(res))
+        time.sleep(5)
+
 
     def config_scylla_manager(self, mgmt_port, db_hosts):
         """
