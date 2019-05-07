@@ -1,10 +1,15 @@
 # coding: utf-8
+# -*- coding: utf-8 -*-
 import os
 
 from enum import Enum
 from textwrap import dedent
 
 from invoke.exceptions import UnexpectedExit, Failure
+
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 import requests
 import logging
