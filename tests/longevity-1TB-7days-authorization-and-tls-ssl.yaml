@@ -20,7 +20,7 @@ n_monitor_nodes: 1
 nemesis_class_name: 'ChaosMonkey'
 nemesis_interval: 30
 nemesis_during_prepare: 'false'
-user_prefix: 'longevity-tls-1tb-7d-VERSION'
+user_prefix: 'ics-precreate-longevity-tls-1tb-7d-VERSION'
 failure_post_behavior: keep
 space_node_threshold: 644245094
 ip_ssh_connections: 'private'
