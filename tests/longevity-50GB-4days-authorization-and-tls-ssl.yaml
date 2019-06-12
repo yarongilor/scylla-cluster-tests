@@ -17,7 +17,7 @@ n_loaders: 3
 n_monitor_nodes: 1
 nemesis_class_name: 'ChaosMonkey'
 nemesis_interval: 5
-user_prefix: 'longevity-tls-50gb-4d-VERSION'
+user_prefix: 'precreate-ics-longevity-tls-50gb-4d-VERSION'
 failure_post_behavior: keep
 space_node_threshold: 644245094
 ip_ssh_connections: 'private'
@@ -34,6 +34,7 @@ append_scylla_args: '--blocked-reactor-notify-ms 500  --abort-on-lsa-bad-alloc 1
 
 # aws instance_provision: on_demand|spot_fleet|spot_low_price|spot_duration|mixed
 instance_provision: 'mixed'
+pre_create_schema: True
 
 # scylla-manager configuration
 # if running on aws and use_mgmt is true, the monitor image should not contain scylla

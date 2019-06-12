@@ -1009,7 +1009,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
             query += ' AND compression = {}'
 
         if compaction is not None:
-            query = "%s AND compaction = {'class': '%s'}'" % (query, compaction)
+            query += " AND compaction={'class': '%s'}" % compaction
 
         if read_repair is not None:
             query = '%s AND read_repair_chance=%f' % (query, read_repair)
@@ -1025,6 +1025,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
         if compact_storage:
             query += ' AND COMPACT STORAGE'
 
+        self.log.debug('CQL query to execute: {}'.format(query))
         session.execute(query)
         time.sleep(0.2)
 
