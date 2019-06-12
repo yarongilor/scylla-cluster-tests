@@ -324,7 +324,8 @@ class LongevityTest(ClusterTester):
             self.create_ks(session, keyspace_name, rf=3)
             self.log.debug('{} Created'.format(keyspace_name))
             self.create_cf(session,  'standard1', key_type='blob', read_repair=0.0, compact_storage=True,
-                           columns={'"C0"': 'blob'}, compaction='IncrementalCompactionStrategy',
+                           columns={'"C0"': 'blob', '"C1"': 'blob', '"C2"': 'blob', '"C3"': 'blob', '"C4"': 'blob'},
+                           compaction='IncrementalCompactionStrategy',
                            in_memory=in_memory, scylla_encryption_options=scylla_encryption_options)
 
     def _flush_all_nodes(self):
