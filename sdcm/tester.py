@@ -982,7 +982,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
         session.execute('USE %s' % name)
 
     def create_cf(self, session, name, key_type="varchar",
-                  speculative_retry=None, read_repair=None, compression=None,
+                  speculative_retry=None, read_repair=None, compaction=None, compression=None,
                   gc_grace=None, columns=None,
                   compact_storage=False, in_memory=False, scylla_encryption_options=None):
 
@@ -1007,6 +1007,9 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
             # if a compression option is omitted, C*
             # will default to lz4 compression
             query += ' AND compression = {}'
+
+        if compaction is not None:
+            query = "%s AND compaction = {'class': '%s'}'" % (query, compaction)
 
         if read_repair is not None:
             query = '%s AND read_repair_chance=%f' % (query, read_repair)
