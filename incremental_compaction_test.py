@@ -46,27 +46,32 @@ class IncrementalCompactionTest(ClusterTester):
 
         self.log.info('Starting c-s write workload')
         stress_cmd = self.params.get('stress_cmd')
-        cs_throughput_limit_mb = self.params.get('cs_throughput_limit_mb')
-        cs_col_size_kb = self.params.get('cs_col_size_kb')
-        throughput_kb_sec = cs_throughput_limit_mb * cs_col_size_kb
-        self.log.debug("throughput_kb_sec: {} cs_throughput_limit_mb: {} cs_col_size_kb: {}".format(throughput_kb_sec, cs_throughput_limit_mb, cs_col_size_kb))
+        cs_ops_limit_mb = self.params.get('cs_ops_limit_mb')
+        cs_col_size_mb = self.params.get('cs_col_size_mb')
+        throughput_kb_sec = cs_ops_limit_mb * cs_col_size_mb * 1024
+        self.log.debug("throughput_kb_sec: {} cs_ops_limit_mb: {} cs_col_size_mb: {}".format(throughput_kb_sec, cs_ops_limit_mb, cs_col_size_mb))
         stress_cmd_queue = self.run_stress_thread(stress_cmd=stress_cmd, duration=10000)
         self.start_time = datetime.datetime.now()
-        node = self.db_cluster.nodes[0]
+        self.wait_data_dir_reaching(20, node=self.db_cluster.nodes[0])
         cycles = 2000
-        sleep_time = 5
+        sleep_initial_time = 30
+        time.sleep(sleep_initial_time)
+        sleep_interval = 10
+        def _print_debug_node(node, msg):
+            self.log.debug(msg="[{}] {}".format(node.private_ip_address, msg))
         for idx in range(cycles):
             self.log.debug("==================>  Cycle #{}  <================".format(idx))
-            time.sleep(sleep_time)
-            used_size_mb = int(self.get_used_capacity(node=node))
-            used_size_kb = used_size_mb * 1024
-            self.log.debug("Filesystem used capacity is: {}KB ({}MB)".format(used_size_kb, used_size_mb))
-            elapsed_seconds = get_stress_elapsed_time_sec()
-            neto_expected_capacity_kb = throughput_kb_sec * elapsed_seconds
-            self.log.debug("Estimated Neto capacity (after {} seconds) is: {}KB ({}MB)".format(elapsed_seconds, neto_expected_capacity_kb, neto_expected_capacity_kb/1024))
-            delta_capacity_kb = used_size_kb - neto_expected_capacity_kb
-            self.log.debug("Delta used capacity is: {}KB ({}MB)".format(delta_capacity_kb, delta_capacity_kb/1024))
-            self.log.debug("Space amplification percentage is: {}".format(used_size_kb/neto_expected_capacity_kb*100))
+            time.sleep(sleep_interval)
+            for node in self.db_cluster.nodes:
+                used_size_mb = int(self.get_used_capacity(node=node))
+                used_size_kb = used_size_mb * 1024
+                _print_debug_node(node=node, msg="Filesystem used capacity is: {}KB ({}MB)".format(used_size_kb, used_size_mb))
+                elapsed_seconds = get_stress_elapsed_time_sec()
+                neto_expected_capacity_kb = throughput_kb_sec * elapsed_seconds
+                _print_debug_node(node=node, msg="Estimated Neto capacity (after {} seconds) is: {}KB ({}MB)".format(elapsed_seconds, neto_expected_capacity_kb, neto_expected_capacity_kb/1024))
+                delta_capacity_kb = used_size_kb - neto_expected_capacity_kb
+                _print_debug_node(node=node, msg="Delta used capacity is: {}KB ({}MB)".format(delta_capacity_kb, delta_capacity_kb/1024))
+                _print_debug_node(node=node, msg="Space amplification percentage is: {}".format(used_size_kb/neto_expected_capacity_kb*100))
 
 
 
