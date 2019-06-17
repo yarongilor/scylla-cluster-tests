@@ -8,9 +8,9 @@ gce_datacenter: 'us-east1-b'
 #scylla_repo: https://s3.amazonaws.com/downloads.scylladb.com/enterprise/rpm/unstable/centos/master/68/scylla.repo
 
 # workloads
-stress_cmd: "cassandra-stress write no-warmup cl=ALL duration=30m -schema 'replication(factor=2)' -port jmx=6868 -mode cql3 native -rate threads=1 limit=40/s -col 'size=FIXED(1048576) n=FIXED(1)' -pop seq=1..9000000000"
-cs_throughput_limit_mb: 40
-cs_col_size_kb: 1024 # 1 MB
+stress_cmd: "cassandra-stress write cl=QUORUM duration=60m -schema 'replication(factor=2)' -port jmx=6868 -mode cql3 native -rate threads=1 limit=10/s -col 'size=FIXED(1048576) n=FIXED(1)' -pop seq=1..9000000000"
+cs_ops_limit_mb: 10
+cs_col_size_mb: 1 # 1024 KB
 
 #prepare_write_stress: cassandra-stress write no-warmup cl=QUORUM n=10000000 -schema 'replication(factor=3) compression=LZ4Compressor' -port jmx=6868 -mode cql3 native compression=lz4 -rate threads=1000 -pop seq=1..10000000 -log interval=5
 #stress_cmd_read_10m: cassandra-stress read no-warmup cl=QUORUM duration=10m -schema 'replication(factor=3) compression=SnappyCompressor' -port jmx=6868 -mode cql3 native compression=snappy -rate threads=1000 -pop seq=1..10000000 -log interval=5
@@ -30,6 +30,7 @@ ip_ssh_connections: 'public' # 'private'
 #authenticator_user: 'cassandra'
 #authenticator_password: 'cassandra'
 #authorizer: 'ScyllaAuthorizer'
+instance_provision: 'spot_low_price' # 'spot_low_price' 'on_demand'
 
 backends: !mux
     gce: !mux
@@ -64,7 +65,7 @@ backends: !mux
             security_group_ids: 'sg-c5e1f7a0'
             subnet_id: 'subnet-ec4a72c4'
             # ami_id_db_scylla: 'ami-04c7c8f4ab9be4cfd' # enterprise-2019.1 # 'ami-9887c6e7' # Clean CentOs 7
-            ami_id_db_scylla: 'ami-04c7c8f4ab9be4cfd'
+            ami_id_db_scylla: 'ami-0eafe0a8f4d1fad98'
             ami_db_scylla_user: 'centos'
             ami_id_loader: 'ami-0fc423ac17a75570d'
             ami_loader_user: 'centos'
