@@ -31,6 +31,7 @@ ip_ssh_connections: 'public' # 'private'
 #authenticator_password: 'cassandra'
 #authorizer: 'ScyllaAuthorizer'
 instance_provision: 'spot_low_price' # 'spot_low_price' 'on_demand'
+pre_create_schema: True
 
 backends: !mux
     gce: !mux
@@ -65,7 +66,7 @@ backends: !mux
             security_group_ids: 'sg-c5e1f7a0'
             subnet_id: 'subnet-ec4a72c4'
             # ami_id_db_scylla: 'ami-04c7c8f4ab9be4cfd' # enterprise-2019.1 # 'ami-9887c6e7' # Clean CentOs 7
-            ami_id_db_scylla: 'ami-0eafe0a8f4d1fad98'
+            ami_id_db_scylla: 'ami-04fc7aa03aeaa1869'
             ami_db_scylla_user: 'centos'
             ami_id_loader: 'ami-0fc423ac17a75570d'
             ami_loader_user: 'centos'
