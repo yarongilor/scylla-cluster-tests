@@ -16,8 +16,14 @@ import datetime
 
 import time
 from avocado import main
+from enum import Enum
 
 from sdcm.tester import ClusterTester
+
+class CompactionStrategy(Enum):
+    STCS = "SizeTieredCompactionStrategy"
+    LCS = "LeveledCompactionStrategy"
+    ICS = "IncrementalCompactionStrategy"
 
 
 class IncrementalCompactionTest(ClusterTester):
@@ -27,8 +33,27 @@ class IncrementalCompactionTest(ClusterTester):
     :avocado: enable
     """
 
+    def _pre_create_schema(self, keyspace_num=1, in_memory=False, scylla_encryption_options=None, rf=3, compaction=None):
+        """
 
+        :param self:
+        :param keyspace_num:
+        :param in_memory:
+        :param scylla_encryption_options:
+        :return:
+        """
+        node = self.db_cluster.nodes[0]
+        with self.cql_connection_patient(node) as session:
+            self.log.debug('Pre Creating Schema for c-s with {} keyspaces and {} compaction and RF of - {} . '.format(keyspace_num, compaction, rf))
 
+            for i in xrange(1, keyspace_num + 1):
+                keyspace_name = 'keyspace{}'.format(i)
+                self.create_ks(session, keyspace_name, rf=rf)
+                self.log.debug('{} Created'.format(keyspace_name))
+                self.create_cf(session, 'standard1', key_type='blob', read_repair=0.0, compact_storage=True,
+                               columns={'"C0"': 'blob', '"C1"': 'blob', '"C2"': 'blob', '"C3"': 'blob',
+                                        '"C4"': 'blob'},
+                               in_memory=in_memory, scylla_encryption_options=scylla_encryption_options, compaction=compaction)
 
     def test_compaction_space_amplification(self):
         """
@@ -38,11 +63,11 @@ class IncrementalCompactionTest(ClusterTester):
         """
         # Util functions ===============================================================================================
 
-        def get_stress_elapsed_time_sec():
+        def _get_stress_elapsed_time_sec():
             return int((datetime.datetime.now() - self.start_time).seconds)
-        # Util functions ===============================================================================================
 
-        # stress_cmd = self.params.get('prepare_write_cmd')
+
+        # Util functions ===============================================================================================
 
         self.log.info('Starting c-s write workload')
         stress_cmd = self.params.get('stress_cmd')
@@ -50,6 +75,11 @@ class IncrementalCompactionTest(ClusterTester):
         cs_col_size_mb = self.params.get('cs_col_size_mb')
         throughput_kb_sec = cs_ops_limit_mb * cs_col_size_mb * 1024
         self.log.debug("throughput_kb_sec: {} cs_ops_limit_mb: {} cs_col_size_mb: {}".format(throughput_kb_sec, cs_ops_limit_mb, cs_col_size_mb))
+        keyspace_num = self.params.get('keyspace_num', default=1)
+        pre_create_schema = self.params.get('pre_create_schema', default=False)
+        if pre_create_schema:
+            rf = min(3, len(self.db_cluster.nodes))
+            self._pre_create_schema(keyspace_num, compaction=CompactionStrategy.ICS.value, rf=rf)
         stress_cmd_queue = self.run_stress_thread(stress_cmd=stress_cmd, duration=10000)
         self.start_time = datetime.datetime.now()
         self.wait_data_dir_reaching(20, node=self.db_cluster.nodes[0])
@@ -57,6 +87,7 @@ class IncrementalCompactionTest(ClusterTester):
         sleep_initial_time = 30
         time.sleep(sleep_initial_time)
         sleep_interval = 10
+        
         def _print_debug_node(node, msg):
             self.log.debug(msg="[{}] {}".format(node.private_ip_address, msg))
         for idx in range(cycles):
@@ -66,7 +97,7 @@ class IncrementalCompactionTest(ClusterTester):
                 used_size_mb = int(self.get_used_capacity(node=node))
                 used_size_kb = used_size_mb * 1024
                 _print_debug_node(node=node, msg="Filesystem used capacity is: {}KB ({}MB)".format(used_size_kb, used_size_mb))
-                elapsed_seconds = get_stress_elapsed_time_sec()
+                elapsed_seconds = _get_stress_elapsed_time_sec()
                 neto_expected_capacity_kb = throughput_kb_sec * elapsed_seconds
                 _print_debug_node(node=node, msg="Estimated Neto capacity (after {} seconds) is: {}KB ({}MB)".format(elapsed_seconds, neto_expected_capacity_kb, neto_expected_capacity_kb/1024))
                 delta_capacity_kb = used_size_kb - neto_expected_capacity_kb
