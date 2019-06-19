@@ -14,10 +14,10 @@ stress_read_cmd: ["cassandra-stress read cl=QUORUM duration=10080m              
                   "cassandra-stress read cl=QUORUM duration=10020m -schema 'replication(factor=3) compression=SnappyCompressor compaction(strategy=SizeTieredCompactionStrategy)'  -port jmx=6868 -mode cql3 native compression=snappy                -rate threads=20 -pop seq=1..50000000    -log interval=5",
                   "cassandra-stress read cl=QUORUM duration=10030m -schema 'replication(factor=3) compression=DeflateCompressor compaction(strategy=SizeTieredCompactionStrategy)' -port jmx=6868 -mode cql3 native compression=none                  -rate threads=20 -pop seq=1..50000000    -log interval=5",
                   "cassandra-stress counter_read cl=QUORUM duration=10080m -port jmx=6868 -mode cql3 native -rate threads=10 -pop seq=1..10000000"]
-n_db_nodes: 4
-n_loaders: 2
+n_db_nodes: 3
+n_loaders: 1
 n_monitor_nodes: 1
-nemesis_class_name: 'ChaosMonkey'
+nemesis_class_name: 'NoOpMonkey'
 nemesis_interval: 30
 nemesis_during_prepare: 'false'
 user_prefix: 'ics-precreate-longevity-tls-1tb-7d-VERSION'
@@ -38,7 +38,7 @@ append_scylla_args: '--blocked-reactor-notify-ms 500  --abort-on-lsa-bad-alloc 1
 # aws instance_provision: on_demand|spot_fleet|spot_low_price|spot_duration
 instance_provision: 'on_demand'
 pre_create_schema: True
-
+run_prepare_only: 'true'
 # scylla-manager configuration
 # if running on aws and use_mgmt is true, the monitor image should not contain scylla
 use_mgmt: true
