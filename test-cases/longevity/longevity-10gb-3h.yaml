@@ -14,4 +14,3 @@ nemesis_interval: 5
 
 user_prefix: 'ics-longevity-10gb-3h'
 space_node_threshold: 64424
-use_ics: 'true'
