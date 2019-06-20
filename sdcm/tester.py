@@ -985,7 +985,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
                   speculative_retry=None, read_repair=None, compaction=None, compression=None,
                   gc_grace=None, columns=None,
                   compact_storage=False, in_memory=False, scylla_encryption_options=None):
-
+        self.log.debug('In create_cf(). compaction: {}'.format(compaction))
         additional_columns = ""
         if columns is not None:
             for k, v in columns.items():

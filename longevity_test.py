@@ -102,6 +102,8 @@ class LongevityTest(ClusterTester):
         """
         Run cassandra-stress with params defined in data_dir/scylla.yaml
         """
+        self.log.debug('In test_custom_time')
+
         self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(),
                                     tester_obj=self)
         stress_queue = list()
@@ -112,11 +114,16 @@ class LongevityTest(ClusterTester):
         prepare_write_cmd = self.params.get('prepare_write_cmd', default=None)
         keyspace_num = self.params.get('keyspace_num', default=1)
         pre_create_schema = self.params.get('pre_create_schema', default=False)
+        self.log.debug('In test_custom_time. prepare_write_cmd: {} , pre_create_schema: {}'.format(prepare_write_cmd, pre_create_schema))
 
         if prepare_write_cmd:
+            self.log.debug('In test_custom_time if prepare_write_cmd:')
+
             # In some cases (like many keyspaces), we want to create the schema (all keyspaces & tables) before the load
             # starts - due to the heavy load, the schema propogation can take long time and c-s fails.
             if pre_create_schema:
+                self.log.debug('In test_custom_time if pre_create_schema:')
+
                 self._pre_create_schema(keyspace_num, scylla_encryption_options=self.params.get('scylla_encryption_options', None), compaction_strategy=self.params.get('compaction_strategy', default='SizeTieredCompactionStrategy'))
             # When the load is too heavy for one lader when using MULTI-KEYSPACES, the load is spreaded evenly across
             # the loaders (round_robin).
@@ -319,6 +326,7 @@ class LongevityTest(ClusterTester):
         For cases we are testing many keyspaces and tables, It's a possibility that we will do it better and faster than
         cassandra-stress.
         """
+        self.log.debug('In _pre_create_schema. compaction: {}'.format(compaction_strategy))
         node = self.db_cluster.nodes[0]
         session = self.cql_connection_patient(node)
 
