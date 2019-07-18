@@ -336,6 +336,7 @@ class LongevityTest(ClusterTester):
             keyspace_name = 'keyspace{}'.format(i)
             self.create_ks(session, keyspace_name, rf=3)
             self.log.debug('{} Created'.format(keyspace_name))
+            time.sleep(120)
             self.create_cf(session,  'standard1', key_type='blob', read_repair=0.0, compact_storage=True,
                            columns={'"C0"': 'blob'}, compaction=compaction_strategy,
                            in_memory=in_memory, scylla_encryption_options=scylla_encryption_options)
