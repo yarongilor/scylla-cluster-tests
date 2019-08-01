@@ -984,7 +984,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
     def create_cf(self, session, name, key_type="varchar",
                   speculative_retry=None, read_repair=None, compaction=None, compression=None,
                   gc_grace=None, columns=None,
-                  compact_storage=False, in_memory=False, scylla_encryption_options=None):
+                  compact_storage=False, in_memory=False, scylla_encryption_options=None, sstable_size_in_mb=None):
         self.log.debug('In create_cf(). compaction: {}'.format(compaction))
         additional_columns = ""
         if columns is not None:
@@ -1008,8 +1008,13 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
             # will default to lz4 compression
             query += ' AND compression = {}'
 
+        dict_compaction = {}
         if compaction is not None:
-            query += " AND compaction={'class': '%s'}" % compaction
+            dict_compaction['class'] = compaction
+        if sstable_size_in_mb is not None:
+            dict_compaction['sstable_size_in_mb'] = sstable_size_in_mb
+        if dict_compaction:
+            query += " AND compaction=%s" % (str(dict_compaction))
 
         if read_repair is not None:
             query = '%s AND read_repair_chance=%f' % (query, read_repair)
@@ -1025,7 +1030,7 @@ class ClusterTester(db_stats.TestStatsMixin, Test):
         if compact_storage:
             query += ' AND COMPACT STORAGE'
 
-        self.log.debug('CQL query to execute: {}'.format(query))
+        self.log.debug('CQL query of CREATE COLUMNFAMILY to execute: {}'.format(query))
         session.execute(query)
         time.sleep(0.2)
 
