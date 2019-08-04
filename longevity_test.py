@@ -20,6 +20,7 @@ import yaml
 from avocado import main
 
 from sdcm.tester import ClusterTester
+from sdcm.utils import retrying
 
 
 class LongevityTest(ClusterTester):
@@ -112,6 +113,7 @@ class LongevityTest(ClusterTester):
 
         # prepare write workload
         prepare_write_cmd = self.params.get('prepare_write_cmd', default=None)
+        prepare_overwrite_cmd = self.params.get('prepare_overwrite_cmd', default=None)
         keyspace_num = self.params.get('keyspace_num', default=1)
         pre_create_schema = self.params.get('pre_create_schema', default=False)
         self.log.debug('In test_custom_time. prepare_write_cmd: {} , pre_create_schema: {}'.format(prepare_write_cmd, pre_create_schema))
@@ -169,6 +171,26 @@ class LongevityTest(ClusterTester):
 
                 for stress in verify_queue:
                     self.verify_stress_thread(queue=stress)
+
+            if prepare_overwrite_cmd:
+                overwrite_queue = list()
+                self.log.debug('In test_custom_time. prepare_overwrite_cmd: {} '.format(prepare_overwrite_cmd))
+                self._wait_no_compactions_running()
+                self.log.debug('Starting overwrite stress after all compactions are done..')
+                if keyspace_num > 1 and self.params.get('round_robin', default='false').lower() == 'true':
+                    self.log.debug("Using round_robin for multiple Keyspaces...")
+                    for i in xrange(1, keyspace_num + 1):
+                        keyspace_name = self._get_keyspace_name(i)
+                        self._run_all_stress_cmds(overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
+                                                                       'keyspace_name': keyspace_name,
+                                                                       'round_robin': True})
+                # Not using round_robin and all keyspaces will run on all loaders
+                else:
+                    self._run_all_stress_cmds(overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
+                                                                   'keyspace_num': keyspace_num})
+
+
+
 
         run_prepare_only = self.params.get('run_prepare_only', default=None)
         if run_prepare_only:
@@ -351,6 +373,18 @@ class LongevityTest(ClusterTester):
         """
         for node in self.db_cluster.nodes:
             node.remoter.run('sudo nodetool flush')
+
+    @retrying(n=80, sleep_time=60, allowed_exceptions=(AssertionError,))
+    def _wait_no_compactions_running(self):
+        q = "sum(scylla_compaction_manager_compactions{})"
+        now = time.time()
+        results = self.prometheusDB.query(query=q, start=now - 60, end=now)
+        self.log.debug("scylla_compaction_manager_compactions: %s" % results)
+        # if all are zeros the result will be False, otherwise there are still compactions
+        if results:
+            assert any([float(v[1]) for v in results[0]["values"]]) is False, \
+                "Waiting until all compactions settle down"
+
 
 
 if __name__ == '__main__':
