@@ -173,7 +173,7 @@ class LongevityTest(ClusterTester):
                     self.verify_stress_thread(queue=stress)
 
             if prepare_overwrite_cmd:
-                overwrite_queue = list()
+                verify_overwrite_queue = list()
                 self.log.debug('In test_custom_time. prepare_overwrite_cmd: {} '.format(prepare_overwrite_cmd))
                 self._wait_no_compactions_running()
                 self.log.debug('Starting overwrite stress after all compactions are done..')
@@ -181,14 +181,15 @@ class LongevityTest(ClusterTester):
                     self.log.debug("Using round_robin for multiple Keyspaces...")
                     for i in xrange(1, keyspace_num + 1):
                         keyspace_name = self._get_keyspace_name(i)
-                        self._run_all_stress_cmds(overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
+                        self._run_all_stress_cmds(verify_overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
                                                                        'keyspace_name': keyspace_name,
                                                                        'round_robin': True})
                 # Not using round_robin and all keyspaces will run on all loaders
                 else:
-                    self._run_all_stress_cmds(overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
+                    self._run_all_stress_cmds(verify_overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
                                                                    'keyspace_num': keyspace_num})
-
+                for stress in verify_overwrite_queue:
+                    self.verify_stress_thread(queue=stress)
 
 
 
