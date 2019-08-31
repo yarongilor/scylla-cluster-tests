@@ -173,23 +173,42 @@ class LongevityTest(ClusterTester):
                     self.verify_stress_thread(queue=stress)
 
             if prepare_overwrite_cmd:
+                ops_num = int([i for i in prepare_write_cmd.split() if i.startswith('n=')][0].split('=')[1])/2 # number of operations to run. example: 250100200
+                column_size = 1024
+                prepare_overwrite_cmd = "cassandra-stress write cl=ALL  n={} -schema 'replication(factor=3) compaction(strategy=LeveledCompactionStrategy)' -port jmx=6868 -mode cql3 native" \
+                                        " -rate threads=1000 -col 'size=FIXED({}) n=FIXED(1)' -pop 'dist=gauss(1..{},{},{})' ".format(ops_num, column_size, ops_num, ops_num/2, ops_num/2)
+                total_data_to_write_gb = ops_num * column_size / (1024 ** 3)
                 verify_overwrite_queue = list()
                 self.log.debug('In test_custom_time. prepare_overwrite_cmd: {} '.format(prepare_overwrite_cmd))
+                self.log.debug('Total data to write per cycle is: {} GB '.format(total_data_to_write_gb))
+
                 self._wait_no_compactions_running()
-                self.log.debug('Starting overwrite stress after all compactions are done..')
-                if keyspace_num > 1 and self.params.get('round_robin', default='false').lower() == 'true':
-                    self.log.debug("Using round_robin for multiple Keyspaces...")
-                    for i in xrange(1, keyspace_num + 1):
-                        keyspace_name = self._get_keyspace_name(i)
+                overwrite_cycles_num = 4
+                for i in range(1,overwrite_cycles_num+1):
+                    self.log.debug('Starting overwrite stress cycle {}..'.format(i))
+                    dict_nodes_capacity = {}
+                    for node in self.db_cluster.nodes:
+                        dict_nodes_capacity[node.private_ip_address] = {"initial_capacity":self._get_used_capacity_gb(node=node)}
+                    start_time = time.time()
+                    if keyspace_num > 1 and self.params.get('round_robin', default='false').lower() == 'true':
+                        self.log.debug("Using round_robin for multiple Keyspaces...")
+                        for i in xrange(1, keyspace_num + 1):
+                            keyspace_name = self._get_keyspace_name(i)
+                            self._run_all_stress_cmds(verify_overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
+                                                                           'keyspace_name': keyspace_name,
+                                                                           'round_robin': True})
+                    # Not using round_robin and all keyspaces will run on all loaders
+                    else:
                         self._run_all_stress_cmds(verify_overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
-                                                                       'keyspace_name': keyspace_name,
-                                                                       'round_robin': True})
-                # Not using round_robin and all keyspaces will run on all loaders
-                else:
-                    self._run_all_stress_cmds(verify_overwrite_queue, params={'stress_cmd': prepare_overwrite_cmd,
-                                                                   'keyspace_num': keyspace_num})
-                for stress in verify_overwrite_queue:
-                    self.verify_stress_thread(queue=stress)
+                                                                       'keyspace_num': keyspace_num})
+                    for stress in verify_overwrite_queue:
+                        self.verify_stress_thread(queue=stress)
+
+                    for node in self.db_cluster.nodes:
+                        max_used_capacity = self._get_max_used_capacity_over_time_gb(node=node, start_time=start_time)
+                        neto_max_used_capacity = max_used_capacity - dict_nodes_capacity[node.private_ip_address]["initial_capacity"]
+                        self.log.info("Space amplification for total_data_to_write_gb {} is: {}".format(total_data_to_write_gb, neto_max_used_capacity))
+
 
 
 
@@ -386,7 +405,63 @@ class LongevityTest(ClusterTester):
             assert any([float(v[1]) for v in results[0]["values"]]) is False, \
                 "Waiting until all compactions settle down"
 
+    def _get_used_capacity_gb(self, node):
+        # (sum(node_filesystem_size{mountpoint="/var/lib/scylla"})-sum(node_filesystem_avail{mountpoint="/var/lib/scylla"}))
+        filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
+                                    'instance=~"{1.private_ip_address}"}})'.format(self, node)
 
+        self.log.debug("filesystem_capacity_query: {}".format(filesystem_capacity_query))
+
+        fs_size_res = self.prometheusDB.query(query=filesystem_capacity_query, start=time.time(), end=time.time())
+        kb_size = 2 ** 10
+        mb_size = kb_size * 1024
+        gb_size = mb_size * 1024
+        self.log.debug("fs_cap_res: {}".format(fs_size_res))
+        used_capacity_query = '(sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
+                              'instance=~"{1.private_ip_address}"}})-sum(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
+                              'instance=~"{1.private_ip_address}"}}))'.format(self, node)
+
+        self.log.debug("used_capacity_query: {}".format(used_capacity_query))
+
+        used_cap_res = self.prometheusDB.query(query=used_capacity_query, start=time.time(), end=time.time())
+        self.log.debug("used_cap_res: {}".format(used_cap_res))
+
+        assert used_cap_res, "No results from Prometheus"
+        used_size = float(used_cap_res[0]["values"][0][1])
+        used_size_gb = used_size / gb_size
+        self.log.debug(
+            "The used filesystem capacity on node {} is: {} GB".format(node.public_ip_address, used_size_gb))
+        return used_size_gb
+
+    def _get_max_used_capacity_over_time_gb(self, node, start_time=None):
+        # (sum(node_filesystem_size{mountpoint="/var/lib/scylla"})-sum(node_filesystem_avail{mountpoint="/var/lib/scylla"}))
+        # min_over_time(node_filesystem_avail{mountpoint="$mount_point", instance=~"$node"}[100m])
+
+        filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
+            'instance=~"{1.private_ip_address}"}})'.format(self, node)
+
+        self.log.debug("filesystem_capacity_query: {}".format(filesystem_capacity_query))
+
+        fs_size_res = self.prometheusDB.query(query=filesystem_capacity_query, start=time.time(), end=time.time())
+        kb_size = 2 ** 10
+        mb_size = kb_size * 1024
+        gb_size = mb_size * 1024
+        fs_size_gb = int(fs_size_res[0]["values"][0][1]) / gb_size
+        self.log.debug("fs_cap_res: {}".format(fs_size_res))
+        min_avail_capacity_query = '(min_over_time(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
+            'instance=~"{1.private_ip_address}"}}[1m]))'.format(self, node)
+
+        self.log.debug("min_avail_capacity_query: {}".format(min_avail_capacity_query))
+        start_time = start_time or time.time()
+        min_avail_capacity_res = self.prometheusDB.query(query=min_avail_capacity_query, start=start_time, end=time.time())
+        self.log.debug("min_avail_capacity_res: {}".format(min_avail_capacity_res))
+
+        assert min_avail_capacity_res, "No results from Prometheus"
+        min_avail_capacity_gb = int(min_avail_capacity_res[0]["values"][0][1]) / gb_size
+        max_used_capacity_gb = fs_size_gb - min_avail_capacity_gb
+        self.log.debug("The maximum used filesystem capacity for {} since {} is: {} GB/ {} GB".format(
+            node.private_ip_address, start_time, max_used_capacity_gb, fs_size_gb))
+        return max_used_capacity_gb
 
 if __name__ == '__main__':
     main()
