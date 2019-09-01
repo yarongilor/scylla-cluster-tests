@@ -186,9 +186,9 @@ class LongevityTest(ClusterTester):
                 overwrite_cycles_num = 4
                 for i in range(1,overwrite_cycles_num+1):
                     self.log.debug('Starting overwrite stress cycle {}..'.format(i))
-                    dict_nodes_capacity = {}
+                    dict_nodes_initial_capacity = {}
                     for node in self.db_cluster.nodes:
-                        dict_nodes_capacity[node.private_ip_address] = {"initial_capacity":self._get_used_capacity_gb(node=node)}
+                        dict_nodes_initial_capacity[node.private_ip_address] = self._get_used_capacity_gb(node=node)
                     start_time = time.time()
                     if keyspace_num > 1 and self.params.get('round_robin', default='false').lower() == 'true':
                         self.log.debug("Using round_robin for multiple Keyspaces...")
@@ -205,9 +205,9 @@ class LongevityTest(ClusterTester):
                         self.verify_stress_thread(queue=stress)
 
                     for node in self.db_cluster.nodes:
-                        max_used_capacity = self._get_max_used_capacity_over_time_gb(node=node, start_time=start_time)
-                        neto_max_used_capacity = max_used_capacity - dict_nodes_capacity[node.private_ip_address]["initial_capacity"]
-                        self.log.info("Space amplification for total_data_to_write_gb {} is: {}".format(total_data_to_write_gb, neto_max_used_capacity))
+                        max_used_capacity_gb = self._get_max_used_capacity_over_time_gb(node=node, start_time=start_time)
+                        neto_max_used_capacity_gb = max_used_capacity_gb - dict_nodes_initial_capacity[node.private_ip_address]
+                        self.log.info("Space amplification for total_data_to_write_gb {} is: {} GB".format(total_data_to_write_gb, neto_max_used_capacity_gb))
 
 
 
@@ -453,14 +453,16 @@ class LongevityTest(ClusterTester):
 
         self.log.debug("min_avail_capacity_query: {}".format(min_avail_capacity_query))
         start_time = start_time or time.time()
-        min_avail_capacity_res = self.prometheusDB.query(query=min_avail_capacity_query, start=start_time, end=time.time())
+        end_time = time.time()
+        time_interval_minutes = end_time - start_time / 60
+        min_avail_capacity_res = self.prometheusDB.query(query=min_avail_capacity_query, start=start_time, end=end_time)
         self.log.debug("min_avail_capacity_res: {}".format(min_avail_capacity_res))
 
         assert min_avail_capacity_res, "No results from Prometheus"
         min_avail_capacity_gb = int(min_avail_capacity_res[0]["values"][0][1]) / gb_size
         max_used_capacity_gb = fs_size_gb - min_avail_capacity_gb
-        self.log.debug("The maximum used filesystem capacity for {} since {} is: {} GB/ {} GB".format(
-            node.private_ip_address, start_time, max_used_capacity_gb, fs_size_gb))
+        self.log.debug("The maximum used filesystem capacity of {} for the last {} minutes is: {} GB/ {} GB".format(
+            node.private_ip_address, time_interval_minutes, max_used_capacity_gb, fs_size_gb))
         return max_used_capacity_gb
 
 if __name__ == '__main__':
