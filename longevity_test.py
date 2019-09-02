@@ -12,7 +12,7 @@
 # See LICENSE for more details.
 #
 # Copyright (c) 2016 ScyllaDB
-
+import math
 import os
 import re
 import time
@@ -458,7 +458,7 @@ class LongevityTest(ClusterTester):
         self.log.debug("fs_cap_res: {}".format(fs_size_res))
         start_time = start_time or time.time()
         end_time = time.time()
-        time_interval_minutes = (end_time - start_time) / 60 + 1 # convert time to minutes and round up.
+        time_interval_minutes = int(math.ceil((end_time - start_time) / 60))  # convert time to minutes and round up.
         min_avail_capacity_query = '(min_over_time(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
             'instance=~"{1.private_ip_address}"}}[{2}m]))'.format(self, node, time_interval_minutes)
 
