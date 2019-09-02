@@ -164,13 +164,13 @@ class LongevityTest(ClusterTester):
             # self._flush_all_nodes()
 
             # In case we would like to verify all keys were written successfully before we start other stress / nemesis
-            prepare_verify_cmd = self.params.get('prepare_verify_cmd', default=None)
-            if prepare_verify_cmd:
-                self._run_all_stress_cmds(verify_queue, params={'stress_cmd': prepare_verify_cmd,
-                                                                'keyspace_num': keyspace_num})
-
-                for stress in verify_queue:
-                    self.verify_stress_thread(queue=stress)
+            # prepare_verify_cmd = self.params.get('prepare_verify_cmd', default=None)
+            # if prepare_verify_cmd:
+            #     self._run_all_stress_cmds(verify_queue, params={'stress_cmd': prepare_verify_cmd,
+            #                                                     'keyspace_num': keyspace_num})
+            #
+            #     for stress in verify_queue:
+            #         self.verify_stress_thread(queue=stress)
 
             if prepare_overwrite_cmd:
                 ops_num = int([i for i in prepare_write_cmd.split() if i.startswith('n=')][0].split('=')[1])/2 # number of operations to run. example: 250100200
@@ -207,7 +207,7 @@ class LongevityTest(ClusterTester):
                     for node in self.db_cluster.nodes:
                         max_used_capacity_gb = self._get_max_used_capacity_over_time_gb(node=node, start_time=start_time)
                         neto_max_used_capacity_gb = max_used_capacity_gb - dict_nodes_initial_capacity[node.private_ip_address]
-                        self.log.info("Space amplification for total_data_to_write_gb {} is: {} GB".format(total_data_to_write_gb, neto_max_used_capacity_gb))
+                        self.log.info("Space amplification for {} GB written data is: {} GB".format(total_data_to_write_gb, neto_max_used_capacity_gb))
 
 
 
@@ -406,7 +406,11 @@ class LongevityTest(ClusterTester):
                 "Waiting until all compactions settle down"
 
     def _get_used_capacity_gb(self, node):
-        # (sum(node_filesystem_size{mountpoint="/var/lib/scylla"})-sum(node_filesystem_avail{mountpoint="/var/lib/scylla"}))
+        """
+
+        :param node:
+        :return: the file-system used-capacity on node (in GB)
+        """
         filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
                                     'instance=~"{1.private_ip_address}"}})'.format(self, node)
 
@@ -434,8 +438,12 @@ class LongevityTest(ClusterTester):
         return used_size_gb
 
     def _get_max_used_capacity_over_time_gb(self, node, start_time=None):
-        # (sum(node_filesystem_size{mountpoint="/var/lib/scylla"})-sum(node_filesystem_avail{mountpoint="/var/lib/scylla"}))
-        # min_over_time(node_filesystem_avail{mountpoint="$mount_point", instance=~"$node"}[100m])
+        """
+
+        :param node:
+        :param start_time: the start interval to search max-used-capacity from.
+        :return:
+        """
 
         filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
             'instance=~"{1.private_ip_address}"}})'.format(self, node)
@@ -448,18 +456,22 @@ class LongevityTest(ClusterTester):
         gb_size = mb_size * 1024
         fs_size_gb = int(fs_size_res[0]["values"][0][1]) / gb_size
         self.log.debug("fs_cap_res: {}".format(fs_size_res))
-        min_avail_capacity_query = '(min_over_time(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
-            'instance=~"{1.private_ip_address}"}}[1m]))'.format(self, node)
-
-        self.log.debug("min_avail_capacity_query: {}".format(min_avail_capacity_query))
         start_time = start_time or time.time()
         end_time = time.time()
-        time_interval_minutes = end_time - start_time / 60
+        time_interval_minutes = (end_time - start_time) / 60 + 1 # convert time to minutes and round up.
+        min_avail_capacity_query = '(min_over_time(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
+            'instance=~"{1.private_ip_address}"}}[{2}m]))'.format(self, node, time_interval_minutes)
+
+        self.log.debug("min_avail_capacity_query: {}".format(min_avail_capacity_query))
         min_avail_capacity_res = self.prometheusDB.query(query=min_avail_capacity_query, start=start_time, end=end_time)
         self.log.debug("min_avail_capacity_res: {}".format(min_avail_capacity_res))
 
         assert min_avail_capacity_res, "No results from Prometheus"
-        min_avail_capacity_gb = int(min_avail_capacity_res[0]["values"][0][1]) / gb_size
+        list_min_available_capacity = min_avail_capacity_res[0]["values"]
+        self.log.debug("list_available_capacity is: {}".format(list_min_available_capacity))
+        min_available_capacity = min([int(val[1]) for val in list_min_available_capacity])
+        self.log.debug("Minimum available capacity retrieved is: {}".format(min_available_capacity))
+        min_avail_capacity_gb = min_available_capacity / gb_size
         max_used_capacity_gb = fs_size_gb - min_avail_capacity_gb
         self.log.debug("The maximum used filesystem capacity of {} for the last {} minutes is: {} GB/ {} GB".format(
             node.private_ip_address, time_interval_minutes, max_used_capacity_gb, fs_size_gb))
