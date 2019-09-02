@@ -22,6 +22,9 @@ from avocado import main
 from sdcm.tester import ClusterTester
 from sdcm.utils import retrying
 
+KB_SIZE = 2 ** 10
+MB_SIZE = KB_SIZE * 1024
+GB_SIZE = MB_SIZE * 1024
 
 class LongevityTest(ClusterTester):
     """
@@ -205,9 +208,12 @@ class LongevityTest(ClusterTester):
                         self.verify_stress_thread(queue=stress)
 
                     for node in self.db_cluster.nodes:
+                        node_current_capacity = self._get_used_capacity_gb(node=node)
                         max_used_capacity_gb = self._get_max_used_capacity_over_time_gb(node=node, start_time=start_time)
-                        neto_max_used_capacity_gb = max_used_capacity_gb - dict_nodes_initial_capacity[node.private_ip_address]
-                        self.log.info("Space amplification for {} GB written data is: {} GB".format(total_data_to_write_gb, neto_max_used_capacity_gb))
+                        max_space_amplification_gb = max_used_capacity_gb - dict_nodes_initial_capacity[node.private_ip_address]
+                        self.log.info("Node {} used capacity changed from {} to {} after {} GB write.".format(
+                            node.private_ip_address, dict_nodes_initial_capacity[node.private_ip_address], node_current_capacity, total_data_to_write_gb ))
+                        self.log.info("Space amplification for {} GB written data is: {} GB".format(total_data_to_write_gb, max_space_amplification_gb))
 
 
 
@@ -407,72 +413,61 @@ class LongevityTest(ClusterTester):
 
     def _get_used_capacity_gb(self, node):
         """
-
         :param node:
         :return: the file-system used-capacity on node (in GB)
         """
+        used_capacity = self._get_filesystem_total_size_gb(node=node) - self._get_filesystem_available_size_gb(node=node)
+        self.log.debug("Node {} used capacity is: {} GB".format(node.private_ip_address, used_capacity))
+        return used_capacity
+
+    def _get_prometheus_query_numeric_values_list(self, query, start_time=None):
+        start_time = start_time or time.time()
+        res = self.prometheusDB.query(query=query, start=start_time, end=time.time())
+        return res[0]["values"]
+
+    def _get_prometheus_query_numeric_value_gb(self, query):
+        res = self._get_prometheus_query_numeric_values_list(query=query)
+        return int(res[0][1]) / GB_SIZE
+
+    def _get_filesystem_available_size_gb(self, node, start_time=None):
+        """
+        :param node:
+        :return:
+        """
+        filesystem_available_size_query = 'sum(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
+            'instance=~"{1.private_ip_address}"}})'.format(self, node)
+        return self._get_prometheus_query_numeric_value_gb(query=filesystem_available_size_query)
+
+    def _get_filesystem_available_size_list(self, node, start_time):
+        """
+        :param node:
+        :return:
+        """
+        filesystem_available_size_query = 'sum(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
+            'instance=~"{1.private_ip_address}"}})'.format(self, node)
+        return self._get_prometheus_query_numeric_values_list(query=filesystem_available_size_query, start_time=start_time)
+    
+    def _get_filesystem_total_size_gb(self, node):
+        """
+        :param node:
+        :return:
+        """
         filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
-                                    'instance=~"{1.private_ip_address}"}})'.format(self, node)
+            'instance=~"{1.private_ip_address}"}})'.format(self, node)
+        return self._get_prometheus_query_numeric_value_gb(query=filesystem_capacity_query)
 
-        self.log.debug("filesystem_capacity_query: {}".format(filesystem_capacity_query))
-
-        fs_size_res = self.prometheusDB.query(query=filesystem_capacity_query, start=time.time(), end=time.time())
-        kb_size = 2 ** 10
-        mb_size = kb_size * 1024
-        gb_size = mb_size * 1024
-        self.log.debug("fs_cap_res: {}".format(fs_size_res))
-        used_capacity_query = '(sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
-                              'instance=~"{1.private_ip_address}"}})-sum(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
-                              'instance=~"{1.private_ip_address}"}}))'.format(self, node)
-
-        self.log.debug("used_capacity_query: {}".format(used_capacity_query))
-
-        used_cap_res = self.prometheusDB.query(query=used_capacity_query, start=time.time(), end=time.time())
-        self.log.debug("used_cap_res: {}".format(used_cap_res))
-
-        assert used_cap_res, "No results from Prometheus"
-        used_size = float(used_cap_res[0]["values"][0][1])
-        used_size_gb = used_size / gb_size
-        self.log.debug(
-            "The used filesystem capacity on node {} is: {} GB".format(node.public_ip_address, used_size_gb))
-        return used_size_gb
-
-    def _get_max_used_capacity_over_time_gb(self, node, start_time=None):
+    def _get_max_used_capacity_over_time_gb(self, node, start_time):
         """
 
         :param node:
         :param start_time: the start interval to search max-used-capacity from.
         :return:
         """
-
-        filesystem_capacity_query = 'sum(node_filesystem_size{{mountpoint="{0.scylla_dir}", ' \
-            'instance=~"{1.private_ip_address}"}})'.format(self, node)
-
-        self.log.debug("filesystem_capacity_query: {}".format(filesystem_capacity_query))
-
-        fs_size_res = self.prometheusDB.query(query=filesystem_capacity_query, start=time.time(), end=time.time())
-        kb_size = 2 ** 10
-        mb_size = kb_size * 1024
-        gb_size = mb_size * 1024
-        fs_size_gb = int(fs_size_res[0]["values"][0][1]) / gb_size
-        self.log.debug("fs_cap_res: {}".format(fs_size_res))
-        start_time = start_time or time.time()
+        fs_size_gb = self._get_filesystem_total_size_gb(node=node)
         end_time = time.time()
         time_interval_minutes = int(math.ceil((end_time - start_time) / 60))  # convert time to minutes and round up.
-        min_avail_capacity_query = '(min_over_time(node_filesystem_avail{{mountpoint="{0.scylla_dir}", ' \
-            'instance=~"{1.private_ip_address}"}}[{2}m]))'.format(self, node, time_interval_minutes)
-
-        self.log.debug("min_avail_capacity_query: {}".format(min_avail_capacity_query))
-        min_avail_capacity_res = self.prometheusDB.query(query=min_avail_capacity_query, start=start_time, end=end_time)
-        self.log.debug("min_avail_capacity_res: {}".format(min_avail_capacity_res))
-
-        assert min_avail_capacity_res, "No results from Prometheus"
-        list_min_available_capacity = min_avail_capacity_res[0]["values"]
-        self.log.debug("list_available_capacity is: {}".format(list_min_available_capacity))
-        min_available_capacity = min([int(val[1]) for val in list_min_available_capacity])
-        self.log.debug("Minimum available capacity retrieved is: {}".format(min_available_capacity))
-        min_avail_capacity_gb = min_available_capacity / gb_size
-        max_used_capacity_gb = fs_size_gb - min_avail_capacity_gb
+        min_available_capacity_gb = min([int(val[1]) for val in self._get_filesystem_available_size_list(node=node, start_time=start_time)]) / GB_SIZE
+        max_used_capacity_gb = fs_size_gb - min_available_capacity_gb
         self.log.debug("The maximum used filesystem capacity of {} for the last {} minutes is: {} GB/ {} GB".format(
             node.private_ip_address, time_interval_minutes, max_used_capacity_gb, fs_size_gb))
         return max_used_capacity_gb
