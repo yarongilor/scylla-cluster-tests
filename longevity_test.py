@@ -179,7 +179,7 @@ class LongevityTest(ClusterTester):
                 ops_num = int([i for i in prepare_write_cmd.split() if i.startswith('n=')][0].split('=')[1])/2 # number of operations to run. example: 250100200
                 column_size = 1024
                 prepare_overwrite_cmd = "cassandra-stress write cl=ALL  n={} -schema 'replication(factor=3) compaction(strategy=LeveledCompactionStrategy)' -port jmx=6868 -mode cql3 native" \
-                                        " -rate threads=1000 -col 'size=FIXED({}) n=FIXED(1)' -pop 'dist=gauss(1..{},{},{})' ".format(ops_num, column_size, ops_num, ops_num/2, ops_num/2)
+                                        " -rate threads=1000 -col 'size=FIXED({}) n=FIXED(1)' -pop 'dist=uniform(1..{})' ".format(ops_num, column_size, ops_num)
                 total_data_to_write_gb = ops_num * column_size / (1024 ** 3)
                 verify_overwrite_queue = list()
                 self.log.debug('In test_custom_time. prepare_overwrite_cmd: {} '.format(prepare_overwrite_cmd))
@@ -213,7 +213,7 @@ class LongevityTest(ClusterTester):
                         max_space_amplification_gb = max_used_capacity_gb - dict_nodes_initial_capacity[node.private_ip_address]
                         self.log.info("Node {} used capacity changed from {} to {} after {} GB write.".format(
                             node.private_ip_address, dict_nodes_initial_capacity[node.private_ip_address], node_current_capacity, total_data_to_write_gb ))
-                        self.log.info("Space amplification for {} GB written data is: {} GB".format(total_data_to_write_gb, max_space_amplification_gb))
+                        self.log.info("Capacity increase after {} GB over-write data is: {} GB".format(total_data_to_write_gb, max_space_amplification_gb))
 
 
 
