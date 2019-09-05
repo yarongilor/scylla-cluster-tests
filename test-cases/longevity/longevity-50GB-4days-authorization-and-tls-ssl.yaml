@@ -40,3 +40,5 @@ authenticator_password: cassandra
 authorizer: 'CassandraAuthorizer'
 
 use_mgmt: true
+
+append_scylla_args: '--reactor-backend epoll'
