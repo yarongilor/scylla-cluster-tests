@@ -188,7 +188,7 @@ class IcsSpaceAmplificationTest(LongevityTest):
         column_size = 200
         num_of_columns = 5
         # The number of writes for the total new data to test. impacts 'total_new_data_to_write_gb'.
-        ops_num = 200200300
+        ops_num = 900200300
         overwrite_ops_num = ops_num // 2  # A half of the data size is used for the over-write data test.
         # The total data size to test. should be large enough to clearly identify space amplification issue.
         total_new_data_to_write_gb = round(ops_num * column_size * num_of_columns / (1024 ** 3), 2)
