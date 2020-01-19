@@ -14,13 +14,15 @@
 # Copyright (c) 2018 ScyllaDB
 
 
-import time
 import os
+import time
 
-from sdcm.tester import ClusterTester
 from sdcm.cluster import get_username
 from sdcm.utils.common import format_timestamp
 from sdcm.sct_events import get_logger_event_summary
+
+
+from sdcm.tester import ClusterTester
 
 
 class GeminiTest(ClusterTester):
@@ -44,7 +46,6 @@ class GeminiTest(ClusterTester):
 
         self.log.debug('Start gemini benchmark')
         test_queue = self.run_gemini(cmd=cmd)
-
         self.gemini_results = self.verify_gemini_results(queue=test_queue)
 
         if self.gemini_results['status'] == 'FAILED':
