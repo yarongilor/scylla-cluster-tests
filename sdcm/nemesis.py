@@ -415,7 +415,7 @@ class Nemesis():  # pylint: disable=too-many-instance-attributes,too-many-public
             self.target_node.start_scylla_server(verify_up=True, verify_down=False)
 
     @retrying(n=3, sleep_time=60, allowed_exceptions=(NodeSetupFailed, NodeSetupTimeout))
-    def _add_and_init_new_cluster_node(self, old_node_ip=None, timeout=10800):
+    def _add_and_init_new_cluster_node(self, old_node_ip=None, timeout=18000):
         """When old_node_private_ip is not None replacement node procedure is initiated"""
         self.log.info("Adding new node to cluster...")
         new_node = self.cluster.add_nodes(count=1, dc_idx=self.target_node.dc_idx, enable_auto_bootstrap=True)[0]
