@@ -394,6 +394,9 @@ class BaseNode():  # pylint: disable=too-many-instance-attributes,too-many-publi
             DatabaseLogEvent(type='SEMAPHORE_TIME_OUT', regex='semaphore_timed_out'),
             DatabaseLogEvent(type='BOOT', regex='Starting Scylla Server', severity=Severity.NORMAL),
             DatabaseLogEvent(type='SUPPRESSED_MESSAGES', regex='journal: Suppressed', severity=Severity.WARNING),
+            DatabaseLogEvent(type='BOOTSTRAP_START', regex='JOINING: Starting to bootstrap', severity=Severity.NORMAL),
+            DatabaseLogEvent(type='BOOTSTRAP_END', regex='storage_service - Bootstrap completed', severity=Severity.NORMAL),
+
         ]
 
         self.termination_event = threading.Event()
