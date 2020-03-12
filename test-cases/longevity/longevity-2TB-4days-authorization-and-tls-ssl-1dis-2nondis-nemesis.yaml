@@ -27,10 +27,10 @@ nemesis_class_name: 'DisruptiveMonkey:1 NonDisruptiveMonkey:2'
 nemesis_interval: 30
 nemesis_during_prepare: false
 
-user_prefix: 'longevity-tls-2tb-4d-1dis-2nondis'
+user_prefix: 'longevity-2tb-4d-1dis-2nondis'
 space_node_threshold: 644245094
-server_encrypt: true
-client_encrypt: true
+server_encrypt: false
+client_encrypt: false
 
 authenticator: 'PasswordAuthenticator'
 authenticator_user: cassandra
