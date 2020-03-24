@@ -3,7 +3,7 @@ cassandra_stress_population_size: 10000000
 space_node_threshold: 100
 
 add_node_cnt: 1
-seeds_num: 2
+seeds_num: 5
 seeds_selector: 'first'
 
 n_loaders: 1
