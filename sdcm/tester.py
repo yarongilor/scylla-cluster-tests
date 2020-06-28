@@ -74,10 +74,6 @@ from sdcm.send_email import build_reporter, read_email_data_from_file, get_runni
 from sdcm.utils.alternator import create_table as alternator_create_table, WriteIsolation
 from sdcm.utils.profiler import ProfilerFactory
 
-try:
-    import cluster_cloud
-except ImportError:
-    cluster_cloud = None
 
 configure_logging()
 
@@ -96,6 +92,12 @@ except ImportError:
 warnings.filterwarnings(action="ignore", message="unclosed",
                         category=ResourceWarning)
 TEST_LOG = logging.getLogger(__name__)
+
+try:
+    import cluster_cloud
+except ImportError as error:
+    TEST_LOG.error(f"Cluster cloud import failed with: {error}")
+    cluster_cloud = None
 
 
 class FlakyRetryPolicy(RetryPolicy):
