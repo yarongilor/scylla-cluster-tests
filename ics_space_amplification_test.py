@@ -2,7 +2,10 @@ import math
 import time
 
 from longevity_test import LongevityTest
-from sdcm.cluster import SCYLLA_DIR
+from sdcm import wait
+from sdcm.cluster import SCYLLA_DIR, BaseNode
+from sdcm.utils.decorators import retrying
+from test_lib.compaction import CompactionStrategy, LOGGER
 
 KB_SIZE = 2 ** 10
 MB_SIZE = KB_SIZE * 1024
@@ -27,7 +30,10 @@ class IcsSpaceAmplificationTest(LongevityTest):
 
         fs_size_res = self.prometheus_db.query(query=filesystem_capacity_query, start=int(time.time()) - 5,
                                                end=int(time.time()))
-        assert fs_size_res, "No results from Prometheus"
+        if not fs_size_res:
+            self.log.warning(f"No results from Prometheus query: {filesystem_capacity_query}")
+            return 0
+            # assert fs_size_res, "No results from Prometheus"
         if not fs_size_res[0]:  # if no returned values - try the old metric names.
             filesystem_capacity_query = '{FS_SIZE_METRIC_OLD}{node_capacity_query_postfix}'.format(
                 **dict(locals(), **globals()))
@@ -147,7 +153,28 @@ class IcsSpaceAmplificationTest(LongevityTest):
             dict_nodes_used_capacity[node.private_ip_address] = self._get_used_capacity_gb(node=node)
         return dict_nodes_used_capacity
 
-    def test_ics_space_amplification(self):  # pylint: disable=too-many-locals
+    def _alter_table_compaction(self, compaction_strategy=None, table_name='standard1', keyspace_name='keyspace1',
+                                additional_compaction_params: dict = None):
+        """
+         Alters table compaction like: ALTER TABLE mykeyspace.mytable WITH
+                                        compaction = {'class' : 'IncrementalCompactionStrategy'}
+        """
+
+        base_query = f"ALTER TABLE {keyspace_name}.{table_name} WITH compaction = "
+        dict_requested_compaction = {}
+        if compaction_strategy:
+            dict_requested_compaction['class'] = compaction_strategy._value_
+
+        if additional_compaction_params:
+            for param in additional_compaction_params:
+                dict_requested_compaction.update(param)
+
+        full_alter_query = base_query + str(dict_requested_compaction)
+        LOGGER("Alter table query is: {}".format(full_alter_query))
+        node1: BaseNode = self.db_cluster.nodes[0]
+        node1.run_cqlsh(cmd=full_alter_query)
+
+    def _test_ics_space_amplification_base(self, space_amplification_goal: float = None):  # pylint: disable=too-many-locals
         """
         Includes 3 space amplification test scenarios for ICS:
         (1) writing new data.
@@ -170,13 +197,27 @@ class IcsSpaceAmplificationTest(LongevityTest):
         self.log.debug('Test Space-amplification on writing new data')
         prepare_write_cmd = "cassandra-stress write cl=ALL n={ops_num}  -schema 'replication(factor=3)" \
                             " compaction(strategy=IncrementalCompactionStrategy)' -port jmx=6868 -mode cql3 native" \
-                            " -rate threads=1000 -col 'size=FIXED({column_size}) n=FIXED({num_of_columns})'" \
+                            " -rate threads=1000 -col 'size=FIXED({column_size}) n=FIXED(5)'" \
                             " -pop seq=1..{ops_num} -log interval=15".format(**dict(locals(), **globals()))
         dict_nodes_initial_capacity = self._get_nodes_used_capacity()
         start_time = time.time()
         self._run_all_stress_cmds(write_queue, params={'stress_cmd': prepare_write_cmd,
                                                        'keyspace_num': keyspace_num})
+        keyspace = 'keyspace1'
 
+        @retrying(n=6, sleep_time=20, raise_on_exceeded=True, message="Retrying on getting created table")
+        def wait_table_created(table_name):
+            res = self.db_cluster.run_nodetool(sub_cmd='cfstats', args=keyspace, ignore_status=True)
+            return res.exit_status == 0 and table_name in res
+
+        wait_table_created(table_name='standard1')
+        if space_amplification_goal:
+            node1: BaseNode = self.db_cluster.nodes[0]
+            node1.run_cqlsh(
+                f"ALTER TABLE {keyspace}.standard1 WITH compaction = {{'class': '{CompactionStrategy.INCREMENTAL.value}', 'space_amplification_goal': '{space_amplification_goal}'}}")
+
+            self._alter_table_compaction(additional_compaction_params={
+                                         'space_amplification_goal': '{space_amplification_goal}'})
         # Wait on the queue till all threads come back.
         for stress in write_queue:
             self.verify_stress_thread(cs_thread_pool=stress)
@@ -189,7 +230,7 @@ class IcsSpaceAmplificationTest(LongevityTest):
 
         self.log.debug('Test Space-amplification on over-write data')
         prepare_overwrite_cmd = "cassandra-stress write cl=ALL  n={overwrite_ops_num} -schema 'replication(factor=3) compaction(strategy=IncrementalCompactionStrategy)' -port jmx=6868 -mode cql3 native" \
-                                " -rate threads=1000 -col 'size=FIXED({column_size}) n=FIXED({num_of_columns})' -pop 'dist=uniform(1..{overwrite_ops_num})' ".format(
+                                " -rate threads=1000 -col 'size=FIXED({column_size}) n=FIXED(5)' -pop 'dist=uniform(1..{overwrite_ops_num})' ".format(
                                     **dict(locals(), **globals()))
 
         verify_overwrite_queue = list()
@@ -220,6 +261,12 @@ class IcsSpaceAmplificationTest(LongevityTest):
             dict_nodes_initial_capacity=dict_nodes_capacity_before_major_compaction,
             start_time=start_time)
         verify_nodes_space_amplification(dict_nodes_space_amplification=dict_nodes_space_amplification)
+
+    def test_ics_space_amplification(self):
+        self._test_ics_space_amplification_base()
+
+    def test_ics_space_amplification_with_goal(self):
+        self._test_ics_space_amplification_base(space_amplification_goal=1.2)
 
 
 def verify_nodes_space_amplification(dict_nodes_space_amplification):
