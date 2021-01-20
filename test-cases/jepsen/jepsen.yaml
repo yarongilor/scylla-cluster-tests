@@ -1,4 +1,4 @@
-test_duration: 360
+test_duration: 540
 cluster_backend: 'gce'
 gce_image_username: 'sct'
 gce_image_db: 'https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/family/debian-10'
