@@ -62,7 +62,7 @@ class LongevityTest(ClusterTester):
 
             if 'keyspace_name' in params:
                 del params['keyspace_name']
-
+        self.log.debug('$$$$$$ _run_all_stress_cmds completed')
         return stress_queue
 
     def _parse_stress_cmd(self, stress_cmd, params):
@@ -351,9 +351,11 @@ class LongevityTest(ClusterTester):
                 for _ in range(user_profile_table_count):
                     stress_params_list += self.create_templated_user_stress_params(next(templated_table_counter),
                                                                                    cs_profile)
-
-            self._run_user_stress_in_batches(batch_size=batch_size,
-                                             stress_params_list=stress_params_list)
+            try:
+                self._run_user_stress_in_batches(batch_size=batch_size,
+                                                 stress_params_list=stress_params_list)
+            except Exception as error:
+                self.log.debug(f'$$$$$$ _run_user_stress_in_batches got exception: {error}')
 
     def _run_user_stress_in_batches(self, batch_size, stress_params_list):
         """
@@ -379,17 +381,25 @@ class LongevityTest(ClusterTester):
             for cs_profile in customer_profiles:
                 # for now we'll leave to just one fresh table, to kick schema update
                 num_of_newly_created_tables = 1
+                self.log.debug('$$$$$$ _pre_create_templated_user_schema start')
                 self._pre_create_templated_user_schema(batch_start=extra_tables_idx,
                                                        batch_end=extra_tables_idx+num_of_newly_created_tables)
+                self.log.debug('$$$$$$ _pre_create_templated_user_schema end')
                 for i in range(num_of_newly_created_tables):
                     batch += self.create_templated_user_stress_params(extra_tables_idx + i, cs_profile=cs_profile)
 
             for params in batch:
                 batch_params['stress_cmd'] += [params['stress_cmd']]
 
+            self.log.debug('$$$$$$ _run_all_stress_cmds start')
             self._run_all_stress_cmds(stress_queue, params=batch_params)
+            self.log.debug('$$$$$$ _run_all_stress_cmds end')
+
+            self.log.debug('$$$$$$ verify_stress_thread loop start')
             for stress in stress_queue:
+                self.log.debug(f'$$$$$$ verify_stress_thread {stress} start')
                 self.verify_stress_thread(cs_thread_pool=stress)
+            self.log.debug('$$$$$$ verify_stress_thread loop end')
 
     def _run_stress_in_batches(self, total_stress, batch_size, stress_cmd):
         stress_queue = list()
@@ -503,32 +513,35 @@ class LongevityTest(ClusterTester):
             keyspace_name = profile_yaml['keyspace']
             table_template = string.Template(profile_yaml['table_definition'])
 
-            with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
-                try:
-                    session.execute(keyspace_definition)
-                except AlreadyExists:
-                    self.log.debug("keyspace [{}] exists".format(keyspace_name))
-
-                if batch_start is not None and batch_end is not None:
-                    table_range = range(batch_start, batch_end)
-                else:
-                    table_range = range(user_profile_table_count)
-                self.log.debug('Pre Creating Schema for c-s with {} user tables'.format(user_profile_table_count))
-                for i in table_range:
-                    table_name = 'table{}'.format(i)
-                    query = table_template.substitute(table_name=table_name)
+            try:
+                with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
                     try:
-                        session.execute(query)
+                        session.execute(keyspace_definition)
                     except AlreadyExists:
-                        self.log.debug('table [{}] exists'.format(table_name))
-                    self.log.debug('{} Created'.format(table_name))
+                        self.log.debug("keyspace [{}] exists".format(keyspace_name))
 
-                    for definition in profile_yaml.get('extra_definitions', []):
-                        query = string.Template(definition).substitute(table_name=table_name)
+                    if batch_start is not None and batch_end is not None:
+                        table_range = range(batch_start, batch_end)
+                    else:
+                        table_range = range(user_profile_table_count)
+                    self.log.debug('Pre Creating Schema for c-s with {} user tables'.format(user_profile_table_count))
+                    for i in table_range:
+                        table_name = 'table{}'.format(i)
+                        query = table_template.substitute(table_name=table_name)
                         try:
                             session.execute(query)
-                        except (AlreadyExists, InvalidRequest) as exc:
-                            self.log.debug('extra definition for [{}] exists [{}]'.format(table_name, str(exc)))
+                        except AlreadyExists:
+                            self.log.debug('table [{}] exists'.format(table_name))
+                        self.log.debug('{} Created'.format(table_name))
+
+                        for definition in profile_yaml.get('extra_definitions', []):
+                            query = string.Template(definition).substitute(table_name=table_name)
+                            try:
+                                session.execute(query)
+                            except (AlreadyExists, InvalidRequest) as exc:
+                                self.log.debug('extra definition for [{}] exists [{}]'.format(table_name, str(exc)))
+            except Exception as error:
+                self.log.debug(f'$$$$$$ _pre_create_templated_user_schema got exception: {error}')
 
     def _pre_create_keyspace(self):
         cmds = self.params.get('pre_create_keyspace')
