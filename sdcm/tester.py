@@ -1278,28 +1278,24 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             self.loaders.kill_stress_thread()
 
     def verify_stress_thread(self, cs_thread_pool):
-        try:
-            if isinstance(cs_thread_pool, dict):
-                results = self.get_stress_results_bench(queue=cs_thread_pool)
-                errors = []
-            else:
-                results, errors = cs_thread_pool.verify_results()
-            if results and self.create_stats:
-                self.update_stress_results(results)
-            if not results:
-                self.log.warning('There is no stress results, probably stress thread has failed.')
-            # Sometimes, we might have an epic error messages list
-            # that will make small machines driving the test
-            # to run out of memory when writing the XML report. Since
-            # the error message is merely informational, let's simply
-            # use the last 5 lines for the final error message.
-            errors = errors[-5:]
-            if errors:
-                self.log.warning("cassandra-stress errors on "
-                                 "nodes:\n%s" % "\n".join(errors))
-            self.log.debug(f'$$$$$$ verify_stress_thread {cs_thread_pool} completed')
-        except Exception as error:
-            self.log.debug(f'$$$$$$ verify_stress_thread got exception: {error}')
+        if isinstance(cs_thread_pool, dict):
+            results = self.get_stress_results_bench(queue=cs_thread_pool)
+            errors = []
+        else:
+            results, errors = cs_thread_pool.verify_results()
+        if results and self.create_stats:
+            self.update_stress_results(results)
+        if not results:
+            self.log.warning('There is no stress results, probably stress thread has failed.')
+        # Sometimes, we might have an epic error messages list
+        # that will make small machines driving the test
+        # to run out of memory when writing the XML report. Since
+        # the error message is merely informational, let's simply
+        # use the last 5 lines for the final error message.
+        errors = errors[-5:]
+        if errors:
+            self.log.warning("cassandra-stress errors on "
+                             "nodes:\n%s" % "\n".join(errors))
 
     def get_stress_results(self, queue, store_results=True):
         results = queue.get_results()
