@@ -6,8 +6,8 @@ cs_user_profiles:
 
 pre_create_schema: true
 
-user_profile_table_count: 5000
-batch_size: 200
+user_profile_table_count: 1000
+batch_size: 20
 
 n_loaders: 5
 n_monitor_nodes: 1

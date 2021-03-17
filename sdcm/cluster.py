@@ -4270,7 +4270,7 @@ class BaseLoaderSet():
                           ">> /etc/security/limits.d/20-coredump.conf\"")
         if result.exit_status == 0:
             # Update existing scylla-bench to latest
-            node.remoter.run('go get -u github.com/scylladb/scylla-bench')
+            # node.remoter.run('go get -u github.com/scylladb/scylla-bench')
             self.log.debug('Skip loader setup for using a prepared AMI')
             return
 
