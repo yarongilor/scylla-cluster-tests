@@ -1,4 +1,9 @@
 user_prefix: 'alternator-streams-nemesis'
 nemesis_class_name: 'DecommissionMonkey'
-nemesis_interval: 30
+nemesis_interval: 600
 nemesis_during_prepare: true
+use_mgmt: false
+
+# set minimal num_tokens for reproduction of: https://github.com/scylladb/scylla/issues/8012
+append_scylla_yaml: |
+  num_tokens: 1
