@@ -1879,6 +1879,10 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 thread.result(timeout=120)
                 time.sleep(10)  # to make sure all failed logs/events, are ignored correctly
 
+        # Stopping alert manager for the rest of the test -
+        # a workaround for https://github.com/scylladb/scylla/issues/7840
+        #  avoid failing with a Prometheus error of CassandraStressWriteTooSlow
+        self.cluster._alert_manager.stop()
         self.log.debug("Execute a complete repair for target node")
         self.repair_nodetool_repair()
 
