@@ -23,7 +23,7 @@ from collections import OrderedDict
 from uuid import UUID
 from distutils.version import LooseVersion
 
-from cassandra import InvalidRequest
+from cassandra import InvalidRequest, OperationTimedOut
 from cassandra.util import sortedset, SortedSet  # pylint: disable=no-name-in-module
 from cassandra import ConsistencyLevel
 from cassandra.protocol import ProtocolException  # pylint: disable=no-name-in-module
@@ -2894,21 +2894,23 @@ class FillDatabaseData(ClusterTester):
     ]
 
     @staticmethod
-    def cql_create_simple_tables(session, rows):
+    @retrying(n=5, sleep_time=15, allowed_exceptions=OperationTimedOut)
+    def retrying_session_query(session, query):
+        session.execute(query)
+
+    def cql_create_simple_tables(self, session, rows):
         """ Create tables for truncate test """
         create_query = "CREATE TABLE IF NOT EXISTS truncate_table%d (my_id int PRIMARY KEY, col1 int, value int)"
         for i in range(rows):
-            session.execute(create_query % i)
-            # Added sleep after each created table
-            time.sleep(15)
+            query = create_query % i
+            self.retrying_session_query(session, query)
 
-    @staticmethod
-    def cql_insert_data_to_simple_tables(session, rows):  # pylint: disable=invalid-name
+    def cql_insert_data_to_simple_tables(self, session, rows):  # pylint: disable=invalid-name
         def insert_query():
             return f'INSERT INTO truncate_table{i} (my_id, col1, value) VALUES ( {k}, {k}, {k})'
         for i in range(rows):  # pylint: disable=unused-variable
             for k in range(100):  # pylint: disable=unused-variable
-                session.execute(insert_query())
+                self.retrying_session_query(session, insert_query())
 
     @staticmethod
     def cql_truncate_simple_tables(session, rows):
