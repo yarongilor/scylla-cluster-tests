@@ -2731,6 +2731,20 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.disrupt_grow_shrink_cluster()
         InfoEvent(message="Finished grow_shrink disruption").publish()
 
+    def disrupt_run_reproduction_sequence(self):
+        sleep_time_between_ops = 3 * 60
+        InfoEvent(message='StartEvent - start a repair by ScyllaManager').publish()
+        self.disrupt_mgmt_repair_cli()
+        InfoEvent(message='FinishEvent - Manager repair has finished').publish()
+        time.sleep(sleep_time_between_ops)
+        InfoEvent(message='Starting disrupt_nodetool_decommission').publish()
+        self.disrupt_nodetool_decommission()
+        InfoEvent(message='Finished disrupt_nodetool_decommission').publish()
+        time.sleep(sleep_time_between_ops)
+        InfoEvent(message='Starting disrupt_major_compaction').publish()
+        self.disrupt_major_compaction()
+        InfoEvent(message="Finished disrupt_major_compaction").publish()
+
     def disrupt_memory_stress(self):
         """
         Try to run stress-ng to preempt allocated memory of scylla process,
@@ -3816,6 +3830,15 @@ class NemesisSequence(Nemesis):
 
     def disrupt(self):
         self.disrupt_run_unique_sequence()
+
+
+class NemesisReproductionSequence(Nemesis):
+    disruptive = True
+    networking = False
+    run_with_gemini = False
+
+    def disrupt(self):
+        self.disrupt_run_reproduction_sequence()
 
 
 class TerminateAndRemoveNodeMonkey(Nemesis):
