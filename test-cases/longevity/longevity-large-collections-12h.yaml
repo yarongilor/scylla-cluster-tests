@@ -9,8 +9,8 @@ n_monitor_nodes: 1
 
 instance_type_db: 'i3en.3xlarge'
 
-nemesis_class_name: 'ChaosMonkey'
-nemesis_interval: 15
+nemesis_class_name: 'DecommissionMonkey'
+nemesis_interval: 5
 
 user_prefix: 'longevity-large-collections-12h'
 space_node_threshold: 64424
