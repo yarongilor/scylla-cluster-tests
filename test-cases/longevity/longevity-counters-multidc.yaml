@@ -18,7 +18,7 @@ nemesis_class_name: 'ChaosMonkey'
 nemesis_interval: 15
 
 server_encrypt: true
-internode_encryption: 'dc'
+internode_encryption: 'all'
 
 ip_ssh_connections: 'public'
 
