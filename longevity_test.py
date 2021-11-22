@@ -90,11 +90,11 @@ class LongevityTest(ClusterTester):
         params = {}
         fullscan = self.params.get('run_fullscan')
         if fullscan:
-            fullscan = fullscan.split(',')
-            params['ks.cf'] = fullscan[0].strip()
-            params['interval'] = int(fullscan[1].strip())
-            self.log.info('Fullscan target: {} Fullscan interval: {}'.format(params['ks.cf'],
-                                                                             params['interval']))
+            fullscan = [val.strip() for val in fullscan.split(',')]
+            params['ks.cf'] = fullscan[0]
+            params['interval'] = int(fullscan[1])
+            params['allow_reversed_queries'] = 'allow_reversed_queries' in fullscan
+            self.log.info('Full-scan params are: %s', params)
         return params
 
     def run_pre_create_schema(self):
@@ -242,11 +242,10 @@ class LongevityTest(ClusterTester):
                             self.log.debug('Stress cmd: {}'.format(stress_cmd))
                             self._run_all_stress_cmds(stress_queue, params)
 
-        fullscan = self._get_fullscan_params()
-        if fullscan:
-            self.log.info('Fullscan target: {} Fullscan interval: {}'.format(fullscan['ks.cf'],
-                                                                             fullscan['interval']))
-            self.run_fullscan_thread(ks_cf=fullscan['ks.cf'], interval=fullscan['interval'])
+        fs_params = self._get_fullscan_params()
+        if fs_params:
+            self.run_fullscan_thread(ks_cf=fs_params['ks.cf'], interval=fs_params['interval'],
+                                     allow_reversed_queries=fs_params['allow_reversed_queries'])
 
         # Check if we shall wait for total_used_space or if nemesis wasn't started
         if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):
