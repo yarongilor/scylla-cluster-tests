@@ -1650,7 +1650,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                          'errors': stats['errors']})
         return stats
 
-    def run_fullscan_thread(self, ks_cf='random', interval=1, duration=None):
+    def run_fullscan_thread(self, ks_cf='random', interval=1, duration=None, allow_reversed_queries=False):
         """Run thread of cql command select *
 
         Calculate test duration and timeout interval between
@@ -1667,6 +1667,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             ks_cf=ks_cf,
             duration=self.get_duration(duration),
             interval=interval * 60,
+            allow_reversed_queries=allow_reversed_queries,
             termination_event=self.db_cluster.nemesis_termination_event,
         ).start()
 

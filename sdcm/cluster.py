@@ -3486,6 +3486,22 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
         return list(regular_table_names - materialized_view_table_names)
 
+    def get_partition_keys(self, ks_cf: str, pk_name: str = 'pk', num_of_pk: int = 100) -> List[str]:
+        """
+        Return list of partitions from a requested table
+        :param ks_cf:
+        :param num_of_pk:
+        :param pk_name:
+        :return:
+        """
+        pks_list = []
+        cql_result = self.run_cqlsh(f'select {pk_name} from {ks_cf} limit {num_of_pk}', split=True,
+                                    verbose=True)
+        for line in cql_result:
+            line_splitted = line.split('|')
+            pks_list.append(line_splitted[0].strip())
+        return pks_list
+
     def get_all_tables_with_cdc(self, db_node: BaseNode) -> List[str]:
         """Return list of all tables with enabled cdc feature
 
