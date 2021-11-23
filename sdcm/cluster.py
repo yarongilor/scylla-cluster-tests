@@ -3495,11 +3495,14 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         :return:
         """
         pks_list = []
-        cql_result = self.run_cqlsh(f'select {pk_name} from {ks_cf} limit {num_of_pk}', split=True,
+        cmd = f'select {pk_name} from {ks_cf} limit {num_of_pk}'
+        cql_result = self.run_cqlsh(cmd, split=True,
                                     verbose=True)
+        self.log.info(f'Result of {cmd} is: {cql_result}')
         for line in cql_result:
             line_splitted = line.split('|')
             pks_list.append(line_splitted[0].strip())
+        self.log.info(f'pks_list is: {pks_list}')
         return pks_list
 
     def get_all_tables_with_cdc(self, db_node: BaseNode) -> List[str]:

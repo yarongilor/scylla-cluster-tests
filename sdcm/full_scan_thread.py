@@ -42,7 +42,7 @@ class FullScanThread:
     def generate_query_options(self) -> dict:
         bypass_cache = ' bypass cache'
         basic_query = 'select * from {}'
-        reversed_query_suffix = ' order by ck desc where pk = {}'
+        reversed_query_suffix = ' where pk = {} order by ck desc'
         reversed_query = basic_query + reversed_query_suffix
         query_options = {'normal_query_options': [basic_query, basic_query + bypass_cache]}
         if self.allow_reversed_queries:
@@ -68,10 +68,12 @@ class FullScanThread:
 
     def randomly_form_cql_statement(self, ks_cf: str) -> Optional[str]:
         query_mode = random.choice(list(self.query_options.keys()))
-        if query_mode == 'reversed_query_options':
+        if query_mode == 'reversed_query_options' or True:  #TODO: DBG
+            self.log.info(f'selected reversed_query_options')
             if pks := self.db_cluster.get_partition_keys(ks_cf=ks_cf):
                 pk = random.choice(pks)
                 cmd = random.choice(self.query_options['reversed_query_options']).format(ks_cf, pk)
+                self.log.info(f'reversed_query_options cmd: {cmd}')
             else:
                 self.log.info(f'No partition keys found for table: {ks_cf}! A reversed query cannot be executed!')
                 return None
