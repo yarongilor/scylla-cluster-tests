@@ -3501,7 +3501,9 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         self.log.info(f'Result of {cmd} is: {cql_result}')
         for line in cql_result:
             line_splitted = line.split('|')
-            pks_list.append(line_splitted[0].strip())
+            res_val = line_splitted[0].strip()
+            if res_val.isdigit():
+                pks_list.append(res_val)
         self.log.info(f'pks_list is: {pks_list}')
         return pks_list
 
