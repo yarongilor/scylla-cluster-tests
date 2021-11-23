@@ -66,11 +66,11 @@ class FullScanThread:
             cmd += cql_timeout_param
         return cmd
 
-    def randomly_form_cql_statement(self, ks_cf: str) -> Optional[str]:
+    def randomly_form_cql_statement(self, ks_cf: str, db_node: BaseNode) -> Optional[str]:
         query_mode = random.choice(list(self.query_options.keys()))
         if query_mode == 'reversed_query_options' or True:  #TODO: DBG
             self.log.info(f'selected reversed_query_options')
-            if pks := self.db_cluster.get_partition_keys(ks_cf=ks_cf):
+            if pks := self.db_cluster.get_partition_keys(ks_cf=ks_cf, db_node=db_node):
                 pk = random.choice(pks)
                 cmd = random.choice(self.query_options['reversed_query_options']).format(ks_cf, pk)
                 self.log.info(f'reversed_query_options cmd: {cmd}')
@@ -90,7 +90,7 @@ class FullScanThread:
         ks_cf = self.get_ks_cs(db_node)
         read_pages = random.choice([100, 1000, 0])
         with FullScanEvent(node=db_node.name, ks_cf=ks_cf, message="") as fs_event:
-            cmd = self.randomly_form_cql_statement(ks_cf)
+            cmd = self.randomly_form_cql_statement(ks_cf=ks_cf, db_node=db_node)
             if not cmd:
                 return
             with self.create_session(db_node) as session:

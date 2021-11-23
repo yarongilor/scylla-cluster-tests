@@ -3486,18 +3486,18 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
         return list(regular_table_names - materialized_view_table_names)
 
-    def get_partition_keys(self, ks_cf: str, pk_name: str = 'pk', num_of_pk: int = 100) -> List[str]:
+    def get_partition_keys(self, ks_cf: str, db_node: BaseNode, pk_name: str = 'pk', num_of_pk: int = 100) -> List[str]:
         """
         Return list of partitions from a requested table
         :param ks_cf:
+        :param db_node:
         :param num_of_pk:
         :param pk_name:
         :return:
         """
         pks_list = []
         cmd = f'select {pk_name} from {ks_cf} limit {num_of_pk}'
-        cql_result = self.run_cqlsh(cmd, split=True,
-                                    verbose=True)
+        cql_result = db_node.run_cqlsh(cmd, split=True, verbose=True)
         self.log.info(f'Result of {cmd} is: {cql_result}')
         for line in cql_result:
             line_splitted = line.split('|')
