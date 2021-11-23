@@ -7,7 +7,7 @@ instance_type_db: 'i3.large'
 
 user_prefix: 'gemini-with-nemesis-3h-normal'
 
-nemesis_class_name: 'GeminiChaosMonkey'
+nemesis_class_name: 'RebuildStreamingErrMonkey'
 nemesis_interval: 5
 
 # gemini
