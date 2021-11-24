@@ -2370,3 +2370,23 @@ def clear_out_all_exit_hooks():
       teardown.
     """
     threading._threading_atexits.clear()  # pylint: disable=protected-access
+
+
+def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 100) -> List[str]:
+    """
+    Return list of partitions from a requested table
+    :param session:
+    :param ks_cf:
+    :param limit:
+    :param pk_name:
+    :return:
+    """
+    pks_list = []
+    cmd = f'select {pk_name} from {ks_cf} limit {limit}'
+    cql_result = session.execute(cmd)
+    for line in cql_result:
+        line_splitted = line.split('|')
+        res_val = line_splitted[0].strip()
+        if res_val.isdigit():
+            pks_list.append(res_val)
+    return pks_list
