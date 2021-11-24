@@ -247,6 +247,34 @@ class FullScanEvent(ScyllaDatabaseContinuousEvent):
         return fmt
 
 
+class FullPartitionScanReversedOrderEvent(ScyllaDatabaseContinuousEvent):
+    def __init__(self, node: str, ks_cf: str, message: Optional[str] = None, severity=Severity.NORMAL, **__):
+        super().__init__(node=node, severity=severity)
+        self.ks_cf = ks_cf
+        self.message = message
+
+    @property
+    def msgfmt(self):
+        fmt = super().msgfmt + " select_from={0.ks_cf}"
+        if self.message:
+            fmt += " message={0.message}"
+        return fmt
+
+
+class FullPartitionScanEvent(ScyllaDatabaseContinuousEvent):
+    def __init__(self, node: str, ks_cf: str, message: Optional[str] = None, severity=Severity.NORMAL, **__):
+        super().__init__(node=node, severity=severity)
+        self.ks_cf = ks_cf
+        self.message = message
+
+    @property
+    def msgfmt(self):
+        fmt = super().msgfmt + " select_from={0.ks_cf}"
+        if self.message:
+            fmt += " message={0.message}"
+        return fmt
+
+
 class RepairEvent(ScyllaDatabaseContinuousEvent):
     begin_pattern = r'Repair 1 out of \d+ ranges, id=\[id=\d+, uuid=[\d\w-]{36}\], shard=(?P<shard>\d+)'
     end_pattern = r'repair id \[id=\d+, uuid=[\d\w-]{36}\] on shard (?P<shard>\d+) completed'

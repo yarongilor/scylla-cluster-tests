@@ -3647,26 +3647,6 @@ def wait_for_init_wrap(method):  # pylint: disable=too-many-statements
     return wrapper
 
 
-def get_partition_keys(ks_cf: str, db_node: BaseNode, pk_name: str = 'pk', num_of_pk: int = 100) -> List[str]:
-    """
-    Return list of partitions from a requested table
-    :param ks_cf:
-    :param db_node:
-    :param num_of_pk:
-    :param pk_name:
-    :return:
-    """
-    pks_list = []
-    cmd = f'select {pk_name} from {ks_cf} limit {num_of_pk}'
-    cql_result = db_node.run_cqlsh(cmd, split=True, verbose=True)
-    for line in cql_result:
-        line_splitted = line.split('|')
-        res_val = line_splitted[0].strip()
-        if res_val.isdigit():
-            pks_list.append(res_val)
-    return pks_list
-
-
 class ClusterNodesNotReady(Exception):
     pass
 
