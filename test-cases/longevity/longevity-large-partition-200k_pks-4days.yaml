@@ -68,3 +68,5 @@ user_prefix: 'longevity-large-partitions-200k-pks-4d'
 space_node_threshold: 644245094
 
 stop_test_on_stress_failure: false
+
+run_reversed_query: 'scylla_bench.test, 2' # 'ks.cf, interval(min)''

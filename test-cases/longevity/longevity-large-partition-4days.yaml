@@ -24,3 +24,5 @@ space_node_threshold: 644245094
 validate_partitions: true
 table_name: "scylla_bench.test"
 primary_key_column: "pk"
+
+run_reversed_query: 'scylla_bench.test, 2' # 'ks.cf, interval(min)''

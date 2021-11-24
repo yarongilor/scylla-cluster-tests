@@ -793,6 +793,8 @@ class SCTConfiguration(dict):
              help=""),
         dict(name="run_fullscan", env="SCT_RUN_FULLSCAN", type=str,
              help=""),
+        dict(name="run_reversed_query", env="SCT_RUN_REVERSED_QUERY", type=str,
+             help=""),
         dict(name="keyspace_num", env="SCT_KEYSPACE_NUM", type=int,
              help=""),
         dict(name="round_robin", env="SCT_ROUND_ROBIN", type=boolean,

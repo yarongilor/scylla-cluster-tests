@@ -46,3 +46,5 @@ nemesis_interval: 15
 user_prefix: 'longevity-large-partitions-8h'
 
 space_node_threshold: 644245094
+
+run_reversed_query: 'scylla_bench.test, 2' # 'ks.cf, interval(min)''

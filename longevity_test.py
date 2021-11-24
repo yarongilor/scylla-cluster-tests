@@ -86,15 +86,14 @@ class LongevityTest(ClusterTester):
     def _get_keyspace_name(ks_number, keyspace_pref='keyspace'):
         return '{}{}'.format(keyspace_pref, ks_number)
 
-    def _get_fullscan_params(self):
+    def _get_read_operation_params(self, read_operation: str) -> dict:
         params = {}
-        fullscan = self.params.get('run_fullscan')
-        if fullscan:
-            fullscan = [val.strip() for val in fullscan.split(',')]
-            params['ks.cf'] = fullscan[0]
-            params['interval'] = int(fullscan[1])
-            params['allow_reversed_queries'] = 'allow_reversed_queries' in fullscan
-            self.log.info('Full-scan params are: %s', params)
+        read_operation_params = self.params.get(read_operation)
+        if read_operation_params:
+            read_operation_params = [val.strip() for val in read_operation_params.split(',')]
+            params['ks.cf'] = read_operation_params[0]
+            params['interval'] = int(read_operation_params[1])
+            self.log.info('Read operation %s params are: %s', read_operation, params)
         return params
 
     def run_pre_create_schema(self):
@@ -242,10 +241,13 @@ class LongevityTest(ClusterTester):
                             self.log.debug('Stress cmd: {}'.format(stress_cmd))
                             self._run_all_stress_cmds(stress_queue, params)
 
-        fs_params = self._get_fullscan_params()
+        fs_params = self._get_read_operation_params(read_operation='run_fullscan')
         if fs_params:
-            self.run_fullscan_thread(ks_cf=fs_params['ks.cf'], interval=fs_params['interval'],
-                                     allow_reversed_queries=fs_params['allow_reversed_queries'])
+            self.run_fullscan_thread(ks_cf=fs_params['ks.cf'], interval=fs_params['interval'])
+
+        rq_params = self._get_read_operation_params(read_operation='run_reversed_query')
+        if rq_params:
+            self.run_reversed_query_thread(ks_cf=rq_params['ks.cf'], interval=rq_params['interval'])
 
         # Check if we shall wait for total_used_space or if nemesis wasn't started
         if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):

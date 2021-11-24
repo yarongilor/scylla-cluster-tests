@@ -49,7 +49,7 @@ from sdcm.cluster_aws import LoaderSetAWS
 from sdcm.cluster_aws import MonitorSetAWS
 from sdcm.cluster_k8s import mini_k8s, gke, eks, LOADER_CLUSTER_CONFIG
 from sdcm.cluster_k8s.eks import MonitorSetEKS
-from sdcm.full_scan_thread import FullScanThread
+from sdcm.read_operation_thread import FullScanThread, ReversedQueryThread
 from sdcm.nosql_thread import NoSQLBenchStressThread
 from sdcm.scylla_bench_thread import ScyllaBenchThread
 from sdcm.cassandra_harry_thread import CassandraHarryThread
@@ -1650,7 +1650,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                          'errors': stats['errors']})
         return stats
 
-    def run_fullscan_thread(self, ks_cf='random', interval=1, duration=None, allow_reversed_queries=False):
+    def run_fullscan_thread(self, ks_cf='random', interval=1, duration=None):
         """Run thread of cql command select *
 
         Calculate test duration and timeout interval between
@@ -1667,7 +1667,25 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             ks_cf=ks_cf,
             duration=self.get_duration(duration),
             interval=interval * 60,
-            allow_reversed_queries=allow_reversed_queries,
+            termination_event=self.db_cluster.nemesis_termination_event,
+        ).start()
+
+    def run_reversed_query_thread(self, ks_cf: str, interval=1, duration=None):
+        """Run thread of cql command select with a clustering key reversed query.
+
+        Calculate test duration and timeout interval between
+        requests and execute the thread with cqlsh command to
+        db node: select * from ks.cf where pk = ? order by ck desc'
+
+        Keyword Arguments:
+            timeout {number} -- interval between request in min (default: {1})
+            duration {int} -- duration of running thread in min (default: {None})
+        """
+        ReversedQueryThread(
+            db_cluster=self.db_cluster,
+            ks_cf=ks_cf,
+            duration=self.get_duration(duration),
+            interval=interval * 60,
             termination_event=self.db_cluster.nemesis_termination_event,
         ).start()
 
