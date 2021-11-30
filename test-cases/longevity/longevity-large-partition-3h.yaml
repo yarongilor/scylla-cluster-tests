@@ -44,3 +44,5 @@ space_node_threshold: 644245094
 run_fullscan: 'scylla_bench.test, 10' # 'ks.cf|random, interval(min)''
 
 run_reversed_query: 'scylla_bench.test, 2' # 'ks.cf, interval(min)''
+
+use_mgmt: true
