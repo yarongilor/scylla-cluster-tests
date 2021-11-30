@@ -3831,7 +3831,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 check_package_suites_distro(node, 'deb')
 
                 def list_installed_packages():
-                    node.scylla_packages_installed()
+                    node.scylla_packages_installed
 
                 @retrying(n=6, sleep_time=10, allowed_exceptions=(UnexpectedExit,))
                 def dpkg_force_install():
