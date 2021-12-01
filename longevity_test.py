@@ -240,7 +240,7 @@ class LongevityTest(ClusterTester):
 
         fullscan_params = self._get_scan_operation_params(scan_operation='run_fullscan')
         if fullscan_params:
-            self.run_fullscan_thread(ks_cf=fullscan_params['ks.cf'], interval=fullscan_params['interval'])
+            self.run_fullscan_thread(ks_cf=fullscan_params['ks_cf'], interval=fullscan_params['interval'])
 
         full_partition_scan_params = self._get_scan_operation_params(scan_operation='run_full_partition_scan')
         if full_partition_scan_params:
