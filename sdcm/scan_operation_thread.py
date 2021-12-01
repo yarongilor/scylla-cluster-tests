@@ -4,7 +4,7 @@ import random
 import threading
 import time
 from abc import abstractmethod
-from typing import Optional
+from typing import Optional, Union
 # from deepdiff import DeepDiff
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
@@ -166,7 +166,7 @@ class FullPartitionScanThread(ScanOperationThread):
         self.full_partition_scan_params['validate_data'] = json.loads(
             self.full_partition_scan_params.get('validate_data', 'false'))
 
-    def randomly_form_cql_statement(self) -> Optional[str, str]:  # TODO: Finish pylint stuff
+    def randomly_form_cql_statement(self) -> Optional[tuple[str, str]]:  # TODO: Finish pylint stuff
         with self.create_session(self.db_node) as session:
             ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
             rows_count = self.full_partition_scan_params.get('rows_count', 5000)
@@ -255,7 +255,7 @@ class FullPartitionScanThread(ScanOperationThread):
         self.log.info(f'Type of result is: {type(result)}')
         while result.has_more_pages and pages <= read_pages:
             fetch_next_page = result.fetch_next_page()
-            self.log.info(f'fetch_next_page is: %', fetch_next_page)
+            self.log.info('fetch_next_page is: %', fetch_next_page)
             self.query_result_data += fetch_next_page
             if read_pages > 0:
                 pages += 1
