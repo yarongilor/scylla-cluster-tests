@@ -76,6 +76,7 @@ class ScanOperationThread:
     def fetch_result_pages(self, result, read_pages):
         self.log.info('Will fetch up to % result pages.."', read_pages)
         pages = 0
+        self.log.info(f'Got a query result of: {result}')
         while result.has_more_pages and pages <= read_pages:
             result.fetch_next_page()
             if read_pages > 0:
@@ -250,8 +251,12 @@ class FullPartitionScanThread(ScanOperationThread):
         self.log.info('Will fetch up to % result pages.."', read_pages)
         pages = 0
         self.query_result_data = result
+        self.log.info(f'Got a query result of: {result}')
+        self.log.info(f'Type of result is: {type(result)}')
         while result.has_more_pages and pages <= read_pages:
-            self.query_result_data += result.fetch_next_page()
+            fetch_next_page = result.fetch_next_page()
+            self.log.info(f'fetch_next_page is: %', fetch_next_page)
+            self.query_result_data += fetch_next_page
             if read_pages > 0:
                 pages += 1
 
