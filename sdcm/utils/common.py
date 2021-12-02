@@ -2381,12 +2381,7 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 10
     :param pk_name:
     :return:
     """
-    pks_list = []
     cmd = f'select {pk_name} from {ks_cf} limit {limit}'
     cql_result = session.execute(cmd)
-    for line in cql_result:
-        line_splitted = line.split('|')
-        res_val = line_splitted[0].strip()
-        if res_val.isdigit():
-            pks_list.append(res_val)
+    pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
     return pks_list
