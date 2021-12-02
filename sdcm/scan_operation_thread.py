@@ -255,11 +255,13 @@ class FullPartitionScanThread(ScanOperationThread):
         self.log.info(f'Got a query result of: {result}')
         self.log.info(f'Type of result is: {type(result)}')
         while result.has_more_pages and pages <= read_pages:
-            fetch_next_page = result.fetch_next_page()
-            self.log.info('fetch_next_page is: %s', fetch_next_page)
-            self.query_result_data += fetch_next_page
-            if read_pages > 0:
-                pages += 1
+            if fetch_next_page := result.fetch_next_page():
+                self.log.info('fetch_next_page is: %s', fetch_next_page)
+                self.query_result_data += fetch_next_page
+                if read_pages > 0:
+                    pages += 1
+            else:
+                break
 
     def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
         queries = self.randomly_form_cql_statement()
