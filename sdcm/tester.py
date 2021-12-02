@@ -1664,7 +1664,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         random choosen from current configuration'
 
         Keyword Arguments:
-            timeout {number} -- interval between request in min (default: {1})
+            interval {number} -- interval between requests in min (default: {1})
             duration {int} -- duration of running thread in min (default: {None})
         """
         FullScanThread(
@@ -1675,7 +1675,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             termination_event=self.db_cluster.nemesis_termination_event,
         ).start()
 
-    def run_full_partition_scan_thread(self, duration=None, **kwargs):
+    def run_full_partition_scan_thread(self, duration=None, interval=1, **kwargs):
         """Run thread of cql command select with a clustering key reversed query.
 
         Calculate test duration and timeout interval between
@@ -1683,13 +1683,14 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         db node: select * from ks.cf where pk = ? order by ck desc'
 
         Keyword Arguments:
-            timeout {number} -- interval between request in min (default: {1})
+            interval {number} -- interval between requests in seconds (default: {1})
             duration {int} -- duration of running thread in min (default: {None})
         """
         FullPartitionScanThread(
             db_cluster=self.db_cluster,
             termination_event=self.db_cluster.nemesis_termination_event,
             duration=self.get_duration(duration),
+            interval=interval,
             **kwargs
         ).start()
 
