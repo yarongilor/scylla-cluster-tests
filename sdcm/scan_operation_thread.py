@@ -77,7 +77,7 @@ class ScanOperationThread:
         self.log.info('Will fetch up to %s result pages.."', read_pages)
         pages = 0
         self.log.info(f'Got a query result of: {result}')
-        self.log.info(f'Got a query result of rows: {result.current_rows}')
+        self.log.info(f'Got a query result of rows: {result.current_rows[:3]}')
         while result.has_more_pages and pages <= read_pages:
             result.fetch_next_page()
             if read_pages > 0:
