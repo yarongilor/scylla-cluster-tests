@@ -65,7 +65,6 @@ class ScanOperationThread:
         username, password = credentials if credentials else (None, None)
         return self.db_cluster.cql_connection_patient(db_node, user=username, password=password)
 
-    # TODO: complete implement to save reverse query result in self.query_result in order to compare with normal query
     def execute_query(self, session, cmd: str):
         self.log.info('Will run command "%s"', cmd)
         return session.execute(SimpleStatement(
@@ -74,12 +73,16 @@ class ScanOperationThread:
             consistency_level=ConsistencyLevel.ONE))
 
     def fetch_result_pages(self, result, read_pages):
-        self.log.info('Will fetch up to % result pages.."', read_pages)
+        self.log.info('Will fetch up to %s result pages.."', read_pages)
         pages = 0
         while result.has_more_pages and pages <= read_pages:
-            result.fetch_next_page()
-            if read_pages > 0:
-                pages += 1
+            if fetch_next_page := result.fetch_next_page():
+                self.log.info('fetch_next_page is: %s', fetch_next_page)
+                self.query_result_data += fetch_next_page
+                if read_pages > 0:
+                    pages += 1
+            else:
+                break
 
     def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
         db_node = self.db_node
@@ -263,7 +266,7 @@ class FullPartitionScanThread(ScanOperationThread):
         ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
         if self.full_partition_scan_params.get('validate_data'):
             reversed_query_result = self.query_result_data
-            ScanOperationThread.run_scan_operation(self, scan_operation_event=FullPartitionScanThread, cmd=normal_query)
+            ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=normal_query)
             diff = DeepDiff(t1=reversed_query_result, t2=self.query_result_data, ignore_order=True,
                             ignore_numeric_type_changes=True)
             if diff:
