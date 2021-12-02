@@ -24,13 +24,13 @@ class ScanOperationThread:
     basic_query = 'select * from {}'
 
     # pylint: disable=too-many-arguments
-    def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, termination_event: threading.Event,
-                 page_size: int = 100000, **kwargs):
+    def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
+                 termination_event: threading.Event, page_size: int = 100000, **kwargs):
         self.ks_cf = kwargs.get('ks_cf')
         self.db_cluster = db_cluster
         self.page_size = page_size
         self.duration = duration
-        self.interval = kwargs.get('interval')
+        self.interval = interval
         self.query_options = None
         self.query_result_data = None
         self.db_node = None
