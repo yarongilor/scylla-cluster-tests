@@ -268,7 +268,7 @@ class FullPartitionScanThread(ScanOperationThread):
         ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
         if self.full_partition_scan_params.get('validate_data'):
             reversed_query_result = self.query_result_data
-            ScanOperationThread.run_scan_operation(self, scan_operation_event=FullPartitionScanThread, cmd=normal_query)
+            ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=normal_query)
             # diff = DeepDiff(t1=reversed_query_result, t2=self.query_result_data, ignore_order=True,
             #                 ignore_numeric_type_changes=True)
             # if diff:
