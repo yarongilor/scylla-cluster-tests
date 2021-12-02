@@ -2383,5 +2383,7 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 10
     """
     cmd = f'select {pk_name} from {ks_cf} limit {limit}'
     cql_result = session.execute(cmd)
+    LOGGER.info(f'get_partition_keys cql_result: {cql_result}')
+    LOGGER.info(f'get_partition_keys cql_result rows: {cql_result.current_rows[:10]}')
     pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
     return pks_list
