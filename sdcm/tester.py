@@ -1673,7 +1673,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             termination_event=self.db_cluster.nemesis_termination_event,
         ).start()
 
-    def run_full_partition_scan_thread(self, **kwargs):
+    def run_full_partition_scan_thread(self, duration=None, **kwargs):
         """Run thread of cql command select with a clustering key reversed query.
 
         Calculate test duration and timeout interval between
@@ -1687,6 +1687,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         FullPartitionScanThread(
             db_cluster=self.db_cluster,
             termination_event=self.db_cluster.nemesis_termination_event,
+            duration=self.get_duration(duration),
             **kwargs
         ).start()
 
