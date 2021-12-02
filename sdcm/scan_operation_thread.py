@@ -5,7 +5,7 @@ import threading
 import time
 from abc import abstractmethod
 from typing import Optional
-from deepdiff import DeepDiff
+# from deepdiff import DeepDiff
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 
@@ -265,6 +265,7 @@ class FullPartitionScanThread(ScanOperationThread):
         normal_query, reversed_query = queries
         ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
         if self.full_partition_scan_params.get('validate_data'):
+            return  # TODO: remove when hydra docker is updated with DeepDif
             reversed_query_result = self.query_result_data
             ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=normal_query)
             diff = DeepDiff(t1=reversed_query_result, t2=self.query_result_data, ignore_order=True,
