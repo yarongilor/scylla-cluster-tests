@@ -168,7 +168,7 @@ class FullPartitionScanThread(ScanOperationThread):
         self.full_partition_scan_params['validate_data'] = json.loads(
             self.full_partition_scan_params.get('validate_data', 'false'))
 
-    def randomly_form_cql_statement(self) -> Optional[str, str]:  # TODO: Finish pylint stuff
+    def randomly_form_cql_statement(self) -> Optional[tuple[str, str]]:  # TODO: Finish pylint stuff
         with self.create_session(self.db_node) as session:
             ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
             rows_count = self.full_partition_scan_params.get('rows_count', 5000)
