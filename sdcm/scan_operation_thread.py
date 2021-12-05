@@ -32,7 +32,7 @@ class ScanOperationThread:
         self.duration = duration
         self.interval = interval
         self.query_options = None
-        self.query_result_data = None
+        self.query_result_data = []
         self.db_node = None
         self.read_pages = 0
         self.termination_event = termination_event
@@ -76,19 +76,14 @@ class ScanOperationThread:
         self.log.info('Will fetch up to %s result pages.."', read_pages)
         pages = 0
         while result.has_more_pages and pages <= read_pages:
-            if fetch_next_page := result.fetch_next_page():
-                self.log.info('fetch_next_page is: %s', fetch_next_page)
-                self.query_result_data += fetch_next_page
-                if read_pages > 0:
-                    pages += 1
-            else:
-                break
+            result.fetch_next_page()
+            if read_pages > 0:
+                pages += 1
 
     def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
         db_node = self.db_node
         if self.ks_cf == 'random':
             self.ks_cf = self.get_ks_cs(db_node)
-        read_pages = self.read_pages
         with scan_operation_event(node=db_node.name, ks_cf=self.ks_cf, message="") as operation_event:
             cmd = cmd or self.randomly_form_cql_statement()
             if not cmd:
@@ -100,7 +95,7 @@ class ScanOperationThread:
 
                 try:
                     result = self.execute_query(session=session, cmd=cmd)
-                    self.fetch_result_pages(result=result, read_pages=read_pages)
+                    self.fetch_result_pages(result=result, read_pages=self.read_pages)
                     operation_event.message = f"{scan_operation_event.__name__} operation ended successfully"
                 except Exception as exc:  # pylint: disable=broad-except
                     msg = str(exc)
@@ -250,13 +245,13 @@ class FullPartitionScanThread(ScanOperationThread):
         return normal_query, self.randomly_add_timeout(reversed_query)
 
     def fetch_result_pages(self, result, read_pages):
-        self.log.info('Will fetch up to % result pages.."', read_pages)
-        pages = 0
-        self.query_result_data = result
-        while result.has_more_pages and pages <= read_pages:
-            self.query_result_data += result.fetch_next_page()
-            if read_pages > 0:
-                pages += 1
+        self.log.info('Will fetch up to %s result pages.."', read_pages)
+        self.query_result_data = []
+        handler = PagedResultHandler(future=result, scan_operation_thread=self)
+        handler.finished_event.wait()
+        if handler.error:
+            self.log.warning("Got a Page Handler error: %s", handler.error)
+            raise handler.error
 
     def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
         queries = self.randomly_form_cql_statement()
@@ -276,3 +271,32 @@ class FullPartitionScanThread(ScanOperationThread):
 
     def run(self):
         self.run_for_a_duration(scan_operation_event=FullPartitionScanReversedOrderEvent)
+
+
+class PagedResultHandler(object):
+
+    def __init__(self, future, scan_operation_thread: FullPartitionScanThread):
+        self.error = None
+        self.finished_event = threading.Event()
+        self.future = future
+        self.max_read_pages = scan_operation_thread.read_pages
+        self.current_read_pages = 0
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.scan_operation_thread = scan_operation_thread
+        self.future.add_callbacks(
+            callback=self.handle_page,
+            errback=self.handle_error)
+
+    def handle_page(self, rows):
+        self.scan_operation_thread.query_result_data += rows
+        if self.future.has_more_pages and self.current_read_pages <= self.max_read_pages:
+            self.log.info('Will fetch the next page: %s', self.current_read_pages)
+            self.future.start_fetching_next_page()
+            if self.max_read_pages > 0:
+                self.current_read_pages += 1
+        else:
+            self.finished_event.set()
+
+    def handle_error(self, exc):
+        self.error = exc
+        self.finished_event.set()
