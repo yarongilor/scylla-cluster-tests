@@ -253,6 +253,12 @@ class FullPartitionScanThread(ScanOperationThread):
             self.log.warning("Got a Page Handler error: %s", handler.error)
             raise handler.error
 
+    def execute_query(self, session, cmd: str):
+        self.log.info('Will run command "%s"', cmd)
+        session.default_fetch_size = self.page_size
+        session.default_consistency_level = ConsistencyLevel.ONE
+        return session.execute_async(cmd)
+
     def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
         queries = self.randomly_form_cql_statement()
         if not queries:
