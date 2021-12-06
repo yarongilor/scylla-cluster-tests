@@ -163,7 +163,7 @@ class FullPartitionScanThread(ScanOperationThread):
         self.full_partition_scan_params['validate_data'] = json.loads(
             self.full_partition_scan_params.get('validate_data', 'false'))
 
-    def randomly_form_cql_statement(self) -> Optional[tuple[str, str]]:  # TODO: Finish pylint stuff
+    def randomly_form_cql_statement(self) -> Optional[tuple[str, str]]:  # pylint: disable=too-many-branches
         with self.create_session(self.db_node) as session:
             ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
             rows_count = self.full_partition_scan_params.get('rows_count', 5000)
@@ -279,7 +279,7 @@ class FullPartitionScanThread(ScanOperationThread):
         self.run_for_a_duration(scan_operation_event=FullPartitionScanReversedOrderEvent)
 
 
-class PagedResultHandler(object):
+class PagedResultHandler:
 
     def __init__(self, future, scan_operation_thread: FullPartitionScanThread):
         self.error = None
