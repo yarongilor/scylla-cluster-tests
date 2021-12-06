@@ -70,3 +70,5 @@ space_node_threshold: 644245094
 stop_test_on_stress_failure: false
 
 run_full_partition_scan: '{"ks_cf": "scylla_bench.test", "interval": 2, "pk_name":"pk", "rows_count": 100000}' # 'ks.cf, interval(min), partition-key name, number-of-rows-per-partition'
+
+use_mgmt: false
