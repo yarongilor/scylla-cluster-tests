@@ -88,6 +88,10 @@ class LongevityTest(ClusterTester):
 
     def _get_scan_operation_params(self, scan_operation: str) -> dict:
         params = {}
+        self.log.info('Starting fullscan_params for: %s', scan_operation)
+        self.log.info('self.params.get(%s) ', scan_operation)
+        got_params = self.params.get(scan_operation)
+        self.log.info('got_params: %s', got_params)
         if scan_operation_params := self.params.get(scan_operation):
             params = json.loads(scan_operation_params)
             self.log.info('Read operation %s params are: %s', scan_operation, params)
@@ -175,7 +179,7 @@ class LongevityTest(ClusterTester):
         Run cassandra-stress with params defined in data_dir/scylla.yaml
         """
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-
+        full_partition_scan_params_test = self._get_scan_operation_params(scan_operation='run_full_partition_scan')
         self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(),
                                     tester_obj=self)
         stress_queue = []
@@ -188,6 +192,11 @@ class LongevityTest(ClusterTester):
 
         self.run_pre_create_keyspace()
         self.run_pre_create_schema()
+
+        self.log.info('Starting fullscan_params..')
+        fullscan_params = self._get_scan_operation_params(scan_operation='run_fullscan')
+        if fullscan_params:
+            self.run_fullscan_thread(ks_cf=fullscan_params['ks_cf'], interval=fullscan_params['interval'])
         self.run_prepare_write_cmd()
 
         # Collect data about partitions and their rows amount

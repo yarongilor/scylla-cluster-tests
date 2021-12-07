@@ -1556,10 +1556,10 @@ class SCTConfiguration(dict):
         """
 
         ret_val = super().get(key)
-
+        self.log.info('Got ret_val (%s) for key: %s ', ret_val, key)
         if key in self.multi_region_params and isinstance(ret_val, list):
             ret_val = ' '.join(ret_val)
-
+        self.log.info('Got ret_val (%s) ', ret_val)
         return ret_val
 
     def _validate_value(self, opt):
