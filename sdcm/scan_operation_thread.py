@@ -5,12 +5,10 @@ import threading
 import time
 from abc import abstractmethod
 from typing import Optional
-# from deepdiff import DeepDiff  # TODO: Uncomment when a new hydra docker with deepdiff is available
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 
 from sdcm.cluster import BaseNode, BaseScyllaCluster, BaseCluster
-# from sdcm.sct_events.system import InfoEvent  # TODO: Uncomment when a new hydra docker with deepdiff is available
 from sdcm.utils.common import get_partition_keys
 from sdcm.sct_events import Severity
 from sdcm.sct_events.database import FullScanEvent, FullPartitionScanReversedOrderEvent
@@ -146,7 +144,7 @@ class FullPartitionScanThread(ScanOperationThread):
     It runs a reversed query of a partition, then optionally runs a normal partition scan in order
     to validate the reversed-query output data.
 
-    Should support the following query options:  # TODO: finish implementing
+    Should support the following query options:
     1) ck < ?
     2) ck > ?
     3) ck > ? and ck < ?
@@ -266,15 +264,8 @@ class FullPartitionScanThread(ScanOperationThread):
         normal_query, reversed_query = queries
         ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
         if self.full_partition_scan_params.get('validate_data'):
-            # TODO: remove and uncomment when a new hydra docker with deepdiff is available
+            # TODO: implement when a new hydra docker with deepdiff is available
             self.log.debug('Temporarily not executing the normal query of: %s', normal_query)
-            # reversed_query_result = self.query_result_data
-            # ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=normal_query)
-            # diff = DeepDiff(t1=reversed_query_result, t2=self.query_result_data, ignore_order=True,
-            #                 ignore_numeric_type_changes=True)
-            # if diff:
-            #     InfoEvent(
-            #         message=f'Found the following differences between a reversed and normal queries: {diff}').publish()
 
     def run(self):
         self.run_for_a_duration(scan_operation_event=FullPartitionScanReversedOrderEvent)

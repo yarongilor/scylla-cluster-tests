@@ -90,7 +90,7 @@ class LongevityTest(ClusterTester):
         params = {}
         if scan_operation_params := self.params.get(scan_operation):
             params = json.loads(scan_operation_params)
-            self.log.info('Read operation %s params are: %s', scan_operation, params)
+            self.log.info('Scan operation %s params are: %s', scan_operation, params)
         return params
 
     def run_pre_create_schema(self):
@@ -238,12 +238,10 @@ class LongevityTest(ClusterTester):
                             self.log.debug('Stress cmd: {}'.format(stress_cmd))
                             self._run_all_stress_cmds(stress_queue, params)
 
-        fullscan_params = self._get_scan_operation_params(scan_operation='run_fullscan')
-        if fullscan_params:
+        if fullscan_params := self._get_scan_operation_params(scan_operation='run_fullscan'):
             self.run_fullscan_thread(ks_cf=fullscan_params['ks_cf'], interval=fullscan_params['interval'])
 
-        full_partition_scan_params = self._get_scan_operation_params(scan_operation='run_full_partition_scan')
-        if full_partition_scan_params:
+        if full_partition_scan_params := self._get_scan_operation_params(scan_operation='run_full_partition_scan'):
             self.run_full_partition_scan_thread(**full_partition_scan_params)
 
         # Check if we shall wait for total_used_space or if nemesis wasn't started
