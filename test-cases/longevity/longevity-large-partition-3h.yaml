@@ -45,4 +45,4 @@ run_fullscan: '{"ks_cf": "scylla_bench.test", "interval": 10}' # 'ks.cf|random, 
 
 run_full_partition_scan: '{"ks_cf": "scylla_bench.test", "interval": 2, "pk_name":"pk", "rows_count": 5000, "validate_data": "true"}' # 'ks.cf, interval(min), partition-key name, number-of-rows-per-partition, validate reversed query output'
 
-use_mgmt: false
+use_mgmt: true
