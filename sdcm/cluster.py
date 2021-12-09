@@ -1732,6 +1732,9 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
             pkg_cmd = 'zypper'
         else:
             pkg_cmd = 'apt-get'
+            self.remoter.sudo(f'{pkg_cmd} download {package_name}')
+            self.remoter.sudo(f'dpkg -i --ignore-depends=scylla-enterprise-server {package_name}')
+            return
         self.remoter.sudo(f'{pkg_cmd} install -y {package_name}')
 
     def is_apt_lock_free(self) -> bool:
@@ -1740,7 +1743,7 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
     def install_manager_agent(self, package_path: Optional[str] = None) -> None:
         package_name = "scylla-manager-agent"
         if package_path:
-            package_name = f"{package_path}scylla-manager-agent*"
+            package_name = f"{package_path}scylla-manager-agent* "
         elif self.parent_cluster.params.get("scylla_mgmt_agent_address"):
             self.download_scylla_manager_repo(self.parent_cluster.params.get("scylla_mgmt_agent_address"))
         else:
