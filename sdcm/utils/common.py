@@ -2385,3 +2385,29 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 10
     cql_result = session.execute(cmd)
     pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
     return pks_list
+
+
+def get_table_clustering_order(ks_cf: str, ck_name: str, session) -> str:
+    """
+    Return list of partitions from a requested table
+    :param ck_name:
+    :param session:
+    :param ks_cf:
+    :param limit:
+    :param pk_name:
+    :return:
+    """
+    try:
+        cmd = f'desc table {ks_cf}'
+        cql_result = session.execute(cmd)
+        LOGGER.info(f'get_table_clustering_order cql_result: {cql_result} ')
+        LOGGER.info(f'get_table_clustering_order cql_result.current_rows: {cql_result.current_rows} ')
+        clustering_order = 'asc'
+        for row in cql_result.current_rows:
+            LOGGER.info(f'cql_result.current_rows: {row}')
+            if f"WITH CLUSTERING ORDER BY ({ck_name} DESC)" in row:
+                clustering_order = 'asc'
+            LOGGER.info(f'clustering_order is: {clustering_order}')
+    except Exception as error:
+        LOGGER.info("get_table_clustering_order Got error: %s", error)
+    return 'desc'
