@@ -9,7 +9,7 @@ from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 
 from sdcm.cluster import BaseNode, BaseScyllaCluster, BaseCluster
-from sdcm.utils.common import get_partition_keys
+from sdcm.utils.common import get_partition_keys, get_table_clustering_order
 from sdcm.sct_events import Severity
 from sdcm.sct_events.database import FullScanEvent, FullPartitionScanReversedOrderEvent
 
@@ -231,7 +231,9 @@ class FullPartitionScanThread(ScanOperationThread):
                             else:
                                 normal_query = reversed_query
 
-                reversed_query += f' order by {ck_name} desc'
+                table_clustering_order = get_table_clustering_order(ks_cf=self.ks_cf, ck_name=ck_name, session=session)
+                reversed_order = 'desc' if table_clustering_order == 'asc' else 'asc'
+                reversed_query += f' order by {ck_name} {reversed_order}'
 
                 normal_query += query_suffix
                 reversed_query += query_suffix
