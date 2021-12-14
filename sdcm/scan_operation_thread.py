@@ -160,15 +160,30 @@ class FullPartitionScanThread(ScanOperationThread):
         self.full_partition_scan_params = kwargs
         self.full_partition_scan_params['validate_data'] = json.loads(
             self.full_partition_scan_params.get('validate_data', 'false'))
+        self.pk_name = self.full_partition_scan_params.get('pk_name', 'pk')
+        self.ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
+        self.rows_count = self.full_partition_scan_params.get('rows_count', 5000)
+        self.table_clustering_order = self.get_table_clustering_order()
+        self.reversed_order = 'desc' if self.table_clustering_order.lower() == 'asc' else 'asc'
+
+    def get_table_clustering_order(self) -> str:
+        for node in self.db_cluster.nodes:
+            try:
+                with self.create_session(node) as session:
+                    return get_table_clustering_order(ks_cf=self.ks_cf, ck_name=self.ck_name, session=session)
+            except Exception as error:
+                self.log.info('Failed getting table %s clustering order through node %s : %s', self.ks_cf, node.name,
+                              error)
+        raise Exception('Failed getting table clustering order from all db nodes')
 
     def randomly_form_cql_statement(self) -> Optional[tuple[str, str]]:  # pylint: disable=too-many-branches
         with self.create_session(self.db_node) as session:
-            ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
-            rows_count = self.full_partition_scan_params.get('rows_count', 5000)
+            ck_name = self.ck_name
+            rows_count = self.rows_count
             ck_random_min_value = random.randint(a=1, b=rows_count)
             ck_random_max_value = random.randint(a=ck_random_min_value, b=rows_count)
             ck_filter = random.choice(list(self.reversed_query_filter_ck_by.keys()))
-            pk_name = self.full_partition_scan_params.get('pk_name', 'pk')
+            pk_name = self.pk_name
             if pks := get_partition_keys(ks_cf=self.ks_cf, session=session, pk_name=pk_name, limit=10000):
                 partition_key = random.choice(pks)
                 # Form a random query out of all options, like:
@@ -231,9 +246,7 @@ class FullPartitionScanThread(ScanOperationThread):
                             else:
                                 normal_query = reversed_query
 
-                table_clustering_order = get_table_clustering_order(ks_cf=self.ks_cf, ck_name=ck_name, session=session)
-                reversed_order = 'desc' if table_clustering_order == 'asc' else 'asc'
-                reversed_query += f' order by {ck_name} {reversed_order}'
+                reversed_query += f' order by {ck_name} {self.reversed_order}'
 
                 normal_query += query_suffix
                 reversed_query += query_suffix

@@ -2393,21 +2393,15 @@ def get_table_clustering_order(ks_cf: str, ck_name: str, session) -> str:
     :param ck_name:
     :param session:
     :param ks_cf:
-    :param limit:
-    :param pk_name:
-    :return:
+    :return: clustering-order string - ASC/DESC
+
+    Example query: SELECT clustering_order from system_schema.columns WHERE keyspace_name = 'scylla_bench'
+    and table_name = 'test' and column_name = 'ck'
     """
-    try:
-        cmd = f'desc table {ks_cf}'
-        cql_result = session.execute(cmd)
-        LOGGER.info(f'get_table_clustering_order cql_result: {cql_result} ')
-        LOGGER.info(f'get_table_clustering_order cql_result.current_rows: {cql_result.current_rows} ')
-        clustering_order = 'asc'
-        for row in cql_result.current_rows:
-            LOGGER.info(f'cql_result.current_rows: {row}')
-            if f"WITH CLUSTERING ORDER BY ({ck_name} DESC)" in row:
-                clustering_order = 'asc'
-            LOGGER.info(f'clustering_order is: {clustering_order}')
-    except Exception as error:
-        LOGGER.info("get_table_clustering_order Got error: %s", error)
-    return 'desc'
+    keyspace, table = ks_cf.split('.')
+    cmd = f"SELECT clustering_order from system_schema.columns WHERE keyspace_name = '{keyspace}' " \
+          f"and table_name = '{table}' and column_name = '{ck_name}'"
+    cql_result = session.execute(cmd)
+    clustering_order = cql_result.current_rows[0].clustering_order
+    LOGGER.info(f'Retrieved a clustering-order of: %s for table %s', clustering_order, ks_cf)
+    return clustering_order
