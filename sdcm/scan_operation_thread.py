@@ -99,10 +99,10 @@ class ScanOperationThread:
                     self.fetch_result_pages(result=result, read_pages=self.read_pages)
                     time_elapsed = int(time.time() - start_time)
                     self.total_scan_time += time_elapsed
-                    self.log.info('Scan duration is: %s', time_elapsed)
+                    self.log.info('[%s] Scan duration is: %s', {type(self).__name__}, time_elapsed)
                     self.log.info('Average scan duration of %s scans is: %s', self.scans_counter,
                                   (self.total_scan_time / self.scans_counter))
-                    operation_event.message = f"{scan_operation_event.__name__} operation ended successfully"
+                    operation_event.message = f"{type(self).__name__} operation ended successfully"
                 except Exception as exc:  # pylint: disable=broad-except
                     msg = str(exc)
                     msg = f"{msg} while running Nemesis: {db_node.running_nemesis}" if db_node.running_nemesis else msg
