@@ -30,9 +30,11 @@ class ScanOperationThread:
         self.duration = duration
         self.interval = interval
         self.query_options = None
-        self.query_result_data = []
+        self.number_of_rows_read = 0
         self.db_node = None
         self.read_pages = 0
+        self.scans_counter = 0
+        self.total_scan_time = 0
         self.termination_event = termination_event
         self.log = logging.getLogger(self.__class__.__name__)
         self._thread = threading.Thread(daemon=True, name=self.__class__.__name__, target=self.run)
@@ -92,8 +94,14 @@ class ScanOperationThread:
                     return
 
                 try:
+                    start_time = time.time()
                     result = self.execute_query(session=session, cmd=cmd)
                     self.fetch_result_pages(result=result, read_pages=self.read_pages)
+                    time_elapsed = int(time.time() - start_time)
+                    self.total_scan_time += time_elapsed
+                    self.log.info('Scan duration is: %s', time_elapsed)
+                    self.log.info('Average scan duration of %s scans is: %s', self.scans_counter,
+                                  (self.total_scan_time / self.scans_counter))
                     operation_event.message = f"{scan_operation_event.__name__} operation ended successfully"
                 except Exception as exc:  # pylint: disable=broad-except
                     msg = str(exc)
@@ -110,7 +118,9 @@ class ScanOperationThread:
         while time.time() < end_time and not self.termination_event.is_set():
             self.db_node = random.choice(self.db_cluster.nodes)
             self.read_pages = random.choice([100, 1000, 0])
+            self.scans_counter += 1
             self.run_scan_operation(scan_operation_event=scan_operation_event)
+            self.log.info('Executed %s number: %s', scan_operation_event, self.scans_counter)
             time.sleep(self.interval)
 
     @abstractmethod
@@ -259,14 +269,14 @@ class FullPartitionScanThread(ScanOperationThread):
 
     def fetch_result_pages(self, result, read_pages):
         self.log.info('Will fetch up to %s result pages.."', read_pages)
-        self.query_result_data = []
+        self.number_of_rows_read = 0
         handler = PagedResultHandler(future=result, scan_operation_thread=self)
         handler.finished_event.wait()
         if handler.error:
             self.log.warning("Got a Page Handler error: %s", handler.error)
             raise handler.error
         self.log.info('Fetched a total of %s pages', handler.current_read_pages)
-        self.log.info('The maximum number of total rows read is: %s', (handler.current_read_pages+1) * self.page_size)
+        self.log.info('The number of total rows read is: %s', self.number_of_rows_read)
 
     def execute_query(self, session, cmd: str):
         self.log.info('Will run command "%s"', cmd)
@@ -303,7 +313,7 @@ class PagedResultHandler:
             errback=self.handle_error)
 
     def handle_page(self, rows):
-        self.scan_operation_thread.query_result_data += rows
+        self.scan_operation_thread.number_of_rows_read += len(rows)
         if self.future.has_more_pages and self.current_read_pages <= self.max_read_pages:
             self.log.info('Will fetch the next page: %s', self.current_read_pages)
             self.future.start_fetching_next_page()
