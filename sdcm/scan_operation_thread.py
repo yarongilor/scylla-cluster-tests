@@ -23,7 +23,7 @@ class ScanOperationThread:
 
     # pylint: disable=too-many-arguments
     def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
-                 termination_event: threading.Event, page_size: int = 100000, **kwargs):
+                 termination_event: threading.Event, page_size: int = 10000, **kwargs):
         self.ks_cf = kwargs.get('ks_cf')
         self.db_cluster = db_cluster
         self.page_size = page_size
@@ -265,6 +265,8 @@ class FullPartitionScanThread(ScanOperationThread):
         if handler.error:
             self.log.warning("Got a Page Handler error: %s", handler.error)
             raise handler.error
+        self.log.info('Fetched a total of %s pages', handler.current_read_pages)
+        self.log.info('The maximum number of total rows read is: %s', (handler.current_read_pages+1) * self.page_size)
 
     def execute_query(self, session, cmd: str):
         self.log.info('Will run command "%s"', cmd)
