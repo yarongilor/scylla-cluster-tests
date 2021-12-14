@@ -34,6 +34,7 @@ class ScanOperationThread:
         self.db_node = None
         self.read_pages = 0
         self.scans_counter = 0
+        self.time_elapsed = 0
         self.total_scan_time = 0
         self.termination_event = termination_event
         self.log = logging.getLogger(self.__class__.__name__)
@@ -97,9 +98,10 @@ class ScanOperationThread:
                     start_time = time.time()
                     result = self.execute_query(session=session, cmd=cmd)
                     self.fetch_result_pages(result=result, read_pages=self.read_pages)
-                    time_elapsed = int(time.time() - start_time)
-                    self.total_scan_time += time_elapsed
-                    self.log.info('[%s] Scan duration is: %s', {type(self).__name__}, time_elapsed)
+                    self.time_elapsed = time.time() - start_time
+                    self.total_scan_time += self.time_elapsed
+                    self.log.info('[%s] last scan duration of %s rows is: %s', {type(self).__name__},
+                                  self.number_of_rows_read, self.time_elapsed)
                     self.log.info('Average scan duration of %s scans is: %s', self.scans_counter,
                                   (self.total_scan_time / self.scans_counter))
                     operation_event.message = f"{type(self).__name__} operation ended successfully"
@@ -175,6 +177,10 @@ class FullPartitionScanThread(ScanOperationThread):
         self.rows_count = self.full_partition_scan_params.get('rows_count', 5000)
         self.table_clustering_order = self.get_table_clustering_order()
         self.reversed_order = 'desc' if self.table_clustering_order.lower() == 'asc' else 'asc'
+        self.reversed_query_filter_ck_stats = {'lt': {'count': 0, 'total_scan_duration': 0},
+                                               'gt': {'count': 0, 'total_scan_duration': 0},
+                                               'lt_and_gt': {'count': 0, 'total_scan_duration': 0}}
+        self.ck_filter = ''
 
     def get_table_clustering_order(self) -> str:
         for node in self.db_cluster.nodes:
@@ -192,9 +198,9 @@ class FullPartitionScanThread(ScanOperationThread):
             rows_count = self.rows_count
             ck_random_min_value = random.randint(a=1, b=rows_count)
             ck_random_max_value = random.randint(a=ck_random_min_value, b=rows_count)
-            ck_filter = random.choice(list(self.reversed_query_filter_ck_by.keys()))
+            self.ck_filter = ck_filter = random.choice(list(self.reversed_query_filter_ck_by.keys()))
             pk_name = self.pk_name
-            if pks := get_partition_keys(ks_cf=self.ks_cf, session=session, pk_name=pk_name, limit=10000):
+            if pks := get_partition_keys(ks_cf=self.ks_cf, session=session, pk_name=pk_name):
                 partition_key = random.choice(pks)
                 # Form a random query out of all options, like:
                 # select * from scylla_bench.test where pk = 1234 and ck < 4721 and ck > 2549 order by ck desc
@@ -261,7 +267,8 @@ class FullPartitionScanThread(ScanOperationThread):
                 normal_query += query_suffix
                 reversed_query += query_suffix
                 self.log.info('Randomly formed normal query is: %s', normal_query)
-                self.log.info('Randomly formed reversed query is: %s', reversed_query)
+                self.log.info('[scan: %s, type: %s] Randomly formed reversed query is: %s', self.scans_counter,
+                              ck_filter, reversed_query)
             else:
                 self.log.info('No partition keys found for table: %s! A reversed query cannot be executed!', self.ks_cf)
                 return None
@@ -276,7 +283,6 @@ class FullPartitionScanThread(ScanOperationThread):
             self.log.warning("Got a Page Handler error: %s", handler.error)
             raise handler.error
         self.log.info('Fetched a total of %s pages', handler.current_read_pages)
-        self.log.info('The number of total rows read is: %s', self.number_of_rows_read)
 
     def execute_query(self, session, cmd: str):
         self.log.info('Will run command "%s"', cmd)
@@ -290,6 +296,11 @@ class FullPartitionScanThread(ScanOperationThread):
             return
         normal_query, reversed_query = queries
         ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
+        self.reversed_query_filter_ck_stats[self.ck_filter]['count'] += 1
+        self.reversed_query_filter_ck_stats[self.ck_filter]['total_scan_duration'] += self.time_elapsed
+        count = self.reversed_query_filter_ck_stats[self.ck_filter]['count']
+        average = self.reversed_query_filter_ck_stats[self.ck_filter]['total_scan_duration'] / count
+        self.log.info('Average %s scans duration of %s executions is: %s', self.ck_filter, count, average)
         if self.full_partition_scan_params.get('validate_data'):
             # TODO: implement when a new hydra docker with deepdiff is available
             self.log.debug('Temporarily not executing the normal query of: %s', normal_query)

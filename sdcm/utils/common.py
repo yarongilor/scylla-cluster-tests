@@ -2372,7 +2372,7 @@ def clear_out_all_exit_hooks():
     threading._threading_atexits.clear()  # pylint: disable=protected-access
 
 
-def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 100) -> List[str]:
+def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = None) -> List[str]:
     """
     Return list of partitions from a requested table
     :param session:
@@ -2381,7 +2381,9 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = 10
     :param pk_name:
     :return:
     """
-    cmd = f'select {pk_name} from {ks_cf} limit {limit}'
+    cmd = f'select distinct {pk_name} from {ks_cf}'
+    if limit:
+        cmd += f' limit {limit}'
     cql_result = session.execute(cmd)
     pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
     return pks_list
