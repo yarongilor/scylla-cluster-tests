@@ -164,7 +164,8 @@ class FullPartitionScanThread(ScanOperationThread):
     5) limit <int>
     6) paging
     """
-    reversed_query_filter_ck_by = {'lt': ' and {} < {}', 'gt': ' and {} > {}', 'lt_and_gt': ' and {} < {} and {} > {}'}
+    reversed_query_filter_ck_by = {'lt': ' and {} < {}', 'gt': ' and {} > {}', 'lt_and_gt': ' and {} < {} and {} > {}',
+                                   'no_filter': ''}
     reversed_query_order = ' order by ck desc'
 
     def __init__(self, **kwargs):
@@ -179,7 +180,8 @@ class FullPartitionScanThread(ScanOperationThread):
         self.reversed_order = 'desc' if self.table_clustering_order.lower() == 'asc' else 'asc'
         self.reversed_query_filter_ck_stats = {'lt': {'count': 0, 'total_scan_duration': 0},
                                                'gt': {'count': 0, 'total_scan_duration': 0},
-                                               'lt_and_gt': {'count': 0, 'total_scan_duration': 0}}
+                                               'lt_and_gt': {'count': 0, 'total_scan_duration': 0},
+                                               'no_filter': {'count': 0, 'total_scan_duration': 0}}
         self.ck_filter = ''
 
     def get_table_clustering_order(self) -> str:
@@ -214,54 +216,54 @@ class FullPartitionScanThread(ScanOperationThread):
                     query_suffix += f' limit {limit}'
                 if random.choice([False] + [True]):
                     query_suffix += self.bypass_cache
-                if random.choice([False] + [True] * 3):  # Randomly add CK filtering
 
-                    # example: rows-count = 20, ck > 10, ck < 15, limit = 3 ==> ck_range = [11..14] = 4
-                    # ==> limit < ck_range
+                # Randomly add CK filtering ( less-than / greater-than / both / non-filter )
+
+                # example: rows-count = 20, ck > 10, ck < 15, limit = 3 ==> ck_range = [11..14] = 4
+                # ==> limit < ck_range
+                # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
+                # order by ck desc limit 5
+                # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
+                if ck_filter == 'lt_and_gt':
+                    # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15 order by ck desc
+                    reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                         ck_random_max_value,
+                                                                                         ck_name,
+                                                                                         ck_random_min_value)
+                    ck_range = ck_random_max_value - ck_random_min_value - 1  # e.g. 15 - 10 - 1 = 4
+                    if limit and limit < ck_range:
+                        # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
+                        # order by ck desc limit 3
+                        # output of ck should be: [12,13,14]
+                        normal_query += \
+                            f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - limit}'
+                    else:
+                        normal_query = reversed_query
+                else:
+                    reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                         ck_random_min_value)
+
+                    # example: rows-count = 20, ck > 10, limit = 5 ==> ck_range = 20 - 10 = 10 ==> limit < ck_range
                     # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
                     # order by ck desc limit 5
                     # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
-                    if ck_filter == 'lt_and_gt':
-                        # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15 order by ck desc
-                        reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                             ck_random_max_value,
-                                                                                             ck_name,
-                                                                                             ck_random_min_value)
-                        ck_range = ck_random_max_value - ck_random_min_value - 1  # e.g. 15 - 10 - 1 = 4
+                    if ck_filter == 'gt':
+                        ck_range = rows_count - ck_random_min_value
                         if limit and limit < ck_range:
-                            # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
-                            # order by ck desc limit 3
-                            # output of ck should be: [12,13,14]
-                            normal_query += \
-                                f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - limit}'
+                            normal_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                               rows_count - limit)
                         else:
                             normal_query = reversed_query
-                    else:
-                        reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                             ck_random_min_value)
 
-                        # example: rows-count = 20, ck > 10, limit = 5 ==> ck_range = 20 - 10 = 10 ==> limit < ck_range
-                        # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
-                        # order by ck desc limit 5
-                        # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
-                        if ck_filter == 'gt':
-                            ck_range = rows_count - ck_random_min_value
-                            if limit and limit < ck_range:
-                                normal_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                                   rows_count - limit)
-                            else:
-                                normal_query = reversed_query
-
-                        # example: rows-count = 20, ck < 10, limit = 5 ==> limit < ck_random_min_value (ck_range)
-                        # reversed query is: select * from scylla_bench.test where pk = 1 and ck < 10
-                        # order by ck desc limit 5
-                        # normal query should be: select * from scylla_bench.test where pk = 1 and ck >= 5 limit 5
-                        if ck_filter == 'lt':
-                            if limit and limit < ck_random_min_value:
-                                normal_query += f' and {ck_name} >= {ck_random_min_value - limit}'
-                            else:
-                                normal_query = reversed_query
-
+                    # example: rows-count = 20, ck < 10, limit = 5 ==> limit < ck_random_min_value (ck_range)
+                    # reversed query is: select * from scylla_bench.test where pk = 1 and ck < 10
+                    # order by ck desc limit 5
+                    # normal query should be: select * from scylla_bench.test where pk = 1 and ck >= 5 limit 5
+                    if ck_filter == 'lt':
+                        if limit and limit < ck_random_min_value:
+                            normal_query += f' and {ck_name} >= {ck_random_min_value - limit}'
+                        else:
+                            normal_query = reversed_query
                 reversed_query += f' order by {ck_name} {self.reversed_order}'
 
                 normal_query += query_suffix
