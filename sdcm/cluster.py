@@ -3704,6 +3704,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
 
                 node.log.info('Installed .deb packages before replacing with new .DEB files')
                 node.log.info(node.scylla_packages_installed)
+                raise ClusterNodesNotReady("YG DBG EXCEPTION ON INSTALL!!!!")
                 dpkg_force_install()
                 node.log.info('Installed .deb packages after replacing with new .DEB files')
                 node.log.info(node.scylla_packages_installed)
