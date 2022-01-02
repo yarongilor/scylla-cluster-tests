@@ -235,30 +235,30 @@ class FullPartitionScanThread(ScanOperationThread):
                 # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
                 # order by ck desc limit 5
                 # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
-                if ck_filter == 'lt_and_gt':
-                    # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15 order by ck desc
-                    reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                         ck_random_max_value,
-                                                                                         ck_name,
-                                                                                         ck_random_min_value)
-                    ck_range = ck_random_max_value - ck_random_min_value - 1  # e.g. 15 - 10 - 1 = 4
-                    if limit and limit < ck_range:
-                        # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
-                        # order by ck desc limit 3
-                        # output of ck should be: [12,13,14]
-                        normal_query += \
-                            f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - limit}'
-                    else:
-                        normal_query = reversed_query
-                else:
-                    reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                         ck_random_min_value)
+                match ck_filter:
+                    case 'lt_and_gt':
+                        # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15 order by ck desc
+                        reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                             ck_random_max_value,
+                                                                                             ck_name,
+                                                                                             ck_random_min_value)
+                        ck_range = ck_random_max_value - ck_random_min_value - 1  # e.g. 15 - 10 - 1 = 4
+                        if limit and limit < ck_range:
+                            # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
+                            # order by ck desc limit 3
+                            # output of ck should be: [12,13,14]
+                            normal_query += \
+                                f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - limit}'
+                        else:
+                            normal_query = reversed_query
 
-                    # example: rows-count = 20, ck > 10, limit = 5 ==> ck_range = 20 - 10 = 10 ==> limit < ck_range
-                    # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
-                    # order by ck desc limit 5
-                    # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
-                    if ck_filter == 'gt':
+                    case 'gt':
+                        # example: rows-count = 20, ck > 10, limit = 5 ==> ck_range = 20 - 10 = 10 ==> limit < ck_range
+                        # reversed query is: select * from scylla_bench.test where pk = 1 and ck > 10
+                        # order by ck desc limit 5
+                        # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
+                        reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                             ck_random_min_value)
                         ck_range = rows_count - ck_random_min_value
                         if limit and limit < ck_range:
                             normal_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
@@ -266,11 +266,13 @@ class FullPartitionScanThread(ScanOperationThread):
                         else:
                             normal_query = reversed_query
 
-                    # example: rows-count = 20, ck < 10, limit = 5 ==> limit < ck_random_min_value (ck_range)
-                    # reversed query is: select * from scylla_bench.test where pk = 1 and ck < 10
-                    # order by ck desc limit 5
-                    # normal query should be: select * from scylla_bench.test where pk = 1 and ck >= 5 limit 5
-                    if ck_filter == 'lt':
+                    case 'lt':
+                        # example: rows-count = 20, ck < 10, limit = 5 ==> limit < ck_random_min_value (ck_range)
+                        # reversed query is: select * from scylla_bench.test where pk = 1 and ck < 10
+                        # order by ck desc limit 5
+                        # normal query should be: select * from scylla_bench.test where pk = 1 and ck >= 5 limit 5
+                        reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                                                                                             ck_random_min_value)
                         if limit and limit < ck_random_min_value:
                             normal_query += f' and {ck_name} >= {ck_random_min_value - limit}'
                         else:
