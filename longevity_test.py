@@ -192,6 +192,13 @@ class LongevityTest(ClusterTester):
 
         self.run_pre_create_keyspace()
         self.run_pre_create_schema()
+
+        fullscan = self._get_fullscan_params()
+        if fullscan:
+            self.log.info('Fullscan target: {} Fullscan interval: {}'.format(fullscan['ks.cf'],
+                                                                             fullscan['interval']))
+            self.run_fullscan_thread(ks_cf=fullscan['ks.cf'], interval=fullscan['interval'])
+
         self.run_prepare_write_cmd()
 
         # Collect data about partitions and their rows amount
@@ -242,11 +249,7 @@ class LongevityTest(ClusterTester):
                             self.log.debug('Stress cmd: {}'.format(stress_cmd))
                             self._run_all_stress_cmds(stress_queue, params)
 
-        fullscan = self._get_fullscan_params()
-        if fullscan:
-            self.log.info('Fullscan target: {} Fullscan interval: {}'.format(fullscan['ks.cf'],
-                                                                             fullscan['interval']))
-            self.run_fullscan_thread(ks_cf=fullscan['ks.cf'], interval=fullscan['interval'])
+
 
         # Check if we shall wait for total_used_space or if nemesis wasn't started
         if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):
@@ -269,6 +272,9 @@ class LongevityTest(ClusterTester):
             if partitions_dict_after is not None:
                 self.assertEqual(partitions_dict_before, partitions_dict_after,
                                  msg='Row amount in partitions is not same before and after running of nemesis')
+
+        # # Wait 24 hours for the full-scan to run after prepare finished.
+        # time.sleep(24 * 60 * 60)
 
     def test_batch_custom_time(self):
         """
