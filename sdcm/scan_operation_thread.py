@@ -24,7 +24,7 @@ class ScanOperationThread:
 
     # pylint: disable=too-many-arguments,unused-argument
     def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
-                 termination_event: threading.Event, ks_cf: str, page_size: int = 10000, **kwargs):
+                 termination_event: threading.Event, ks_cf: str, page_size: int = 10, **kwargs):
         self.ks_cf = ks_cf
         self.db_cluster = db_cluster
         self.page_size = page_size
@@ -83,6 +83,8 @@ class ScanOperationThread:
         pages = 0
         while result.has_more_pages and pages <= read_pages:
             result.fetch_next_page()
+            self.log.info(f'[DBG] fetched result type: {type(result)}')
+            self.log.info(f'[DBG] fetched result: {result}')
             if read_pages > 0:
                 pages += 1
 
@@ -103,6 +105,8 @@ class ScanOperationThread:
                 try:
                     start_time = time.time()
                     result = self.execute_query(session=session, cmd=cmd)
+                    self.log.info(f'[DBG] result type: {type(result)}')
+                    self.log.info(f'[DBG] result: {result}')
                     self.fetch_result_pages(result=result, read_pages=self.read_pages)
                     self.time_elapsed = time.time() - start_time
                     self.total_scan_time += self.time_elapsed
@@ -125,7 +129,7 @@ class ScanOperationThread:
         end_time = time.time() + self.duration
         while time.time() < end_time and not self.termination_event.is_set():
             self.db_node = random.choice(self.db_cluster.nodes)
-            self.read_pages = random.choice([100, 1000, 0])
+            self.read_pages = 3  # TODO: YG_DBG random.choice([100, 1000, 0])
             self.scans_counter += 1
             self.run_scan_operation(scan_operation_event=scan_operation_event)
             self.log.info('Executed %s number: %s', scan_operation_event, self.scans_counter)
