@@ -1,18 +1,23 @@
 import json
 import logging
 import random
+import subprocess
+import tempfile
 import threading
 import time
 from abc import abstractmethod
 from typing import Optional
+
 from cassandra import ConsistencyLevel
+from cassandra.cluster import ResponseFuture
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 
 from sdcm import wait
 from sdcm.cluster import BaseNode, BaseScyllaCluster, BaseCluster
 from sdcm.utils.common import get_partition_keys, get_table_clustering_order
 from sdcm.sct_events import Severity
-from sdcm.sct_events.database import FullScanEvent, FullPartitionScanReversedOrderEvent
+from sdcm.sct_events.database import FullScanEvent, FullPartitionScanReversedOrderEvent, FullPartitionScanEvent, \
+    ScyllaDatabaseContinuousEvent
 
 ERROR_SUBSTRINGS = ("timed out", "unpack requires", "timeout")
 
@@ -24,7 +29,8 @@ class ScanOperationThread:
 
     # pylint: disable=too-many-arguments,unused-argument
     def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
-                 termination_event: threading.Event, ks_cf: str, page_size: int = 10, **kwargs):
+                 termination_event: threading.Event, ks_cf: str,
+                 scan_event: [FullScanEvent, FullPartitionScanReversedOrderEvent], page_size: int = 10, **kwargs):
         self.ks_cf = ks_cf
         self.db_cluster = db_cluster
         self.page_size = page_size
@@ -36,6 +42,7 @@ class ScanOperationThread:
         self.scans_counter = 0
         self.time_elapsed = 0
         self.total_scan_time = 0
+        self.scan_event = scan_event
         self.termination_event = termination_event
         self.log = logging.getLogger(self.__class__.__name__)
         self._thread = threading.Thread(daemon=True, name=self.__class__.__name__, target=self.run)
@@ -83,17 +90,21 @@ class ScanOperationThread:
         pages = 0
         while result.has_more_pages and pages <= read_pages:
             result.fetch_next_page()
-            self.log.info(f'[DBG] fetched result type: {type(result)}')
-            self.log.info(f'[DBG] fetched result: {result}')
             if read_pages > 0:
                 pages += 1
 
-    def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
+    def update_stats(self):
+        self.scans_counter += 1
+        self.total_scan_time += self.time_elapsed
+        self.log.info('Average scan duration of %s scans is: %s', self.scans_counter,
+                      (self.total_scan_time / self.scans_counter))
+
+    def run_scan_operation(self, cmd: str = None, update_stats: bool = True):  # pylint: disable=too-many-locals
         db_node = self.db_node
         self.wait_until_user_table_exists(db_node=db_node, table_name=self.ks_cf)
         if self.ks_cf.lower() == 'random':
             self.ks_cf = random.choice(self.db_cluster.get_non_system_ks_cf_list(db_node))
-        with scan_operation_event(node=db_node.name, ks_cf=self.ks_cf, message="") as operation_event:
+        with self.scan_event(node=db_node.name, ks_cf=self.ks_cf, message="") as operation_event:
             cmd = cmd or self.randomly_form_cql_statement()
             if not cmd:
                 return
@@ -105,15 +116,11 @@ class ScanOperationThread:
                 try:
                     start_time = time.time()
                     result = self.execute_query(session=session, cmd=cmd)
-                    self.log.info(f'[DBG] result type: {type(result)}')
-                    self.log.info(f'[DBG] result: {result}')
                     self.fetch_result_pages(result=result, read_pages=self.read_pages)
                     self.time_elapsed = time.time() - start_time
-                    self.total_scan_time += self.time_elapsed
+                    self.update_stats()
                     self.log.info('[%s] last scan duration of %s rows is: %s', {type(self).__name__},
                                   self.number_of_rows_read, self.time_elapsed)
-                    self.log.info('Average scan duration of %s scans is: %s', self.scans_counter,
-                                  (self.total_scan_time / self.scans_counter))
                     operation_event.message = f"{type(self).__name__} operation ended successfully"
                 except Exception as exc:  # pylint: disable=broad-except
                     msg = str(exc)
@@ -125,19 +132,14 @@ class ScanOperationThread:
                     else:
                         operation_event.severity = Severity.ERROR
 
-    def run_for_a_duration(self, scan_operation_event):
+    def run(self):
         end_time = time.time() + self.duration
         while time.time() < end_time and not self.termination_event.is_set():
             self.db_node = random.choice(self.db_cluster.nodes)
             self.read_pages = 3  # TODO: YG_DBG random.choice([100, 1000, 0])
-            self.scans_counter += 1
-            self.run_scan_operation(scan_operation_event=scan_operation_event)
-            self.log.info('Executed %s number: %s', scan_operation_event, self.scans_counter)
+            self.run_scan_operation()
+            self.log.info('Executed %s number: %s', self.scan_event.__name__, self.scans_counter)
             time.sleep(self.interval)
-
-    @abstractmethod
-    def run(self):
-        ...
 
     def start(self):
         self._thread.start()
@@ -149,14 +151,11 @@ class ScanOperationThread:
 class FullScanThread(ScanOperationThread):
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(scan_event=FullScanEvent, **kwargs)
 
     def randomly_form_cql_statement(self) -> Optional[str]:
         cmd = self.randomly_bypass_cache(cmd=self.basic_query).format(self.ks_cf)
         return self.randomly_add_timeout(cmd)
-
-    def run(self):
-        self.run_for_a_duration(scan_operation_event=FullScanEvent)
 
 
 class FullPartitionScanThread(ScanOperationThread):
@@ -177,12 +176,13 @@ class FullPartitionScanThread(ScanOperationThread):
                                    'no_filter': ''}
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(scan_event=FullPartitionScanReversedOrderEvent, **kwargs)
         self.full_partition_scan_params = kwargs
         self.full_partition_scan_params['validate_data'] = json.loads(
             self.full_partition_scan_params.get('validate_data', 'false'))
         self.pk_name = self.full_partition_scan_params.get('pk_name', 'pk')
         self.ck_name = self.full_partition_scan_params.get('ck_name', 'ck')
+        self.data_column_name = self.full_partition_scan_params.get('data_column_name', 'v')
         self.rows_count = self.full_partition_scan_params.get('rows_count', 5000)
         self.table_clustering_order = self.get_table_clustering_order()
         self.reversed_order = 'desc' if self.table_clustering_order.lower() == 'asc' else 'asc'
@@ -191,6 +191,8 @@ class FullPartitionScanThread(ScanOperationThread):
                                                'lt_and_gt': {'count': 0, 'total_scan_duration': 0},
                                                'no_filter': {'count': 0, 'total_scan_duration': 0}}
         self.ck_filter = ''
+        self.reversed_query_output = tempfile.TemporaryFile()
+        self.normal_query_output = tempfile.TemporaryFile()
 
     def get_table_clustering_order(self) -> str:
         for node in self.db_cluster.nodes:
@@ -295,7 +297,7 @@ class FullPartitionScanThread(ScanOperationThread):
                 return None
         return normal_query, reversed_query
 
-    def fetch_result_pages(self, result, read_pages):
+    def fetch_result_pages(self, result: ResponseFuture, read_pages):
         self.log.info('Will fetch up to %s result pages.."', read_pages)
         self.number_of_rows_read = 0
         handler = PagedResultHandler(future=result, scan_operation_thread=self)
@@ -311,12 +313,19 @@ class FullPartitionScanThread(ScanOperationThread):
         session.default_consistency_level = ConsistencyLevel.ONE
         return session.execute_async(cmd)
 
-    def run_scan_operation(self, scan_operation_event, cmd: str = None):  # pylint: disable=too-many-locals
+    def reset_output_files(self):
+        self.normal_query_output.close()
+        self.reversed_query_output.close()
+        self.normal_query_output = tempfile.TemporaryFile()
+        self.reversed_query_output = tempfile.TemporaryFile()
+
+    def run_scan_operation(self, cmd: str = None, update_stats: bool = True):  # pylint: disable=too-many-locals
         queries = self.randomly_form_cql_statement()
         if not queries:
             return
         normal_query, reversed_query = queries
-        ScanOperationThread.run_scan_operation(self, scan_operation_event=scan_operation_event, cmd=reversed_query)
+        self.scan_event = FullPartitionScanReversedOrderEvent
+        ScanOperationThread.run_scan_operation(self, cmd=reversed_query)
         self.reversed_query_filter_ck_stats[self.ck_filter]['count'] += 1
         self.reversed_query_filter_ck_stats[self.ck_filter]['total_scan_duration'] += self.time_elapsed
         count = self.reversed_query_filter_ck_stats[self.ck_filter]['count']
@@ -324,15 +333,27 @@ class FullPartitionScanThread(ScanOperationThread):
         self.log.info('Average %s scans duration of %s executions is: %s', self.ck_filter, count, average)
         if self.full_partition_scan_params.get('validate_data'):
             # TODO: implement when a new hydra docker with deepdiff is available
-            self.log.debug('Temporarily not executing the normal query of: %s', normal_query)
+            self.log.debug('Executing the normal query: %s', normal_query)
+            self.scan_event = FullPartitionScanEvent
+            ScanOperationThread.run_scan_operation(self, cmd=normal_query)
+            # TODO: compare the 2 output tmp-files.
+            diff_cmd = f"diff -y --suppress-common-lines {self.normal_query_output} {self.reversed_query_output}"
+            with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE) as run_diff_cmd:
+                diff_cmd_output = run_diff_cmd.stdout.read()
+            if not diff_cmd_output:
+                self.log.info("Compared output of normal and reversed queries is identical!")
+            else:
+                self.log.warning("Normal and reversed queries output differs: \n%s", diff_cmd_output)
+            self.reset_output_files()
 
-    def run(self):
-        self.run_for_a_duration(scan_operation_event=FullPartitionScanReversedOrderEvent)
+    def update_stats(self):
+        if self.scan_event == FullPartitionScanReversedOrderEvent:
+            ScanOperationThread.update_stats(self)
 
 
 class PagedResultHandler:
 
-    def __init__(self, future, scan_operation_thread: FullPartitionScanThread):
+    def __init__(self, future: ResponseFuture, scan_operation_thread: FullPartitionScanThread):
         self.error = None
         self.finished_event = threading.Event()
         self.future = future
@@ -344,8 +365,24 @@ class PagedResultHandler:
             callback=self.handle_page,
             errback=self.handle_error)
 
+    def _row_to_byte_array(self, row) -> bytearray:
+        row_byte_array = bytearray()
+        row_byte_array.extend(getattr(row, self.scan_operation_thread.pk_name).to_bytes(2, 'big'))
+        row_byte_array.extend(getattr(row, self.scan_operation_thread.ck_name).to_bytes(2, 'big'))
+        row_byte_array.extend(getattr(row, self.scan_operation_thread.data_column_name))
+        return row_byte_array
+
     def handle_page(self, rows):
-        self.scan_operation_thread.number_of_rows_read += len(rows)
+        if self.scan_operation_thread.scan_event == FullScanEvent:
+            for row in rows:  # TODO: [::-1]:
+                self.scan_operation_thread.normal_query_output.seek(0)
+                self.scan_operation_thread.normal_query_output.write(self._row_to_byte_array(row=row))
+        elif self.scan_operation_thread.scan_event == FullPartitionScanReversedOrderEvent:
+            self.scan_operation_thread.number_of_rows_read += len(rows)
+            if self.scan_operation_thread.full_partition_scan_params['validate_data']:
+                for row in rows:
+                    self.scan_operation_thread.reversed_query_output.write(self._row_to_byte_array(row=row))
+
         if self.future.has_more_pages and self.current_read_pages <= self.max_read_pages:
             self.log.info('Will fetch the next page: %s', self.current_read_pages)
             self.future.start_fetching_next_page()
