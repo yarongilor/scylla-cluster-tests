@@ -191,8 +191,8 @@ class FullPartitionScanThread(ScanOperationThread):
                                                'lt_and_gt': {'count': 0, 'total_scan_duration': 0},
                                                'no_filter': {'count': 0, 'total_scan_duration': 0}}
         self.ck_filter = ''
-        self.reversed_query_output = tempfile.TemporaryFile()
-        self.normal_query_output = tempfile.TemporaryFile()
+        self.reversed_query_output = tempfile.NamedTemporaryFile()
+        self.normal_query_output = tempfile.NamedTemporaryFile()
 
     def get_table_clustering_order(self) -> str:
         for node in self.db_cluster.nodes:
@@ -336,14 +336,16 @@ class FullPartitionScanThread(ScanOperationThread):
             self.log.debug('Executing the normal query: %s', normal_query)
             self.scan_event = FullPartitionScanEvent
             ScanOperationThread.run_scan_operation(self, cmd=normal_query)
-            # TODO: compare the 2 output tmp-files.
-            diff_cmd = f"diff -y --suppress-common-lines {self.normal_query_output} {self.reversed_query_output}"
-            with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE) as run_diff_cmd:
-                diff_cmd_output = run_diff_cmd.stdout.read()
-            if not diff_cmd_output:
+            diff_cmd = \
+                f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
+            with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_diff_cmd:
+                stdout, stderr = run_diff_cmd.communicate()
+            if stderr:
+                self.log.warning("The scan output files diff command encountered an error: \n%s", stderr)
+            elif not stdout:
                 self.log.info("Compared output of normal and reversed queries is identical!")
             else:
-                self.log.warning("Normal and reversed queries output differs: \n%s", diff_cmd_output)
+                self.log.warning("Normal and reversed queries output differs: \n%s", stdout)
             self.reset_output_files()
 
     def update_stats(self):
