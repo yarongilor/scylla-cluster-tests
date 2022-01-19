@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import random
 import subprocess
 import tempfile
@@ -319,6 +320,24 @@ class FullPartitionScanThread(ScanOperationThread):
         self.normal_query_output = tempfile.TemporaryFile()
         self.reversed_query_output = tempfile.TemporaryFile()
 
+    def _compare_output_files(self):
+        self.normal_query_output.flush()
+        os.fsync(self.normal_query_output)
+        self.reversed_query_output.flush()
+        os.fsync(self.reversed_query_output)
+        diff_cmd = \
+            f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
+        self.log.info("Comparing scan queries output files by: %s", diff_cmd)
+        with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_diff_cmd:
+            stdout, stderr = run_diff_cmd.communicate()
+        if stderr:
+            self.log.warning("The scan output files diff command encountered an error: \n%s", stderr)
+        elif not stdout:
+            self.log.info("Compared output of normal and reversed queries is identical!")
+        else:
+            self.log.warning("Normal and reversed queries output differs: \n%s", stdout)
+        self.reset_output_files()
+
     def run_scan_operation(self, cmd: str = None, update_stats: bool = True):  # pylint: disable=too-many-locals
         queries = self.randomly_form_cql_statement()
         if not queries:
@@ -336,17 +355,7 @@ class FullPartitionScanThread(ScanOperationThread):
             self.log.debug('Executing the normal query: %s', normal_query)
             self.scan_event = FullPartitionScanEvent
             ScanOperationThread.run_scan_operation(self, cmd=normal_query)
-            diff_cmd = \
-                f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
-            with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_diff_cmd:
-                stdout, stderr = run_diff_cmd.communicate()
-            if stderr:
-                self.log.warning("The scan output files diff command encountered an error: \n%s", stderr)
-            elif not stdout:
-                self.log.info("Compared output of normal and reversed queries is identical!")
-            else:
-                self.log.warning("Normal and reversed queries output differs: \n%s", stdout)
-            self.reset_output_files()
+            self._compare_output_files()
 
     def update_stats(self):
         if self.scan_event == FullPartitionScanReversedOrderEvent:
