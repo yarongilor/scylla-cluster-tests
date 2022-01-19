@@ -5,14 +5,14 @@ prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication
 stress_cmd: ["scylla-bench -workload=uniform -mode=read -duration=210m  -partition-count=10 -clustering-row-count=1000 -concurrency=1 -connection-count=1 -consistency-level=one -rows-per-request=1 -timeout=30s " ]
 
 
-n_db_nodes: 1
+n_db_nodes: 2
 n_loaders: 1
 n_monitor_nodes: 0
 
 instance_type_db: 'i3.large'
 
-nemesis_class_name: 'NoOpMonkey'
-nemesis_interval: 15
+nemesis_class_name: 'ChaosMonkey'
+nemesis_interval: 5
 
 user_prefix: 'longevity-large-partitions-3h'
 
