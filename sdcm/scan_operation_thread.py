@@ -192,8 +192,8 @@ class FullPartitionScanThread(ScanOperationThread):
                                                'lt_and_gt': {'count': 0, 'total_scan_duration': 0},
                                                'no_filter': {'count': 0, 'total_scan_duration': 0}}
         self.ck_filter = ''
-        self.reversed_query_output = tempfile.NamedTemporaryFile()
-        self.normal_query_output = tempfile.NamedTemporaryFile()
+        self.reversed_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
+        self.normal_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
 
     def get_table_clustering_order(self) -> str:
         for node in self.db_cluster.nodes:
@@ -317,14 +317,14 @@ class FullPartitionScanThread(ScanOperationThread):
     def reset_output_files(self):
         self.normal_query_output.close()
         self.reversed_query_output.close()
-        self.normal_query_output = tempfile.TemporaryFile()
-        self.reversed_query_output = tempfile.TemporaryFile()
+        self.reversed_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
+        self.normal_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
 
     def _compare_output_files(self):
         self.normal_query_output.flush()
-        os.fsync(self.normal_query_output)
+        # os.fsync(self.normal_query_output)
         self.reversed_query_output.flush()
-        os.fsync(self.reversed_query_output)
+        # os.fsync(self.reversed_query_output)
         diff_cmd = \
             f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
         self.log.info("Comparing scan queries output files by: %s", diff_cmd)
@@ -383,16 +383,22 @@ class PagedResultHandler:
         row_byte_array.extend(getattr(row, self.scan_operation_thread.data_column_name))
         return row_byte_array
 
+    def _row_to_string(self, row) -> str:
+        row_string = str(getattr(row, self.scan_operation_thread.pk_name))
+        row_string += str(getattr(row, self.scan_operation_thread.ck_name))
+        row_string += str(getattr(row, self.scan_operation_thread.data_column_name))
+        return row_string
+
     def handle_page(self, rows):
         if self.scan_operation_thread.scan_event == FullScanEvent:
-            for row in rows:  # TODO: [::-1]:
+            for row in rows[::-1]:  # TODO: test!
                 self.scan_operation_thread.normal_query_output.seek(0)
-                self.scan_operation_thread.normal_query_output.write(self._row_to_byte_array(row=row))
+                self.scan_operation_thread.normal_query_output.write(self._row_to_string(row=row))
         elif self.scan_operation_thread.scan_event == FullPartitionScanReversedOrderEvent:
             self.scan_operation_thread.number_of_rows_read += len(rows)
             if self.scan_operation_thread.full_partition_scan_params['validate_data']:
                 for row in rows:
-                    self.scan_operation_thread.reversed_query_output.write(self._row_to_byte_array(row=row))
+                    self.scan_operation_thread.reversed_query_output.write(self._row_to_string(row=row))
 
         if self.future.has_more_pages and self.current_read_pages <= self.max_read_pages:
             self.log.info('Will fetch the next page: %s', self.current_read_pages)
