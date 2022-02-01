@@ -2084,6 +2084,10 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
 
         if match := re.match(r'\D*(\d+\.\d+)', scylla_version or git_branch):
             version = f"nightly-{match.group(1)}"
+        elif git_branch.split('/')[1] in ['enterprise', 'master', 'fix_web_install_scylla_dbg']:
+            version = f"nightly-{git_branch.split('/')[1]}"
+            if 'fix_web_install_scylla' in version:
+                version = "nightly-master"
         else:
             raise Exception("Scylla version for web install isn't identified")
 
