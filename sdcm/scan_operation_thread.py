@@ -327,7 +327,18 @@ class FullPartitionScanThread(ScanOperationThread):
         # os.fsync(self.reversed_query_output)
         diff_cmd = \
             f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
+        ls_cmd = f"ls -alh {self.normal_query_output.name} {self.reversed_query_output.name}"  # DBG
+        head_cmd = f"head {self.normal_query_output.name} {self.reversed_query_output.name}"  # DBG
+        tail_cmd = f"tail {self.normal_query_output.name} {self.reversed_query_output.name}"  # DBG
         self.log.info("Comparing scan queries output files by: %s", diff_cmd)
+        for cmd in [ls_cmd, head_cmd, tail_cmd]:
+            with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_cmd:
+                stdout, stderr = run_cmd.communicate()
+                if stdout:
+                    stdout = stdout.strip()
+            if stderr:
+                self.log.warning("Command %s encountered an error: \n%s", cmd, stderr)
+            self.log.info("%s command output is: \n%s", cmd, stdout)
         with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_diff_cmd:
             stdout, stderr = run_diff_cmd.communicate()
         if stderr:
@@ -335,7 +346,7 @@ class FullPartitionScanThread(ScanOperationThread):
         elif not stdout:
             self.log.info("Compared output of normal and reversed queries is identical!")
         else:
-            self.log.warning("Normal and reversed queries output differs: \n%s", stdout)
+            self.log.warning("Normal and reversed queries output differs: \n%s", stdout.strip())
         self.reset_output_files()
 
     def run_scan_operation(self, cmd: str = None, update_stats: bool = True):  # pylint: disable=too-many-locals
@@ -390,7 +401,7 @@ class PagedResultHandler:
         return row_string
 
     def handle_page(self, rows):
-        if self.scan_operation_thread.scan_event == FullScanEvent:
+        if self.scan_operation_thread.scan_event == FullPartitionScanEvent:
             for row in rows[::-1]:  # TODO: test!
                 self.scan_operation_thread.normal_query_output.seek(0)
                 self.scan_operation_thread.normal_query_output.write(self._row_to_string(row=row))
