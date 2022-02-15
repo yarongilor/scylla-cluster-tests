@@ -192,6 +192,7 @@ class FullPartitionScanThread(ScanOperationThread):
                                                'lt_and_gt': {'count': 0, 'total_scan_duration': 0},
                                                'no_filter': {'count': 0, 'total_scan_duration': 0}}
         self.ck_filter = ''
+        self.limit = ''
         self.reversed_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
         self.normal_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
 
@@ -228,14 +229,8 @@ class FullPartitionScanThread(ScanOperationThread):
                 # Form a random query out of all options, like:
                 # select * from scylla_bench.test where pk = 1234 and ck < 4721 and ck > 2549 order by ck desc
                 # limit 3467 bypass cache
-                normal_query = reversed_query = self.basic_query.format(
-                    self.ks_cf) + f' where {pk_name} = {partition_key}'
-                query_suffix = limit = ''
-
-                if random.choice([False] + [True]):  # Randomly add a LIMIT
-                    limit = random.randint(a=1, b=rows_count)
-                    query_suffix += f' limit {limit}'
-                query_suffix = self.randomly_bypass_cache(cmd=query_suffix)
+                normal_query = reversed_query = f'select {pk_name},{ck_name} from {self.ks_cf}' + f' where {pk_name} = {partition_key}'
+                query_suffix = self.limit = ''
 
                 # Randomly add CK filtering ( less-than / greater-than / both / non-filter )
 
@@ -252,14 +247,14 @@ class FullPartitionScanThread(ScanOperationThread):
                                                                                              ck_name,
                                                                                              ck_random_min_value)
                         ck_range = ck_random_max_value - ck_random_min_value - 1  # e.g. 15 - 10 - 1 = 4
-                        if limit and limit < ck_range:
-                            # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
-                            # order by ck desc limit 3
-                            # output of ck should be: [12,13,14]
-                            normal_query += \
-                                f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - limit}'
-                        else:
-                            normal_query = reversed_query
+                        # if self.limit and self.limit < ck_range:
+                        #     # Example: select * from scylla_bench.test where pk = 1 and ck > 10 and ck < 15
+                        #     # order by ck desc limit 3
+                        #     # output of ck should be: [12,13,14]
+                        #     normal_query += \
+                        #         f' and {ck_name} < {ck_random_max_value} and {ck_name} >= {ck_random_max_value - self.limit}'
+                        # else:
+                        #     normal_query = reversed_query
 
                     case 'gt':
                         # example: rows-count = 20, ck > 10, limit = 5 ==> ck_range = 20 - 10 = 10 ==> limit < ck_range
@@ -268,12 +263,12 @@ class FullPartitionScanThread(ScanOperationThread):
                         # normal query should be: select * from scylla_bench.test where pk = 1 and ck > 15 limit 5
                         reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
                                                                                              ck_random_min_value)
-                        ck_range = rows_count - ck_random_min_value
-                        if limit and limit < ck_range:
-                            normal_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
-                                                                                               rows_count - limit)
-                        else:
-                            normal_query = reversed_query
+                        # ck_range = rows_count - ck_random_min_value
+                        # if self.limit and self.limit < ck_range:
+                        #     normal_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
+                        #                                                                        rows_count - self.limit)
+                        # else:
+                        #     normal_query = reversed_query
 
                     case 'lt':
                         # example: rows-count = 20, ck < 10, limit = 5 ==> limit < ck_random_min_value (ck_range)
@@ -282,14 +277,16 @@ class FullPartitionScanThread(ScanOperationThread):
                         # normal query should be: select * from scylla_bench.test where pk = 1 and ck >= 5 limit 5
                         reversed_query += self.reversed_query_filter_ck_by[ck_filter].format(ck_name,
                                                                                              ck_random_min_value)
-                        if limit and limit < ck_random_min_value:
-                            normal_query += f' and {ck_name} >= {ck_random_min_value - limit}'
-                        else:
-                            normal_query = reversed_query
-                reversed_query += f' order by {ck_name} {self.reversed_order}'
-
-                normal_query += query_suffix
-                reversed_query += query_suffix
+                        # if self.limit and self.limit < ck_random_min_value:
+                        #     normal_query += f' and {ck_name} >= {ck_random_min_value - self.limit}'
+                        # else:
+                        #     normal_query = reversed_query
+                query_suffix = self.randomly_bypass_cache(cmd=query_suffix)
+                normal_query = reversed_query + query_suffix
+                if random.choice([False] + [True]):  # Randomly add a LIMIT
+                    self.limit = random.randint(a=1, b=rows_count)
+                    query_suffix = f' limit {self.limit}' + query_suffix
+                reversed_query += f' order by {ck_name} {self.reversed_order}' + query_suffix
                 self.log.info('Randomly formed normal query is: %s', normal_query)
                 self.log.info('[scan: %s, type: %s] Randomly formed reversed query is: %s', self.scans_counter,
                               ck_filter, reversed_query)
@@ -320,11 +317,29 @@ class FullPartitionScanThread(ScanOperationThread):
         self.reversed_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
         self.normal_query_output = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')
 
+    def _run_shell_command(self, cmd: str, verbose: bool = True) -> (str, str):
+        if verbose:
+            self.log.debug("Running Shell command [%s]...", cmd)
+        with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_cmd:
+            stdout, stderr = run_cmd.communicate()
+        if stderr:
+            self.log.warning("Running Shell command [%s] encountered an error: \n%s", cmd, stderr)
+        return stdout, stderr
+
     def _compare_output_files(self):
         self.normal_query_output.flush()
-        # os.fsync(self.normal_query_output)
         self.reversed_query_output.flush()
-        # os.fsync(self.reversed_query_output)
+
+        with tempfile.NamedTemporaryFile(mode='w+', delete=True, encoding='utf-8') as reorder_normal_query_output:
+            cmd = f'tac {self.normal_query_output.name}'
+            if self.limit:
+                cmd += f' | head -n {self.limit}'
+            cmd += f' > {reorder_normal_query_output.name}'
+            self._run_shell_command(cmd=cmd)
+            reorder_normal_query_output.flush()
+            self._run_shell_command(cmd=f'cp {reorder_normal_query_output.name} {self.normal_query_output.name}')
+            self.normal_query_output.flush()
+
         diff_cmd = \
             f"diff -y --suppress-common-lines {self.normal_query_output.name} {self.reversed_query_output.name}"
         ls_cmd = f"ls -alh {self.normal_query_output.name} {self.reversed_query_output.name}"  # DBG
@@ -332,21 +347,16 @@ class FullPartitionScanThread(ScanOperationThread):
         tail_cmd = f"tail {self.normal_query_output.name} {self.reversed_query_output.name}"  # DBG
         self.log.info("Comparing scan queries output files by: %s", diff_cmd)
         for cmd in [ls_cmd, head_cmd, tail_cmd]:
-            with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_cmd:
-                stdout, stderr = run_cmd.communicate()
-                if stdout:
-                    stdout = stdout.strip()
-            if stderr:
-                self.log.warning("Command %s encountered an error: \n%s", cmd, stderr)
+            stdout, stderr = self._run_shell_command(cmd=cmd)
+            if stdout:
+                stdout = stdout.strip()
             self.log.info("%s command output is: \n%s", cmd, stdout)
-        with subprocess.Popen(diff_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as run_diff_cmd:
-            stdout, stderr = run_diff_cmd.communicate()
-        if stderr:
-            self.log.warning("The scan output files diff command encountered an error: \n%s", stderr)
-        elif not stdout:
-            self.log.info("Compared output of normal and reversed queries is identical!")
-        else:
-            self.log.warning("Normal and reversed queries output differs: \n%s", stdout.strip())
+        stdout, stderr = self._run_shell_command(cmd=diff_cmd)
+        if not stderr:
+            if not stdout:
+                self.log.info("Compared output of normal and reversed queries is identical!")
+            else:
+                self.log.warning("Normal and reversed queries output differs: \n%s", stdout.strip())
         self.reset_output_files()
 
     def run_scan_operation(self, cmd: str = None, update_stats: bool = True):  # pylint: disable=too-many-locals
@@ -362,7 +372,6 @@ class FullPartitionScanThread(ScanOperationThread):
         average = self.reversed_query_filter_ck_stats[self.ck_filter]['total_scan_duration'] / count
         self.log.info('Average %s scans duration of %s executions is: %s', self.ck_filter, count, average)
         if self.full_partition_scan_params.get('validate_data'):
-            # TODO: implement when a new hydra docker with deepdiff is available
             self.log.debug('Executing the normal query: %s', normal_query)
             self.scan_event = FullPartitionScanEvent
             ScanOperationThread.run_scan_operation(self, cmd=normal_query)
@@ -387,23 +396,16 @@ class PagedResultHandler:
             callback=self.handle_page,
             errback=self.handle_error)
 
-    def _row_to_byte_array(self, row) -> bytearray:
-        row_byte_array = bytearray()
-        row_byte_array.extend(getattr(row, self.scan_operation_thread.pk_name).to_bytes(2, 'big'))
-        row_byte_array.extend(getattr(row, self.scan_operation_thread.ck_name).to_bytes(2, 'big'))
-        row_byte_array.extend(getattr(row, self.scan_operation_thread.data_column_name))
-        return row_byte_array
-
-    def _row_to_string(self, row) -> str:
+    def _row_to_string(self, row, include_data_column: bool = False) -> str:
         row_string = str(getattr(row, self.scan_operation_thread.pk_name))
         row_string += str(getattr(row, self.scan_operation_thread.ck_name))
-        row_string += str(getattr(row, self.scan_operation_thread.data_column_name))
-        return row_string
+        if include_data_column:
+            row_string += str(getattr(row, self.scan_operation_thread.data_column_name))
+        return f'{row_string}\n'
 
     def handle_page(self, rows):
         if self.scan_operation_thread.scan_event == FullPartitionScanEvent:
-            for row in rows[::-1]:  # TODO: test!
-                self.scan_operation_thread.normal_query_output.seek(0)
+            for row in rows:
                 self.scan_operation_thread.normal_query_output.write(self._row_to_string(row=row))
         elif self.scan_operation_thread.scan_event == FullPartitionScanReversedOrderEvent:
             self.scan_operation_thread.number_of_rows_read += len(rows)
