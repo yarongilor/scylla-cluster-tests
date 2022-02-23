@@ -157,6 +157,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     kubernetes: bool = False        # flag that signal that nemesis run with k8s cluster
     limited: bool = False           # flag that signal that nemesis are belong to limited set of nemesises
     has_steady_run: bool = False    # flag that signal that nemesis should be run with perf tests with steady run
+    delete_rows: bool = False
 
     def __new__(cls, tester_obj, termination_event, *args):  # pylint: disable=unused-argument
         for name, member in inspect.getmembers(cls, lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
@@ -354,6 +355,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             run_with_gemini: Optional[bool] = None,
             networking: Optional[bool] = None,
             limited: Optional[bool] = None,
+            delete_rows: Optional[bool] = None,
             topology_changes: Optional[bool] = None) -> List[str]:
         return self.get_list_of_methods_by_flags(
             disruptive=disruptive,
@@ -361,6 +363,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             networking=networking,
             kubernetes=self._is_it_on_kubernetes() or None,
             limited=limited,
+            delete_rows=delete_rows,
             topology_changes=topology_changes,
         )
 
@@ -375,6 +378,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             networking: Optional[bool] = None,
             kubernetes: Optional[bool] = None,
             limited: Optional[bool] = None,
+            delete_rows: Optional[bool] = None,
             topology_changes: Optional[bool] = None) -> List[str]:
         subclasses_list = self._get_subclasses(
             disruptive=disruptive,
@@ -382,6 +386,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             networking=networking,
             kubernetes=kubernetes,
             limited=limited,
+            delete_rows=delete_rows,
             topology_changes=topology_changes
         )
         disrupt_methods_list = []
@@ -3610,6 +3615,7 @@ class TruncateLargeParititionMonkey(Nemesis):
 class DeleteByPartitionsMonkey(Nemesis):
     disruptive = False
     kubernetes = True
+    delete_rows = True
 
     def disrupt(self):
         self.disrupt_delete_10_full_partitions()
@@ -3618,6 +3624,7 @@ class DeleteByPartitionsMonkey(Nemesis):
 class DeleteByRowsRangeMonkey(Nemesis):
     disruptive = False
     kubernetes = True
+    delete_rows = True
 
     def disrupt(self):
         self.disrupt_delete_by_rows_range()
@@ -4164,6 +4171,18 @@ class NonDisruptiveMonkey(Nemesis):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(disruptive=False)
+
+    def disrupt(self):
+        self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
+
+
+class DeleteRowsMonkey(Nemesis):
+    # Limit the nemesis scope:
+    #  - DeleteByPartitionsMonkey
+    #  - DeleteByRowsRangeMonkey
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(delete_rows=True)
 
     def disrupt(self):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)

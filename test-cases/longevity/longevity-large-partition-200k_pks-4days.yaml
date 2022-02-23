@@ -1,4 +1,4 @@
-test_duration: 6480
+test_duration: 1600
 
 bench_run: true
 max_partitions_in_test_table: 1000
@@ -47,9 +47,9 @@ stress_cmd: [
 
 stress_read_cmd: [
                   "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=1000 -clustering-row-count=200000 -clustering-row-size=uniform:10..10240 -partition-offset=1001 -concurrency=10 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -iterations=20 -timeout=90s",
-                  "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -clustering-row-count=100000 -clustering-row-size=uniform:3072..5120 -concurrency=10 -connection-count=10 -rows-per-request=10 -consistency-level=quorum -iterations=26 -timeout=300s -validate-data",
-                  "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=1000 -clustering-row-count=100000 -clustering-row-size=uniform:3072..5120 -rows-per-request=10 -consistency-level=quorum -timeout=90s -concurrency=100 -connection-count=100 -iterations=0 -duration=6420m",
-                  "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=1000 -clustering-row-count=200000 -clustering-row-size=uniform:10..10240 -rows-per-request=10 -consistency-level=quorum -timeout=90s -partition-offset=1001 -concurrency=100 -connection-count=100 -iterations=0 -duration=6420m"
+                  "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -clustering-row-count=100000 -clustering-row-size=uniform:3072..5120 -concurrency=10 -connection-count=10 -rows-per-request=10 -consistency-level=quorum -iterations=26 -timeout=300s",
+                  "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=1000 -clustering-row-count=100000 -clustering-row-size=uniform:3072..5120 -rows-per-request=10 -consistency-level=quorum -timeout=90s -concurrency=100 -connection-count=100 -iterations=0 -duration=1400m",
+                  "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=1000 -clustering-row-count=200000 -clustering-row-size=uniform:10..10240 -rows-per-request=10 -consistency-level=quorum -timeout=90s -partition-offset=1001 -concurrency=100 -connection-count=100 -iterations=0 -duration=1400m"
                  ]
 
 n_db_nodes: 5
@@ -60,7 +60,7 @@ round_robin: true
 
 instance_type_db: 'i3en.3xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'DeleteRowsMonkey'
 nemesis_seed: '016'
 nemesis_interval: 30
 
