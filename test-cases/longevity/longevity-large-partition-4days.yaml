@@ -27,7 +27,7 @@ nemesis_class_name: 'DeleteRowsMonkey'
 nemesis_seed: '014'
 instance_type_loader: 'c5n.2xlarge'
 round_robin: true
-nemesis_interval: 30
+nemesis_interval: 15
 nemesis_during_prepare: false
 
 user_prefix: 'longevity-large-partitions-4d'

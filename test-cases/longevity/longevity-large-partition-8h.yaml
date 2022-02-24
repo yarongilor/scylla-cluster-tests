@@ -40,7 +40,7 @@ round_robin: true
 
 instance_type_db: 'i3.2xlarge'
 
-nemesis_class_name: 'DeleteRowsMonkey'
+nemesis_class_name: 'NoOpMonkey'  # 'DeleteRowsMonkey'
 nemesis_interval: 10
 
 user_prefix: 'longevity-large-partitions-8h'
