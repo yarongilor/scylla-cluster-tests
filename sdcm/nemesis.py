@@ -4172,34 +4172,26 @@ class NonDisruptiveMonkey(Nemesis):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
 
 
-# class DeleteRowsMonkey(Nemesis):
-#     # Limit the nemesis scope:
-#     #  - DeleteByPartitionsMonkey
-#     #  - DeleteByRowsRangeMonkey
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(delete_rows=True)
-#
-#     def disrupt(self):
-#         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
-
-
 class DeleteRowsMonkey(Nemesis):
     # Limit the nemesis scope:
     #  - DeleteByPartitionsMonkey
     #  - DeleteByRowsRangeMonkey
+    # 'disrupt_major_compaction'
+    # 'disrupt_mgmt_repair_cli'
+    # disrupt_stop_start_scylla_server
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.disrupt_methods_list = [
             'disrupt_delete_10_full_partitions',
             'disrupt_delete_by_rows_range',
+            'disrupt_major_compaction',
+            'disrupt_stop_start_scylla_server',
+            'disrupt_mgmt_repair_cli',
         ]
 
     def disrupt(self):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
-
-
 
 
 class NetworkMonkey(Nemesis):
