@@ -1870,8 +1870,9 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     def toggle_table_gc_mode(self):  # pylint: disable=too-many-locals
         """
             Alters a non-system table tombstone_gc_mode option.
-            Choose one option of ['repair', 'timeout', 'disabled', 'immediate'].
-            'immediate' option may only be used where test stress doesn't use data-validation.
+            Choose the alternate option of 'repair' / 'timeout'
+             (*) The other available values of 'disabled' / 'immediate' are not tested by
+             this nemesis since not applicable to a longevity test.
         """
         all_ks_cfs = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node)
         non_mview_ks_cfs = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=True)
@@ -1883,22 +1884,16 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         mview_ks_cfs = list(set(all_ks_cfs) - set(non_mview_ks_cfs))
         keyspace_table = random.choice(all_ks_cfs)
         keyspace, table = keyspace_table.split('.')
-        try:  # TODO: DBG
-            cur_gc_mode = get_gc_mode(node=self.target_node, keyspace=keyspace, table=table)
-            if cur_gc_mode != GcMode.REPAIR:
-                new_gc_mode = GcMode.REPAIR
-            else:
-                new_gc_mode = GcMode.TIMEOUT
-            new_gc_mode_as_dict = {'mode': new_gc_mode.value}
+        if get_gc_mode(node=self.target_node, keyspace=keyspace, table=table) != GcMode.REPAIR:
+            new_gc_mode = GcMode.REPAIR
+        else:
+            new_gc_mode = GcMode.TIMEOUT
+        new_gc_mode_as_dict = {'mode': new_gc_mode.value}
 
-            alter_command_prefix = 'ALTER TABLE ' if keyspace_table not in mview_ks_cfs else 'ALTER MATERIALIZED VIEW '
-            cmd = alter_command_prefix + \
-                  " {keyspace_table} WITH tombstone_gc = {new_gc_mode_as_dict};".format(**locals())
-            self.log.debug("Alter GC mode query to execute: {}".format(cmd))
-            self.target_node.run_cqlsh(cmd)
-        except Exception as error:  # TODO: DBG
-            self.log.debug("toggle_table_gc_mode error: %s", error)
-            raise
+        alter_command_prefix = 'ALTER TABLE ' if keyspace_table not in mview_ks_cfs else 'ALTER MATERIALIZED VIEW '
+        cmd = alter_command_prefix + " {keyspace_table} WITH tombstone_gc = {new_gc_mode_as_dict};".format(**locals())
+        self.log.debug("Alter GC mode query to execute: {}".format(cmd))
+        self.target_node.run_cqlsh(cmd)
 
     def toggle_table_ics(self):  # pylint: disable=too-many-locals
         """

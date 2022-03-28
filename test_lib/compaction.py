@@ -38,7 +38,7 @@ class CompactionStrategy(Enum):
             raise ValueError(err_msg) from attr_err
 
 
-def get_gc_mode(node, keyspace, table) -> str:
+def get_gc_mode(node, keyspace, table) -> None | GcMode:
     """Get a given table GC mode
 
     :Arguments:
@@ -46,24 +46,24 @@ def get_gc_mode(node, keyspace, table) -> str:
         keyspace
         table
     """
-    list_tables_gc_mode = node.run_cqlsh('SELECT keyspace_name, table_name, extensions FROM system_schema.tables',
-                                         split=True)
-    LOGGER.debug("Query result for {}.{} GC mode is: {}".format(keyspace, table, list_tables_gc_mode))
+    table_gc_mode_result = node.run_cqlsh(
+        f"SELECT extensions FROM system_schema.tables where keyspace_name = '{keyspace}' and table_name = '{table}'",
+        split=True)
+    LOGGER.debug("Query result for %s.%s GC mode is: %s", keyspace, table, table_gc_mode_result)
+
     gc_mode = 'N/A'
-    for row in list_tables_gc_mode:
-        if '|' not in row:
-            continue
-        list_stripped_values = [val.strip() for val in row.split('|')]
-        LOGGER.debug("list_stripped_values for {}.{} GC mode is: {}".format(keyspace, table, list_stripped_values))
-        if list_stripped_values[0] == keyspace and list_stripped_values[1] == table:
-            dict_extension_values = yaml.safe_load(list_stripped_values[2])
-            LOGGER.debug("dict_extension_values for {}.{} GC mode is: {}".format(keyspace, table, dict_extension_values))
-            gc_values = dict_extension_values['tombstone_gc']
-            LOGGER.debug("gc_values for {}.{} GC mode is: {}".format(keyspace, table, gc_values))
-            gc_mode_value = yaml.load(gc_values.split(b'\x1c')[0].split(b'\x00')[-1])
-            LOGGER.debug("gc_mode_value for {}.{} GC mode is: {}".format(keyspace, table, gc_mode_value))
-            gc_mode = GcMode.from_str(output_str=gc_mode_value)
-            break
+    if table_gc_mode_result and len(table_gc_mode_result) >= 4:
+        extensions_value = table_gc_mode_result[3]
+        # A temporary workaround until 5.0 query-table-extensions issue is fixed:
+        # https://github.com/scylladb/scylla/issues/10309
+        if '6d6f646506000000' in extensions_value:
+            return GcMode.REPAIR
+        elif '6d6f646507000000' in extensions_value:
+            return GcMode.TIMEOUT
+        elif '6d6f646509000000' in extensions_value:
+            return GcMode.IMMEDIATE
+        elif '6d6f646508000000' in extensions_value:
+            return GcMode.DISABLED
 
     LOGGER.debug("Query result for {}.{} GC mode is: {}".format(keyspace, table, gc_mode))
     return gc_mode
