@@ -60,16 +60,18 @@ round_robin: true
 
 instance_type_db: 'i3en.3xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'SisyphusMonkey'  # 'DeleteByRowsRangeMonkey' or: 'NoOpMonkey' or 'SisyphusMonkey'
 nemesis_seed: '016'
-nemesis_interval: 30
+nemesis_interval: 10
 
 user_prefix: 'longevity-large-partitions-200k-pks-4d'
 
-space_node_threshold: 644245094
+space_node_threshold: 6442450
 
 stop_test_on_stress_failure: false
 
 # Temporarily downgrade scylla_bench to a stable version
 scylla_bench_version: v0.1.3
 run_full_partition_scan: '{"ks_cf": "scylla_bench.test", "interval": 90, "pk_name":"pk", "rows_count": 100000, "validate_data": "true"}' # 'ks.cf, interval(sec), partition-key name, number-of-rows-per-partition, validate reversed query output, include data-column or only validate pk + ck'
+
+nemesis_during_prepare: false
