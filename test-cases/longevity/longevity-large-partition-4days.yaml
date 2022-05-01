@@ -2,15 +2,15 @@ test_duration: 6480
 
 bench_run: true
 
-prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -partition-offset=6 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=12 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=19 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=26 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=33 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=40 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=47 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
-                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -partition-offset=54 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150"
+prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -partition-offset=6 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=12 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=19 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=26 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=33 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=40 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=47 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30",
+                     "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -partition-offset=54 -clustering-row-size=2048 -concurrency=25 -rows-per-request=200 -timeout=180s -connection-count 30"
 ]
 stress_cmd: ["scylla-bench -workload=uniform -mode=read -replication-factor=3 -partition-count=60 -clustering-row-count=10000000 -clustering-row-size=2048 -rows-per-request=2000 -timeout=180s -concurrency=700 -max-rate=64000  -duration=5760m -connection-count 500",
              "scylla-bench -workload=uniform -mode=read -replication-factor=3 -partition-count=60 -clustering-row-count=10000000 -clustering-row-size=2048 -rows-per-request=2000 -timeout=180s -concurrency=700 -max-rate=64000  -duration=5760m -connection-count 500",
@@ -25,7 +25,7 @@ instance_type_db: 'i3en.3xlarge'
 
 nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '014'
-instance_type_loader: 'c5n.2xlarge'
+#instance_type_loader: 'c5n.2xlarge'  # TODO: DBG
 round_robin: true
 nemesis_interval: 30
 nemesis_during_prepare: false
