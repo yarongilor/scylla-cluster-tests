@@ -3838,6 +3838,20 @@ class ScyllaCloudLimitedChaosMonkey(Nemesis):
         self.call_random_disrupt_method(disrupt_methods=CLOUD_LIMITED_CHAOS_MONKEY)
 
 
+TOMBSTONE_GC_MONKEY = ['disrupt_toggle_table_gc_mode',
+                              'disrupt_mgmt_repair_cli', 'disrupt_major_compaction',
+                              'disrupt_stop_start_scylla_server', 'disrupt_soft_reboot_node',
+                              'disrupt_delete_overlapping_row_ranges', 'disrupt_delete_by_rows_range',
+                              ]
+
+
+class TombstoneGcMonkey(Nemesis):
+
+    def disrupt(self):
+        # Limit the nemesis scope to only one relevant to Tombstone GC.
+        self.call_random_disrupt_method(disrupt_methods=TOMBSTONE_GC_MONKEY)
+
+
 class AllMonkey(Nemesis):
 
     def disrupt(self):

@@ -17,7 +17,7 @@ n_monitor_nodes: 1
 
 instance_type_db: 'i3en.2xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'TombstoneGcMonkey'
 nemesis_seed: '025'
 nemesis_interval: 15
 nemesis_during_prepare: false
