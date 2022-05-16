@@ -157,6 +157,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     kubernetes: bool = False        # flag that signal that nemesis run with k8s cluster
     limited: bool = False           # flag that signal that nemesis are belong to limited set of nemesises
     has_steady_run: bool = False    # flag that signal that nemesis should be run with perf tests with steady run
+    tombstone_gc_mode: bool = False  # A flag denotes a nemesis impacts tombstone and its GC,
+    # i.e toggle-tombstone-gc-mode, repair, reboot, major compaction.
 
     def __new__(cls, tester_obj, termination_event, *args):  # pylint: disable=unused-argument
         for name, member in inspect.getmembers(cls, lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
@@ -354,11 +356,13 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             run_with_gemini: Optional[bool] = None,
             networking: Optional[bool] = None,
             limited: Optional[bool] = None,
-            topology_changes: Optional[bool] = None) -> List[str]:
+            topology_changes: Optional[bool] = None,
+            tombstone_gc_mode: Optional[bool] = None) -> List[str]:
         return self.get_list_of_methods_by_flags(
             disruptive=disruptive,
             run_with_gemini=run_with_gemini,
             networking=networking,
+            tombstone_gc_mode=tombstone_gc_mode,
             kubernetes=self._is_it_on_kubernetes() or None,
             limited=limited,
             topology_changes=topology_changes,
@@ -373,6 +377,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             disruptive: Optional[bool] = None,
             run_with_gemini: Optional[bool] = None,
             networking: Optional[bool] = None,
+            tombstone_gc_mode: Optional[bool] = None,
             kubernetes: Optional[bool] = None,
             limited: Optional[bool] = None,
             topology_changes: Optional[bool] = None) -> List[str]:
@@ -380,6 +385,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             disruptive=disruptive,
             run_with_gemini=run_with_gemini,
             networking=networking,
+            tombstone_gc_mode=tombstone_gc_mode,
             kubernetes=kubernetes,
             limited=limited,
             topology_changes=topology_changes
@@ -3536,6 +3542,7 @@ class SoftRebootNodeMonkey(Nemesis):
     disruptive = True
     kubernetes = True
     limited = True
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.disrupt_soft_reboot_node()
@@ -3597,6 +3604,7 @@ class MajorCompactionMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.disrupt_major_compaction()
@@ -3685,6 +3693,7 @@ class DeleteByPartitionsMonkey(Nemesis):
 class DeleteByRowsRangeMonkey(Nemesis):
     disruptive = False
     kubernetes = True
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.disrupt_delete_by_rows_range()
@@ -3693,6 +3702,7 @@ class DeleteByRowsRangeMonkey(Nemesis):
 class DeleteOverlappingRowRangesMonkey(Nemesis):
     disruptive = False
     kubernetes = True
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.disrupt_delete_overlapping_row_ranges()
@@ -3997,6 +4007,7 @@ class ToggleTableIcsMonkey(Nemesis):
 class ToggleGcModeMonkey(Nemesis):
     kubernetes = True
     disruptive = False
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.disrupt_toggle_table_gc_mode()
@@ -4022,6 +4033,7 @@ class MgmtRepair(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    tombstone_gc_mode = True
 
     def disrupt(self):
         self.log.info('disrupt_mgmt_repair_cli Nemesis begin')
@@ -4260,6 +4272,19 @@ class NetworkMonkey(Nemesis):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(networking=True)
+
+    def disrupt(self):
+        self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
+
+
+class TombstoneGcMonkey(Nemesis):
+    # Limit the nemesis scope:
+    # 'disrupt_toggle_table_gc_mode', 'disrupt_mgmt_repair_cli', 'disrupt_major_compaction',
+    # 'disrupt_soft_reboot_node', 'disrupt_delete_overlapping_row_ranges', 'disrupt_delete_by_rows_range'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(tombstone_gc_mode=True)
 
     def disrupt(self):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
