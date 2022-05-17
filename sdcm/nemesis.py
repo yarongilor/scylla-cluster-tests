@@ -1904,31 +1904,60 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         """
         self._modify_table_property(name="bloom_filter_fp_chance", val=random.random() / 2)
 
-    def toggle_table_gc_mode(self):
+    def _get_user_keyspace_table(self):
         """
-            Alters a non-system table tombstone_gc_mode option.
-            Choose the alternate option of 'repair' / 'timeout'
-             (*) The other available values of 'disabled' / 'immediate' are not tested by
-             this nemesis since not applicable to a longevity test.
+            Return a random user keyspace, table, and an indication for a Materialized-view.
         """
         all_ks_cfs = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node)
         non_mview_ks_cfs = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=True)
 
         if not all_ks_cfs:
             raise UnsupportedNemesis(
-                'Non-system keyspace and table are not found. toggle_table_gc_mode nemesis can\'t run')
+                'Non-system keyspace and table are not found. The nemesis can\'t run')
 
         mview_ks_cfs = list(set(all_ks_cfs) - set(non_mview_ks_cfs))
         keyspace_table = random.choice(all_ks_cfs)
         keyspace, table = keyspace_table.split('.')
+        is_mview = keyspace_table in mview_ks_cfs
+        return keyspace, table, is_mview
+
+    def modify_table_gc_mode(self):
+        """
+            Alters a non-system table tombstone_gc_mode option.
+            Choose any option out of 'repair' / 'timeout' / 'disabled' / 'immediate'
+             (*) A GC mode legend is:
+             repair = delete only tombstones created before a repair.
+             timeout = the old original mode set by gc grace period parameter.
+             immediate = delete tombstone immediately on compaction.
+             disabled = tombstones are not deleted at all.
+        """
+        keyspace, table, is_mview = self._get_user_keyspace_table()
+        current_gc_mode = get_gc_mode(node=self.target_node, keyspace=keyspace, table=table)
+        new_gc_mode = random.choice([gc_mode for gc_mode in list(
+            GcMode) if gc_mode != current_gc_mode])
+        new_gc_mode_as_dict = {'mode': new_gc_mode.value}
+
+        alter_command_prefix = 'ALTER MATERIALIZED VIEW ' if is_mview else 'ALTER TABLE '
+        cmd = alter_command_prefix + f" {keyspace}.{table} WITH tombstone_gc = {new_gc_mode_as_dict};"
+        self.log.info("Alter GC mode query to execute: %s", cmd)
+        self.target_node.run_cqlsh(cmd)
+
+    def toggle_table_standard_gc_mode(self):
+        """
+            Alters a non-system table tombstone_gc_mode option.
+            Choose the alternate option of 'repair' / 'timeout'
+             (*) The other available values of 'disabled' / 'immediate' are not tested by
+             this nemesis since not applicable to a long or a consistent longevity test.
+        """
+        keyspace, table, is_mview = self._get_user_keyspace_table()
         if get_gc_mode(node=self.target_node, keyspace=keyspace, table=table) != GcMode.REPAIR:
             new_gc_mode = GcMode.REPAIR
         else:
             new_gc_mode = GcMode.TIMEOUT
         new_gc_mode_as_dict = {'mode': new_gc_mode.value}
 
-        alter_command_prefix = 'ALTER TABLE ' if keyspace_table not in mview_ks_cfs else 'ALTER MATERIALIZED VIEW '
-        cmd = alter_command_prefix + f" {keyspace_table} WITH tombstone_gc = {new_gc_mode_as_dict};"
+        alter_command_prefix = 'ALTER MATERIALIZED VIEW ' if is_mview else 'ALTER TABLE '
+        cmd = alter_command_prefix + f" {keyspace}.{table} WITH tombstone_gc = {new_gc_mode_as_dict};"
         self.log.info("Alter GC mode query to execute: %s", cmd)
         self.target_node.run_cqlsh(cmd)
 
@@ -2090,8 +2119,13 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     def disrupt_toggle_table_ics(self):
         self.toggle_table_ics()
 
-    def disrupt_toggle_table_gc_mode(self):
-        self.toggle_table_gc_mode()
+    def disrupt_toggle_table_standard_gc_mode(self):
+        # Toggle table's standard Tombstones-GC modes of: 'repair' / 'timeout'
+        self.toggle_table_standard_gc_mode()
+
+    def disrupt_modify_table_gc_mode(self):
+        # Modify table with any Tombstones-GC-modes
+        self.modify_table_gc_mode()
 
     def disrupt_modify_table(self):
         # randomly select and run one of disrupt_modify_table* methods
@@ -4004,13 +4038,22 @@ class ToggleTableIcsMonkey(Nemesis):
         self.disrupt_toggle_table_ics()
 
 
-class ToggleGcModeMonkey(Nemesis):
+class ToggleStandardGcModeMonkey(Nemesis):
     kubernetes = True
     disruptive = False
     tombstone_gc_mode = True
 
     def disrupt(self):
-        self.disrupt_toggle_table_gc_mode()
+        self.disrupt_toggle_table_standard_gc_mode()
+
+
+class ModifyGcModeMonkey(Nemesis):
+    kubernetes = True
+    disruptive = False
+    tombstone_gc_mode = True
+
+    def disrupt(self):
+        self.disrupt_modify_table_gc_mode()
 
 
 class MgmtBackup(Nemesis):
@@ -4277,14 +4320,33 @@ class NetworkMonkey(Nemesis):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
 
 
-class TombstoneGcMonkey(Nemesis):
+class TombstoneGcStandardMonkey(Nemesis):
     # Limit the nemesis scope:
-    # 'disrupt_toggle_table_gc_mode', 'disrupt_mgmt_repair_cli', 'disrupt_major_compaction',
+    # 'disrupt_toggle_table_standard_gc_mode', 'disrupt_mgmt_repair_cli', 'disrupt_major_compaction',
     # 'disrupt_soft_reboot_node', 'disrupt_delete_overlapping_row_ranges', 'disrupt_delete_by_rows_range'
+    # Exclude the nemesis of: disrupt_modify_table_gc_mode
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.disrupt_methods_list = self.get_list_of_methods_compatible_with_backend(tombstone_gc_mode=True)
+        tombstone_gc_mode_list = self.get_list_of_methods_compatible_with_backend(tombstone_gc_mode=True)
+        self.disrupt_methods_list = (
+            list(filter(lambda monkey: monkey != 'ModifyGcModeMonkey', tombstone_gc_mode_list)))
+
+    def disrupt(self):
+        self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
+
+
+class TombstoneGcAdvancedMonkey(Nemesis):
+    # Limit the nemesis scope:
+    # 'disrupt_modify_table_gc_mode', 'disrupt_mgmt_repair_cli', 'disrupt_major_compaction',
+    # 'disrupt_soft_reboot_node', 'disrupt_delete_overlapping_row_ranges', 'disrupt_delete_by_rows_range'
+    # Exclude the nemesis of: disrupt_toggle_table_standard_gc_mode
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        tombstone_gc_mode_list = self.get_list_of_methods_compatible_with_backend(tombstone_gc_mode=True)
+        self.disrupt_methods_list = (
+            list(filter(lambda monkey: monkey != 'ToggleStandardGcModeMonkey', tombstone_gc_mode_list)))
 
     def disrupt(self):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
