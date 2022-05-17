@@ -11,17 +11,17 @@ stress_read_cmd: [
     ]
 
 
-n_db_nodes: 4
-n_loaders: 3
-n_monitor_nodes: 1
+n_db_nodes: 3
+n_loaders: 1
+n_monitor_nodes: 0
 
-instance_type_db: 'i3en.2xlarge'
+instance_type_db: 'i3.xlarge'
 
 nemesis_class_name: 'TombstoneGcAdvancedMonkey'
 nemesis_seed: '025'
-nemesis_interval: 15
-nemesis_during_prepare: false
-space_node_threshold: 64424
+nemesis_interval: 3
+nemesis_during_prepare: true
+space_node_threshold: 6442
 user_prefix: 'longevity-twcs-tombstone-gc-48h'
 
 post_prepare_cql_cmds: "ALTER TABLE scylla_bench.test with gc_grace_seconds = 300 and default_time_to_live = 21600 and compaction = {'class':'TimeWindowCompactionStrategy', 'compaction_window_size': 60, 'compaction_window_unit': 'MINUTES'};"
