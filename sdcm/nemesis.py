@@ -4345,9 +4345,12 @@ class TombstoneGcAdvancedMonkey(Nemesis):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         tombstone_gc_mode_list = self.get_list_of_methods_compatible_with_backend(tombstone_gc_mode=True)
+
+        self.log.debug('tombstone_gc_mode_list: %s', tombstone_gc_mode_list)  #TODO: DBG
         self.disrupt_methods_list = (
             list(filter(lambda method: method != 'disrupt_toggle_table_standard_gc_mode', tombstone_gc_mode_list)))
 
+        self.log.debug('self.disrupt_methods_list: %s', self.disrupt_methods_list)  # TODO: DBG
     def disrupt(self):
         self.call_random_disrupt_method(disrupt_methods=self.disrupt_methods_list)
 
