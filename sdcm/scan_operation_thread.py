@@ -46,11 +46,6 @@ class ScanOperationThread:
         self.termination_event = termination_event
         self.log = logging.getLogger(self.__class__.__name__)
         self._thread = threading.Thread(daemon=True, name=self.__class__.__name__, target=self.run)
-        self.username, self.password = self.get_credentials()
-
-    def get_credentials(self):
-        credentials = self.db_cluster.get_db_auth()
-        return credentials if credentials else (None, None)
 
     def wait_until_user_table_exists(self, db_node, table_name: str = 'random', timeout_min: int = 20):
         text = f'Waiting until {table_name} user table exists'
@@ -108,8 +103,7 @@ class ScanOperationThread:
             cmd = cmd or self.randomly_form_cql_statement()
             if not cmd:
                 return
-            with self.db_cluster.cql_connection_patient(node=db_node, user=self.username, password=self.password,
-                                                        connect_timeout=300) as session:
+            with self.db_cluster.cql_connection_patient(node=db_node, connect_timeout=300) as session:
 
                 if self.termination_event.is_set():
                     return
@@ -201,8 +195,7 @@ class FullPartitionScanThread(ScanOperationThread):
     def get_table_clustering_order(self) -> str:
         for node in self.db_cluster.nodes:
             try:
-                with self.db_cluster.cql_connection_patient(node=node, user=self.username,
-                                                            password=self.password, connect_timeout=300) as session:
+                with self.db_cluster.cql_connection_patient(node=node, connect_timeout=300) as session:
                     # Using CL ONE. No need for a quorum since querying a constant fixed attribute of a table.
                     session.default_consistency_level = ConsistencyLevel.ONE
                     return get_table_clustering_order(ks_cf=self.ks_cf, ck_name=self.ck_name, session=session)
@@ -222,8 +215,7 @@ class FullPartitionScanThread(ScanOperationThread):
         3) Add a random CK filter with random row values.
         :return: a CQL reversed-query
         """
-        with self.db_cluster.cql_connection_patient(node=self.db_node, user=self.username, password=self.password,
-                                                    connect_timeout=300) as session:
+        with self.db_cluster.cql_connection_patient(node=self.db_node, connect_timeout=300) as session:
             ck_name = self.ck_name
             rows_count = self.rows_count
             ck_random_min_value = random.randint(a=1, b=rows_count)
