@@ -407,6 +407,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         flags = {flag_name.strip('!'): not flag_name.startswith(
             '!') for flag_name in list_of_properties_to_include}
         subclasses_list = self._get_subclasses(**flags)
+        self.log.debug("Gathered subclasses_list methods: {}".format(subclasses_list))
         return subclasses_list
 
     def get_list_of_disrupt_methods(self, subclasses_list):
@@ -1570,7 +1571,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         Here it kept for future usages and unit testing ability.
         more about nemesis_selector behaviour in sct_config.py
         """
-        nemesis_selector = self.cluster.params.get('nemesis_selector')
+        nemesis_selector = self.cluster.params.get('nemesis_selector') or []
+        if self.cluster.params.get('exclude_disabled_nemesis'):
+            self.log.debug("exclude_disabled_nemesis is default true!")
+            nemesis_selector.append('!disabled')
+        else:
+            self.log.debug("exclude_disabled_nemesis is false!")
         if nemesis_selector:
             subclasses = self.get_list_of_subclasses_by_property_name(
                 list_of_properties_to_include=nemesis_selector)
@@ -4206,6 +4212,7 @@ class ToggleTableIcsMonkey(Nemesis):
 class ToggleGcModeMonkey(Nemesis):
     kubernetes = True
     disruptive = False
+    disabled = True
 
     def disrupt(self):
         self.disrupt_toggle_table_gc_mode()
