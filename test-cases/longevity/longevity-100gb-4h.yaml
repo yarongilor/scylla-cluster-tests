@@ -18,4 +18,5 @@ nemesis_seed: '032'
 nemesis_interval: 5
 nemesis_filter_seeds: false
 
-user_prefix: 'longevity-100gb-4h'
+user_prefix: 'longevity-debug'
+exclude_disabled_nemesis: false
