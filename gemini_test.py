@@ -16,6 +16,7 @@
 import time
 
 from sdcm.tester import ClusterTester
+from test_lib.compaction import GcMode
 
 
 class GeminiTest(ClusterTester):
@@ -55,10 +56,16 @@ class GeminiTest(ClusterTester):
         gemini_thread = self.run_gemini(cmd=cmd)
         self.gemini_results["cmd"] = gemini_thread.gemini_commands
         # sleep before run nemesis test_duration * .25
-        sleep_before_start = float(self.params.get('test_duration')) * 60 * .1
+        sleep_before_start = float(self.params.get('test_duration')) * 60 * .01
+
         self.log.info('Sleep interval {}'.format(sleep_before_start))
         time.sleep(sleep_before_start)
 
+        new_gc_mode_as_dict = {'mode': GcMode.IMMEDIATE.value}
+        cmd = f"ALTER TABLE ks1.table1 WITH tombstone_gc = {new_gc_mode_as_dict};"
+        self.log.info("Alter GC mode query to execute: %s", cmd)
+        node = self.db_cluster.nodes[0]
+        node.run_cqlsh(cmd)
         self.db_cluster.start_nemesis()
 
         self.gemini_results.update(self.verify_gemini_results(queue=gemini_thread))

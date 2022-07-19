@@ -2135,7 +2135,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 GcMode) if gc_mode != current_gc_mode])
             new_gc_mode_as_dict = {'mode': new_gc_mode.value}
 
-        new_gc_mode_as_dict = {'mode': GcMode.DISABLED.value}
+        new_gc_mode_as_dict = {'mode': GcMode.IMMEDIATE.value}
         alter_command_prefix = 'ALTER MATERIALIZED VIEW ' if is_mview else 'ALTER TABLE '
         cmd = f"{alter_command_prefix} {keyspace}.{table} WITH tombstone_gc = {new_gc_mode_as_dict};"
         self.log.info("Alter GC mode query to execute: %s", cmd)
