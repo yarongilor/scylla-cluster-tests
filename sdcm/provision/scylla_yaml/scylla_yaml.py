@@ -308,6 +308,7 @@ class ScyllaYaml(BaseModel):  # pylint: disable=too-few-public-methods
     ldap_bind_dn: str = None
     ldap_bind_passwd: str = None
     ldap_url_template: str = None
+    role_manager: str = None
     saslauthd_socket_path: str = None
 
     system_key_directory: str = None
