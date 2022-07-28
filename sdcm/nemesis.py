@@ -4233,6 +4233,7 @@ class ToggleTableIcsMonkey(Nemesis):
 class ToggleGcModeMonkey(Nemesis):
     kubernetes = True
     disruptive = False
+    run_with_gemini = False
 
     def disrupt(self):
         self.disrupt_toggle_table_gc_mode()
