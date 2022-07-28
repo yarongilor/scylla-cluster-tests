@@ -781,6 +781,22 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             self.alternator.create_table(node=node, schema=schema, isolation=alternator.enums.WriteIsolation.FORBID_RMW,
                                          table_name='usertable_no_lwt')
 
+    def run_post_prepare_cql_cmds(self):
+        if post_prepare_cql_cmds := self.params.get('post_prepare_cql_cmds'):
+            self.log.debug("Execute post prepare queries: %s", post_prepare_cql_cmds)
+            self._run_cql_commands(post_prepare_cql_cmds)
+
+    def _run_cql_commands(self, cmds, node=None):
+        node = node if node else self.db_cluster.nodes[0]
+
+        if not isinstance(cmds, list):
+            cmds = [cmds]
+
+        for cmd in cmds:
+            # pylint: disable=no-member
+            with self.db_cluster.cql_connection_patient(node) as session:
+                session.execute(cmd)
+
     def get_nemesis_class(self):
         """
         Get a Nemesis class from parameters.

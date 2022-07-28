@@ -55,10 +55,10 @@ class GeminiTest(ClusterTester):
         gemini_thread = self.run_gemini(cmd=cmd)
         self.gemini_results["cmd"] = gemini_thread.gemini_commands
         # sleep before run nemesis test_duration * .25
-        sleep_before_start = float(self.params.get('test_duration')) * 60 * .1
+        sleep_before_start = float(self.params.get('test_duration')) * 60 * .01  # TODO: DBG
         self.log.info('Sleep interval {}'.format(sleep_before_start))
         time.sleep(sleep_before_start)
-
+        self.run_post_prepare_cql_cmds()
         self.db_cluster.start_nemesis()
 
         self.gemini_results.update(self.verify_gemini_results(queue=gemini_thread))
