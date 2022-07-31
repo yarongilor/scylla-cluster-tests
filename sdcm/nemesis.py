@@ -3727,6 +3727,7 @@ class StopWaitStartMonkey(Nemesis):
     disruptive = True
     kubernetes = True
     limited = True
+    run_with_gemini = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -4230,12 +4231,12 @@ class ToggleTableIcsMonkey(Nemesis):
         self.disrupt_toggle_table_ics()
 
 
-class ToggleGcModeMonkey(Nemesis):
-    kubernetes = True
-    disruptive = False
-
-    def disrupt(self):
-        self.disrupt_toggle_table_gc_mode()
+# class ToggleGcModeMonkey(Nemesis):
+#     kubernetes = True
+#     disruptive = False
+#
+#     def disrupt(self):
+#         self.disrupt_toggle_table_gc_mode()
 
 
 class MgmtBackup(Nemesis):
