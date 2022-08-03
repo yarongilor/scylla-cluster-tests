@@ -321,7 +321,6 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.create_stats = self.params.get(key='store_perf_results')
         self.scylla_dir = SCYLLA_DIR
         self.left_processes_log = os.path.join(self.logdir, 'left_processes.log')
-        self.scylla_hints_dir = os.path.join(self.scylla_dir, "hints")
         self._logs = {}
         self.timeout_thread = None
         self.email_reporter = build_reporter(self.__class__.__name__,
