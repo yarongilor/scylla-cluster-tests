@@ -3168,6 +3168,7 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         collect_kallsyms_in_parallel.run(
             func=collect_kallsyms_map,
             unpack_objects=True, ignore_exceptions=False)
+        return new_nodes
 
 
     def get_node_private_ips(self):

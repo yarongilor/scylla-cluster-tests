@@ -820,7 +820,10 @@ def collect_kallsyms_map(node):
         kallsyms_dir = os.path.join(node.logdir, KALLSYMS_DIR_NAME)
         os.makedirs(kallsyms_dir, exist_ok=True)
         # name = f'kallsyms_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}'  # TODO: remove if not needed.
-        kallsyms_name = f'kallsyms_{node.uptime}'
+        # kallsyms_name = f'kallsyms_{node.uptime}'
+        uptime = datetime.datetime.strptime(node.remoter.run('uptime -s', ignore_status=True).stdout.strip(),
+                                            '%Y-%m-%d %H:%M:%S').strftime("%Y%m%d_%H%M%S")
+        kallsyms_name = f'kallsyms_{uptime}'
         kallsyms_file_path = os.path.join(kallsyms_dir, kallsyms_name)
         if os.path.exists(kallsyms_file_path):
             LOGGER.debug("The kallsyms file '%s' already exists and not changed. Not collecting it's map",
