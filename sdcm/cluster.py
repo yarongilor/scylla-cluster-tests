@@ -2995,12 +2995,12 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         # NOTE: following is needed in case of K8S where we init multiple DB clusters first
         #       and only then we add nodes to it calling code in parallel.
         if add_nodes:
-            run_add_nodes = self.add_db_nodes if 'db' in self.node_type else self.add_nodes
+            add_nodes_func = self.add_db_nodes if 'db' in self.node_type else self.add_nodes
             if isinstance(n_nodes, list):
                 for dc_idx, num in enumerate(n_nodes):
-                    run_add_nodes(num, dc_idx=dc_idx, enable_auto_bootstrap=self.auto_bootstrap)
+                    add_nodes_func(num, dc_idx=dc_idx, enable_auto_bootstrap=self.auto_bootstrap)
             elif isinstance(n_nodes, int):  # legacy type
-                run_add_nodes(n_nodes, enable_auto_bootstrap=self.auto_bootstrap)
+                add_nodes_func(n_nodes, enable_auto_bootstrap=self.auto_bootstrap)
             else:
                 raise ValueError('Unsupported type: {}'.format(type(n_nodes)))
             self.run_node_benchmarks()
@@ -3118,6 +3118,7 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
                                                   user_data_format_version=user_data_format_version, params=self.params,
                                                   syslog_host_port=self.test_config.get_logging_service_host_port())
         return user_data_builder.to_string()
+
     def add_db_nodes(self, count, ec2_user_data='', dc_idx=0, rack=0, enable_auto_bootstrap=False):
         new_nodes = self.add_nodes(count=count, ec2_user_data=ec2_user_data, dc_idx=dc_idx, rack=rack,
                                    enable_auto_bootstrap=enable_auto_bootstrap)

@@ -56,7 +56,6 @@ from sdcm.utils.get_username import get_username
 from sdcm.utils.remotewebbrowser import RemoteBrowser, WebDriverContainerMixin
 
 LOGGER = logging.getLogger(__name__)
-KALLSYMS_DIR_NAME = 'kallsyms'
 
 
 class CollectingNode(AutoSshContainerMixin, WebDriverContainerMixin):
@@ -782,6 +781,8 @@ class ScyllaLogCollector(LogCollector):
                                     "-u scylla-image-setup.service -u scylla-io-setup.service -u scylla-server.service "
                                     "-u scylla-jmx.service -u scylla-housekeeping-restart.service "
                                     "-u scylla-housekeeping-daily.service", search_locally=True),
+                    FileLog(name='kallsyms_*',
+                            search_locally=True),
                     CommandLog(name='cpu_info',
                                command='cat /proc/cpuinfo'),
                     CommandLog(name='mem_info',
@@ -799,7 +800,6 @@ class ScyllaLogCollector(LogCollector):
                                command='cat /etc/scylla.d/io_properties.yaml'),
                     CommandLog(name='dmesg.log',
                                command='sudo dmesg -P'),
-                    DirLog(name=f'{KALLSYMS_DIR_NAME}/*', search_locally=True),
                     CommandLog(name='systemctl.status',
                                command='sudo systemctl status --all --full --no-pager'),
                     CommandLog(name='cassandra-rackdc.properties',
@@ -818,12 +818,10 @@ def save_kallsyms_map(node):
 
     LOGGER.info('Saving kallsyms map from host: %s', node.name)
     if remote_node_dir := create_remote_storage_dir(node):
-        kallsyms_dir = os.path.join(node.logdir, KALLSYMS_DIR_NAME)
-        os.makedirs(kallsyms_dir, exist_ok=True)
         uptime = datetime.datetime.strptime(node.remoter.run('uptime -s', ignore_status=True).stdout.strip(),
                                             '%Y-%m-%d %H:%M:%S').strftime("%Y%m%d_%H%M%S")
         kallsyms_name = f'kallsyms_{uptime}'
-        kallsyms_file_path = os.path.join(kallsyms_dir, kallsyms_name)
+        kallsyms_file_path = os.path.join(node.logdir, kallsyms_name)
         if os.path.exists(kallsyms_file_path):
             LOGGER.debug("The kallsyms file '%s' already exists and not changed. Not collecting it's map",
                          kallsyms_file_path)
@@ -832,7 +830,7 @@ def save_kallsyms_map(node):
                                 command='sudo cat /proc/kallsyms')
 
         try:
-            log_entity.collect(node, kallsyms_dir, remote_node_dir)
+            log_entity.collect(node, node.logdir, remote_node_dir)
         except Exception as details:  # pylint: disable=broad-except
             LOGGER.error("Error occurred during collecting kallsyms on host: %s\n%s", node.name, details)
 
