@@ -3728,6 +3728,7 @@ class StopWaitStartMonkey(Nemesis):
     kubernetes = True
     limited = True
     run_with_gemini = True
+    gemini_tombstone = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -4259,6 +4260,7 @@ class MgmtRepair(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    gemini_tombstone = True
 
     def disrupt(self):
         self.log.info('disrupt_mgmt_repair_cli Nemesis begin')
