@@ -135,7 +135,20 @@ class AWSCluster(cluster.BaseCluster):  # pylint: disable=too-many-instance-attr
         instance_profile = self.params.get('aws_instance_profile_name')
         if instance_profile:
             params['IamInstanceProfile'] = {'Name': instance_profile}
-        instances = self._ec2_services[dc_idx].create_instances(**params)
+        try:
+            # instances = self._ec2_services[dc_idx].create_instances(**params)
+            error_response='An error occurred (InsufficientInstanceCapacity) when calling the RunInstances operation (reached max retries: 4): We currently do not have sufficient im4gn.xlarge capacity in the Availability Zone you requested (us-east-1c). Our system will be working on provisioning additional capacity. You can currently get im4gn.xlarge capacity by not specifying an Availability Zone in your request or choosing us-east-1b, us-east-1d.)'
+            # raise botocore.exceptions.ClientError(error_response=error_response, operation_name='test')
+            raise Exception(error_response)
+            # raise botocore.exceptions.ClientError(
+
+        # except botocore.exceptions.ClientError as error:
+        except Exception as error:
+            self.log.debug(f"Failed creating instances due to error: %s", error)
+            self.log.debug(f"params for instances creation: %s", params)
+            self.log.debug(f"ec2_user_data for instances creation: %s", ec2_user_data)
+
+
 
         ec2 = ec2_client.EC2ClientWrapper(region_name=self.region_names[dc_idx])
         ec2.add_tags(instances, {'Name': 'on_demand'})
