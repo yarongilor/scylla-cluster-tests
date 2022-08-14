@@ -1062,9 +1062,10 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
 
         self.log.info("[yg] self.params: %s", self.params)
         common_params = get_common_params(params=self.params, regions=regions, credentials=self.credentials,
-                                          services=services, auto_az=self.params.get('auto_availability_zone'))
+                                          services=services,
+                                          auto_availability_zone=self.params.get('auto_availability_zone'))
         self.log.info("[yg] common_params: %s", common_params)
-        
+
         def create_cluster(db_type='scylla'):
             cl_params = dict(
                 ec2_instance_type=db_info['type'],
