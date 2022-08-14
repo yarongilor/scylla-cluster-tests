@@ -200,3 +200,5 @@ raid_level: 0
 bare_loaders: false
 
 nemesis_exclude_disabled: true
+
+auto_availability_zone: false

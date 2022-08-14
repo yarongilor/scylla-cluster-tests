@@ -1222,6 +1222,10 @@ class SCTConfiguration(dict):
         dict(name="availability_zone", env="SCT_AVAILABILITY_ZONE",
              type=str,
              help="Availability zone to use. Same for multi-region scenario."),
+        dict(name="auto_availability_zone", env="SCT_AWS_AUTO_AVAILABILITY_ZONE",
+             type=boolean,
+             help="Not limiting availability zones, in order for the cloud provider to automatically select"
+                  " a zone to use."),
 
         dict(name="num_nodes_to_rollback", env="SCT_NUM_NODES_TO_ROLLBACK",
              type=str,
