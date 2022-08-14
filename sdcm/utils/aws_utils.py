@@ -248,12 +248,21 @@ def init_db_info_from_params(db_info: dict, params: dict, regions: List, root_de
     return db_info
 
 
-def get_common_params(params: dict, regions: List, credentials: List, services: List) -> dict:
-    ec2_security_group_ids, ec2_subnet_ids = get_ec2_network_configuration(
-        regions=regions,
-        availability_zones=params.get('availability_zone').split(','),
-        params=params
-    )
+def get_common_params(params: dict, regions: List, credentials: List, services: List, auto_az: bool = False) -> dict:
+    if auto_az:
+        ec2_security_group_ids, ec2_subnet_ids = get_ec2_network_configuration(
+            regions=regions,
+            availability_zones=['a','b','c','d'],  # params.get('availability_zone').split(','),
+            params=params
+        )
+        LOGGER.info("[yg] get_ec2_network_configuration auto_az output: %s, %s ", ec2_security_group_ids, ec2_subnet_ids)
+    else:
+        ec2_security_group_ids, ec2_subnet_ids = get_ec2_network_configuration(
+            regions=regions,
+            availability_zones=params.get('availability_zone').split(','),
+            params=params
+        )
+        LOGGER.info("[yg] get_ec2_network_configuration output: %s, %s ", ec2_security_group_ids, ec2_subnet_ids)
     return dict(ec2_security_group_ids=ec2_security_group_ids,
                 ec2_subnet_id=ec2_subnet_ids,
                 services=services,

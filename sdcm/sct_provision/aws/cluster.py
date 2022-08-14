@@ -12,6 +12,7 @@
 # Copyright (c) 2021 ScyllaDB
 
 import abc
+import logging
 from functools import cached_property
 from typing import List, Dict, Optional
 
@@ -57,7 +58,7 @@ class ClusterBase(BaseModel):
     _NODE_NUM_PARAM_NAME = None
     _INSTANCE_PARAMS_BUILDER = None
     _USER_PARAM = None
-
+    LOGGER = logging.getLogger(__name__)
     @property
     def _provisioner(self):
         return AWSInstanceProvisioner()
@@ -191,6 +192,7 @@ class ClusterBase(BaseModel):
 
     def provision_plan(self, region_id: int) -> ProvisionPlan:
         if not self.params.get('auto_availability_zone'):
+            LOGGER.debug("[yg] NOT auto_availability_zone")
             return ProvisionPlanBuilder(
                 initial_provision_type=self._instance_provision,
                 duration=self._test_duration,
@@ -200,6 +202,7 @@ class ClusterBase(BaseModel):
                 spot_low_price=self._spot_low_price(region_id),
                 provisioner=AWSInstanceProvisioner(),
             ).provision_plan
+        LOGGER.debug("[yg] YES auto_availability_zone")
         return ProvisionPlanBuilder(
             initial_provision_type=self._instance_provision,
             duration=self._test_duration,

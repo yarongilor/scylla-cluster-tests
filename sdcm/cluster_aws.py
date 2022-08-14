@@ -144,9 +144,9 @@ class AWSCluster(cluster.BaseCluster):  # pylint: disable=too-many-instance-attr
 
         # except botocore.exceptions.ClientError as error:
         except Exception as error:
-            self.log.debug(f"Failed creating instances due to error: %s", error)
-            self.log.debug(f"params for instances creation: %s", params)
-            self.log.debug(f"ec2_user_data for instances creation: %s", ec2_user_data)
+            self.log.info(f"Failed creating instances due to error: %s", error)
+            self.log.info(f"params for instances creation: %s", params)
+            self.log.info(f"ec2_user_data for instances creation: %s", ec2_user_data)
 
 
 
