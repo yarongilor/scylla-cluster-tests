@@ -1061,7 +1061,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             wait_ami_available(services[idx].meta.client, ami_id)
 
         common_params = get_common_params(params=self.params, regions=regions, credentials=self.credentials,
-                                          services=services)
+                                          services=services,
+                                          auto_availability_zone=self.params.get('auto_availability_zone'))
 
         def create_cluster(db_type='scylla'):
             cl_params = dict(
