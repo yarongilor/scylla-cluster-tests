@@ -1223,6 +1223,11 @@ class SCTConfiguration(dict):
              type=str,
              help="Availability zone to use. Same for multi-region scenario."),
 
+        dict(name="auto_availability_zone", env="AUTO_AVAILABILITY_ZONE",
+             type=boolean,
+             help="Not specifying availability zone, in order for the cloud provider to automatically assign"
+                  " a zone to use."),
+
         dict(name="num_nodes_to_rollback", env="SCT_NUM_NODES_TO_ROLLBACK",
              type=str,
              help="Number of nodes to upgrade and rollback in test_generic_cluster_upgrade"),

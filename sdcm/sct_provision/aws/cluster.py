@@ -190,12 +190,21 @@ class ClusterBase(BaseModel):
         return on_demand_price * self.params.get('spot_max_price')
 
     def provision_plan(self, region_id: int) -> ProvisionPlan:
+        if not self.params.get('auto_availability_zone'):
+            return ProvisionPlanBuilder(
+                initial_provision_type=self._instance_provision,
+                duration=self._test_duration,
+                fallback_provision_on_demand=self.params.get('instance_provision_fallback_on_demand'),
+                region_name=self._region(region_id),
+                availability_zone=self._az(region_id),
+                spot_low_price=self._spot_low_price(region_id),
+                provisioner=AWSInstanceProvisioner(),
+            ).provision_plan
         return ProvisionPlanBuilder(
             initial_provision_type=self._instance_provision,
             duration=self._test_duration,
             fallback_provision_on_demand=self.params.get('instance_provision_fallback_on_demand'),
             region_name=self._region(region_id),
-            availability_zone=self._az(region_id),
             spot_low_price=self._spot_low_price(region_id),
             provisioner=AWSInstanceProvisioner(),
         ).provision_plan
