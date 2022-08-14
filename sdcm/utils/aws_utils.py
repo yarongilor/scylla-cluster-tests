@@ -248,10 +248,11 @@ def init_db_info_from_params(db_info: dict, params: dict, regions: List, root_de
     return db_info
 
 
-def get_common_params(params: dict, regions: List, credentials: List, services: List) -> dict:
+def get_common_params(params: dict, regions: List, credentials: List, services: List, availability_zone: str = None) -> dict:
+    availability_zones = [availability_zone] if availability_zone else params.get('availability_zone').split(',')
     ec2_security_group_ids, ec2_subnet_ids = get_ec2_network_configuration(
         regions=regions,
-        availability_zones=params.get('availability_zone').split(','),
+        availability_zones=availability_zones,
         params=params
     )
     return dict(ec2_security_group_ids=ec2_security_group_ids,
@@ -268,8 +269,10 @@ def get_ec2_network_configuration(regions: list[str], availability_zones: list[s
     ec2_subnet_ids = []
     for region in regions:
         aws_region = AwsRegion(region_name=region)
+        availability_zones = [region + availability_zone for availability_zone in availability_zones]
+        LOGGER.debug("Getting subnets and SGs for availability zones of: %s", availability_zones)
         for availability_zone in availability_zones:
-            sct_subnet = aws_region.sct_subnet(region_az=region + availability_zone)
+            sct_subnet = aws_region.sct_subnet(region_az=availability_zone)
             assert sct_subnet, f"No SCT subnet configured for {region}! Run 'hydra prepare-aws-region'"
             ec2_subnet_ids.append(sct_subnet.subnet_id)
 

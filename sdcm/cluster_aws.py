@@ -46,6 +46,7 @@ from sdcm.remote import LocalCmdRunner, shell_script_cmd, NETWORK_EXCEPTIONS
 from sdcm.sct_events.database import DatabaseLogEvent
 from sdcm.sct_events.filters import DbEventsFilter
 from sdcm.sct_events.system import SpotTerminationEvent
+from sdcm.utils.aws_region import AwsRegion
 from sdcm.utils.aws_utils import tags_as_ec2_tags, ec2_instance_wait_public_ip
 from sdcm.utils.common import list_instances_aws, MAX_SPOT_DURATION_TIME
 from sdcm.utils.decorators import retrying
