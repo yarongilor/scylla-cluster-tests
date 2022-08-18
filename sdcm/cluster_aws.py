@@ -46,6 +46,7 @@ from sdcm.remote import LocalCmdRunner, shell_script_cmd, NETWORK_EXCEPTIONS
 from sdcm.sct_events.database import DatabaseLogEvent
 from sdcm.sct_events.filters import DbEventsFilter
 from sdcm.sct_events.system import SpotTerminationEvent
+from sdcm.utils.aws_region import AwsRegion
 from sdcm.utils.aws_utils import tags_as_ec2_tags, ec2_instance_wait_public_ip
 from sdcm.utils.common import list_instances_aws, MAX_SPOT_DURATION_TIME
 from sdcm.utils.decorators import retrying
@@ -135,6 +136,13 @@ class AWSCluster(cluster.BaseCluster):  # pylint: disable=too-many-instance-attr
         instance_profile = self.params.get('aws_instance_profile_name')
         if instance_profile:
             params['IamInstanceProfile'] = {'Name': instance_profile}
+        # if params.get('auto_availability_zone'):
+        #     params['MinCount'] = params['MaxCount'] = 1
+        #     regions = self.params.get('region_name').split()
+        #     region = regions[dc_idx]
+        #     aws_region = AwsRegion(region_name=region)
+        #     availability_zones = aws_region.availability_zones
+
         instances = self._ec2_services[dc_idx].create_instances(**params)
 
         ec2 = ec2_client.EC2ClientWrapper(region_name=self.region_names[dc_idx])
