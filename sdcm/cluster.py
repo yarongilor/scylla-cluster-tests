@@ -2995,12 +2995,11 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         # NOTE: following is needed in case of K8S where we init multiple DB clusters first
         #       and only then we add nodes to it calling code in parallel.
         if add_nodes:
-            add_nodes_func = self.add_db_nodes if 'db' in self.node_type else self.add_nodes
             if isinstance(n_nodes, list):
                 for dc_idx, num in enumerate(n_nodes):
-                    add_nodes_func(num, dc_idx=dc_idx, enable_auto_bootstrap=self.auto_bootstrap)
+                    self.add_nodes(num, dc_idx=dc_idx, enable_auto_bootstrap=self.auto_bootstrap)
             elif isinstance(n_nodes, int):  # legacy type
-                add_nodes_func(n_nodes, enable_auto_bootstrap=self.auto_bootstrap)
+                self.add_nodes(n_nodes, enable_auto_bootstrap=self.auto_bootstrap)
             else:
                 raise ValueError('Unsupported type: {}'.format(type(n_nodes)))
             self.run_node_benchmarks()
@@ -3119,15 +3118,6 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
                                                   syslog_host_port=self.test_config.get_logging_service_host_port())
         return user_data_builder.to_string()
 
-    def add_db_nodes(self, count, ec2_user_data='', dc_idx=0, rack=0, enable_auto_bootstrap=False):
-        new_nodes = self.add_nodes(count=count, ec2_user_data=ec2_user_data, dc_idx=dc_idx, rack=rack,
-                                   enable_auto_bootstrap=enable_auto_bootstrap)
-        collect_kallsyms_in_parallel = ParallelObject(
-            timeout=180, objects=new_nodes, num_workers=len(new_nodes))
-        collect_kallsyms_in_parallel.run(
-            func=save_kallsyms_map,
-            unpack_objects=True, ignore_exceptions=False)
-        return new_nodes
 
     def get_node_private_ips(self):
         return [node.private_ip_address for node in self.nodes]
@@ -3526,6 +3516,27 @@ def wait_for_init_wrap(method):  # pylint: disable=too-many-statements
         cl_inst.log.debug('TestConfig duration -> %s s', int(time_elapsed))
 
         method(*args, **kwargs)
+    return wrapper
+
+
+def save_kallsyms_for_nodes(method):  # pylint: disable=too-many-statements
+    """
+        A wrapper for add_nodes() method of various
+        cloud-providers. It calls save_kallsyms_map
+        on each of the new nodes in the resulted list.
+    """
+    @wraps(method)
+    def wrapper(*args, **kwargs):  # pylint: disable=too-many-statements
+        new_nodes = method(*args, **kwargs)
+        cl_inst = args[0]
+        if cl_inst.params.get('print_kernel_callstack'):
+            collect_kallsyms_in_parallel = ParallelObject(
+                timeout=180, objects=new_nodes, num_workers=len(new_nodes))
+            collect_kallsyms_in_parallel.run(
+                func=save_kallsyms_map,
+                unpack_objects=True, ignore_exceptions=False)
+        return new_nodes
+
     return wrapper
 
 
