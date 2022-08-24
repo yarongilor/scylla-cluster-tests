@@ -37,7 +37,6 @@ from mypy_boto3_ec2 import EC2Client
 from mypy_boto3_ec2.service_resource import EC2ServiceResource
 
 from sdcm import ec2_client, cluster, wait
-from sdcm.cluster import save_kallsyms_for_nodes
 from sdcm.ec2_client import CreateSpotInstancesError
 from sdcm.provision.aws.utils import configure_set_preserve_hostname_script
 from sdcm.provision.common.utils import configure_hosts_set_hostname_script
@@ -779,7 +778,6 @@ class ScyllaAWSCluster(cluster.BaseScyllaCluster, AWSCluster):
         self.version = '2.1'
 
     # pylint: disable=too-many-arguments
-    @save_kallsyms_for_nodes
     def add_nodes(self, count, ec2_user_data='', dc_idx=0, rack=0, enable_auto_bootstrap=False):
         if not ec2_user_data:
             if self._ec2_user_data and isinstance(self._ec2_user_data, str):

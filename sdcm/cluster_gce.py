@@ -23,7 +23,6 @@ import tenacity
 from libcloud.common.google import GoogleBaseError, ResourceNotFoundError, InvalidRequestError
 
 from sdcm import cluster
-from sdcm.cluster import save_kallsyms_for_nodes
 from sdcm.sct_events import Severity
 from sdcm.sct_events.gce_events import GceInstanceEvent
 from sdcm.utils.gce_utils import GceLoggingClient
@@ -446,7 +445,6 @@ class GCECluster(cluster.BaseCluster):  # pylint: disable=too-many-instance-attr
             raise CreateGCENodeError('Failed to create node: %s' % ex) from ex
 
     # pylint: disable=too-many-arguments
-    @save_kallsyms_for_nodes
     def add_nodes(self, count, ec2_user_data='', dc_idx=0, rack=0, enable_auto_bootstrap=False):
         if count <= 0:
             return []

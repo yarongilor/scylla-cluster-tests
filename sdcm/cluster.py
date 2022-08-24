@@ -4159,6 +4159,8 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 self.log.info("Done waiting for preinstalled Scylla")
                 if self.params.get('workaround_kernel_bug_for_iotune'):
                     self.copy_preconfigured_iotune_files(node)
+            if self.params.get('print_kernel_callstack'):
+                save_kallsyms_map(node=node)
             if node.is_nonroot_install:
                 self.scylla_configure_non_root_installation(node=node, devname=nic_devname,
                                                             verbose=verbose, timeout=timeout)
