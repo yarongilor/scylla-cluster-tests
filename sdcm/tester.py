@@ -1088,7 +1088,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                         ec2_ami_username=self.params.get('ami_db_scylla_user'),
                         **cl_zone_params)
                 except botocore.exceptions.ClientError as error:
-                    if 'InsufficientInstanceCapacity' in str(error):
+                    capacity_error_keywards = ['Unsupported', 'InsufficientInstanceCapacity']
+                    if  any([capacity_error in str(error) for capacity_error in capacity_error_keywards]):
                         self.log.warning("Failed creating a Scylla AWS cluster: %s", error)
                         capacity_errors.append(error)
                     else:
