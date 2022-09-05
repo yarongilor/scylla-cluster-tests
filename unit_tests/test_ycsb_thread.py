@@ -28,9 +28,18 @@ pytestmark = [pytest.mark.usefixtures('events', 'create_table', 'create_cql_ks_a
 ALTERNATOR_PORT = 8000
 TEST_PARAMS = dict(dynamodb_primarykey_type='HASH_AND_RANGE',
                    alternator_use_dns_routing=True, alternator_port=ALTERNATOR_PORT)
-ALTERNATOR = alternator.api.Alternator(sct_params={"alternator_access_key_id": None,
-                                                   "alternator_secret_access_key": None,
-                                                   "alternator_port": ALTERNATOR_PORT})
+USE_ALTERNATOR_TTL = False  # Set 'True' for using TTL
+ALTERNATOR_WITH_TTL = alternator.api.Alternator(sct_params={"alternator_access_key_id": None,
+                                                            "alternator_secret_access_key": None,
+                                                            "alternator_port": ALTERNATOR_PORT,
+                                                            "experimental": "true",
+                                                            "append_scylla_yaml": " | "
+                                                                                  "experimental_features: alternator-ttl"
+                                                                                  " alternator_ttl_period_in_seconds: 300"})
+
+ALTERNATOR = ALTERNATOR_WITH_TTL if USE_ALTERNATOR_TTL else alternator.api.Alternator(
+    sct_params={"alternator_access_key_id": None, "alternator_secret_access_key": None,
+                "alternator_port": ALTERNATOR_PORT})
 
 
 @pytest.fixture(scope='session')
@@ -82,6 +91,41 @@ def test_01_dynamodb_api(request, docker_scylla, prom_address):
 
     cmd = 'bin/ycsb run dynamodb -P workloads/workloada -threads 5 -p recordcount=1000000 ' \
           '-p fieldcount=10 -p fieldlength=1024 -p operationcount=200200300 -s'
+    ycsb_thread = YcsbStressThread(loader_set, cmd, node_list=[docker_scylla], timeout=5, params=TEST_PARAMS)
+
+    def cleanup_thread():
+        ycsb_thread.kill()
+
+    request.addfinalizer(cleanup_thread)
+
+    ycsb_thread.run()
+
+    @timeout(timeout=60)
+    def check_metrics():
+        output = requests.get("http://{}/metrics".format(prom_address)).text
+        regex = re.compile(r'^collectd_ycsb_read_gauge.*?([0-9\.]*?)$', re.MULTILINE)
+        assert 'collectd_ycsb_read_gauge' in output
+        assert 'collectd_ycsb_update_gauge' in output
+
+        matches = regex.findall(output)
+        assert all(float(i) > 0 for i in matches), output
+
+    check_metrics()
+
+    output = ycsb_thread.get_results()
+    assert 'latency mean' in output[0]
+    assert float(output[0]['latency mean']) > 0
+
+    assert 'latency 99th percentile' in output[0]
+    assert float(output[0]['latency 99th percentile']) > 0
+
+
+def test_05_dynamodb_ttl(request, docker_scylla, prom_address):
+    loader_set = LocalLoaderSetDummy()
+
+    cmd = 'bin/ycsb run dynamodb -P workloads/workloada -threads 5 -p recordcount=1000000 ' \
+          '-p fieldcount=10 -p fieldlength=1024 -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5' \
+          ' -p operationcount=200200300 -s'
     ycsb_thread = YcsbStressThread(loader_set, cmd, node_list=[docker_scylla], timeout=5, params=TEST_PARAMS)
 
     def cleanup_thread():
