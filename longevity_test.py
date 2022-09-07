@@ -252,7 +252,8 @@ class LongevityTest(ClusterTester):
         if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):
             self.db_cluster.wait_total_space_used_per_node(keyspace=None)
             self.db_cluster.start_nemesis()
-
+        self.log.debug('Sleeping for few hours (10000 seconds) after nemesis started..')
+        time.sleep(10000)
         stress_read_cmd = self.params.get('stress_read_cmd')
         if stress_read_cmd:
             params = {'keyspace_num': keyspace_num, 'stress_cmd': stress_read_cmd}
