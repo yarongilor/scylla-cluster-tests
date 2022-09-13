@@ -1101,12 +1101,14 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
 
             self.log.debug("Create new role and user in Ldap")
-            self.tester.create_role_in_ldap(ldap_role_name=empty_role, ldap_users=[authorized_user])
             self.tester.add_user_in_ldap(username=authorized_user)
+            self.tester.create_role_in_ldap(ldap_role_name=empty_role, ldap_users=[authorized_user])
 
-            res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
-            authorized_ldap_user_permissions = [row for row in res]
-            self.log.debug("authorized_user permissions list after added to Ldap: %s", authorized_ldap_user_permissions)
+            with self.cluster.cql_connection_patient(node=node, user=authorized_user,
+                                                     password=LDAP_PASSWORD) as session:
+                res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
+                authorized_ldap_user_permissions = [row for row in res]
+                self.log.debug("authorized_user permissions list after added to Ldap: %s", authorized_ldap_user_permissions)
 
             # with pytest.raises(Unauthorized, match=rf"User {authorized_user} has no SELECT permission on "):  # TODO: catch expected failure
             with self.cluster.cql_connection_patient(node=node, user=authorized_user,
@@ -1143,6 +1145,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             # self.tester.delete_role_in_ldap(ldap_role_name=empty_role)
         except Exception as error:
             self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
+            raise
 
     def disrupt_disable_enable_ldap_authorization(self):
         if not self.cluster.params.get('use_ldap_authorization'):
