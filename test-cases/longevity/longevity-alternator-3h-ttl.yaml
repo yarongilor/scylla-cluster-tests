@@ -43,5 +43,6 @@ alternator_use_dns_routing: true
 # Set 'alternator_ttl_period_in_seconds' to 5 minutes for the TTL scan interval.
 experimental: true
 append_scylla_yaml: |
-  experimental_features: alternator-ttl
+  experimental_features:
+    - alternator-ttl
   alternator_ttl_period_in_seconds: 300

@@ -815,6 +815,11 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             self.alternator.create_table(node=node, schema=schema)
             self.alternator.create_table(node=node, schema=schema, isolation=alternator.enums.WriteIsolation.FORBID_RMW,
                                          table_name=NO_LWT_TABLE_NAME)
+            stress_cmd = self.params.get('stress_cmd')
+            if 'dynamodb.ttlKey' in str(stress_cmd):
+                self.alternator.update_table_ttl(node=node, table_name=alternator.consts.TABLE_NAME)
+                self.alternator.update_table_ttl(node=node, table_name=alternator.consts.NO_LWT_TABLE_NAME)
+
 
     def get_nemesis_class(self):
         """
@@ -1792,10 +1797,6 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if self.create_stats:
             self.update_stress_cmd_details(stress_cmd, prefix, stresser="ycsb", aggregate=stats_aggregate_cmds)
 
-        if 'dynamodb.ttlKey' in stress_cmd:
-            node = self.db_cluster.nodes[0]
-            self.alternator.update_table_ttl(node=node, table_name=alternator.consts.TABLE_NAME)
-            self.alternator.update_table_ttl(node=node, table_name=alternator.consts.NO_LWT_TABLE_NAME)
         return YcsbStressThread(loader_set=self.loaders,
                                 stress_cmd=stress_cmd,
                                 timeout=timeout,
