@@ -1090,10 +1090,23 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 self.cluster.wait_for_schema_agreement()
                 res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}") # TODO: DBG REMOVE
                 authorized_ldap_user_permissions = [row for row in res]
-                self.log.debug("authorized_user permissions list: %s", authorized_ldap_user_permissions)
+                self.log.debug("authorized_user permissions list before added to Ldap: %s", authorized_ldap_user_permissions)
 
-            self.log.debug("Create new users in Ldap")
+            with self.cluster.cql_connection_patient(node=node, user=authorized_user,
+                                                     password=LDAP_PASSWORD) as session:
+                session.execute("SELECT * from customer.info LIMIT 1")
+
+                session.execute(
+                    """ CREATE TABLE IF NOT EXISTS customer.new_info2 (ssid UUID, name text, DOB text, telephone text,
+                    email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
+
+            self.log.debug("Create new role and user in Ldap")
             self.tester.create_role_in_ldap(ldap_role_name=empty_role, ldap_users=[authorized_user])
+            self.tester.add_user_in_ldap(username=authorized_user)
+
+            res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
+            authorized_ldap_user_permissions = [row for row in res]
+            self.log.debug("authorized_user permissions list after added to Ldap: %s", authorized_ldap_user_permissions)
 
             # with pytest.raises(Unauthorized, match=rf"User {authorized_user} has no SELECT permission on "):  # TODO: catch expected failure
             with self.cluster.cql_connection_patient(node=node, user=authorized_user,
@@ -1125,8 +1138,9 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 session.execute(f" DROP ROLE IF EXISTS {customer_role} ")
                 session.execute(f" DROP ROLE IF EXISTS {empty_role} ")
 
-            self.tester.delete_role_in_ldap(ldap_role_name=customer_role)
-            self.tester.delete_role_in_ldap(ldap_role_name=empty_role)
+            self.tester.delete_role_in_ldap(ldap_role_name=authorized_user)
+            # self.tester.delete_role_in_ldap(ldap_role_name=customer_role)
+            # self.tester.delete_role_in_ldap(ldap_role_name=empty_role)
         except Exception as error:
             self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
 

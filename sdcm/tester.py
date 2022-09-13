@@ -496,12 +496,27 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         for user in LDAP_USERS:
             node.run_cqlsh(f'CREATE ROLE \'{user}\' WITH login=true')
         node.run_cqlsh(f'ALTER ROLE \'{LDAP_USERS[0]}\' with SUPERUSER=true and password=\'{LDAP_PASSWORD}\'')
-        # node.run_cqlsh(f'ALTER ROLE \'{LDAP_USERS[1]}\' with password=\'{LDAP_PASSWORD}\'')
+        node.run_cqlsh(f'ALTER ROLE \'{LDAP_USERS[1]}\' with password=\'{LDAP_PASSWORD}\'')
         self.params['are_ldap_users_on_scylla'] = True
 
-    def create_role_in_ldap(self, ldap_role_name: str, ldap_users: list):
-        ldap_username = f'cn=admin,{LDAP_BASE_OBJECT}'
+    @property
+    def ldap_ip(self) -> str:
         ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[0]
+
+    @property
+    def ldap_port(self) -> str:
+        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[1]
+
+    def _add_ldap_entry(self, ldap_entry: list):
+        username = f'cn=admin,{LDAP_BASE_OBJECT}'
+        self.localhost.add_ldap_entry(ip=self.ldap_ip, ldap_port=self.ldap_port,
+                                      user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
+
+    def create_role_in_ldap(self, ldap_role_name: str, ldap_users: list):
+        # ldap_username = f'cn=admin,{LDAP_BASE_OBJECT}'
+        # ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
         unique_members_list = [f'uid={user},ou=Person,{LDAP_BASE_OBJECT}' for user in ldap_users]
         role_entry = [
             f'cn={ldap_role_name},{LDAP_BASE_OBJECT}',
@@ -511,8 +526,9 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                 'userPassword': LDAP_PASSWORD
             }
         ]
-        self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
-                                      user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
+        self._add_ldap_entry(ldap_entry=role_entry)
+        # self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
+        #                               user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
     def delete_role_in_ldap(self, ldap_role_name: str, raise_error: bool = True):
         distinguished_name = str(self.localhost.search_ldap_entry(LDAP_BASE_OBJECT,
@@ -522,6 +538,18 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                                                                                f'{LDAP_BASE_OBJECT}'])]})
         if not res and raise_error:
             raise Exception(f'Failed to delete user {ldap_role_name} from Ldap.')
+
+    def add_user_in_ldap(self, username: str):
+        user_entry = [
+            f'uid={username},ou=Person,{LDAP_BASE_OBJECT}',
+            ['uidObject', 'organizationalPerson', 'top'],
+            {
+                'userPassword': LDAP_PASSWORD,
+                'sn': 'PersonSn',
+                'cn': 'PersonCn'
+            }
+        ]
+        self._add_ldap_entry(ldap_entry=user_entry)
 
     def configure_ldap(self, node, use_ssl=False):
         self.test_config.configure_ldap(node=node, use_ssl=use_ssl)
