@@ -19,10 +19,10 @@ stress_cmd: [
 
 round_robin: true
 
-n_loaders: 2
-instance_type_db: 'i3.2xlarge'
-n_monitor_nodes: 1
-n_db_nodes: 4
+n_loaders: 1
+instance_type_db: 'i3.xlarge'
+n_monitor_nodes: 0
+n_db_nodes: 3
 
 nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '005'
@@ -30,7 +30,7 @@ nemesis_interval: 5
 nemesis_during_prepare: false
 
 user_prefix: 'alternator-3h-ttl'
-space_node_threshold: 64424
+space_node_threshold: 6442
 
 alternator_port: 8080
 dynamodb_primarykey_type: HASH_AND_RANGE
