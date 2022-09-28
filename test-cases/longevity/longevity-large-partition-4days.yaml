@@ -12,10 +12,7 @@ prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication
                      "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=7 -clustering-row-count=10000000 -partition-offset=47 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150",
                      "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=6 -clustering-row-count=10000000 -partition-offset=54 -clustering-row-size=2048 -concurrency=250 -rows-per-request=2000 -timeout=180s -connection-count 150"
 ]
-stress_cmd: ["scylla-bench -workload=uniform -mode=read -select-order-by=asc -replication-factor=3 -partition-count=60 -clustering-row-count=10000000 -clustering-row-size=2048 -rows-per-request=10 -timeout=180s -retry-number=10 -concurrency=400 -max-rate=64000  -duration=5760m -connection-count 400",
-             "scylla-bench -workload=uniform -mode=read -select-order-by=desc -replication-factor=3 -partition-count=60 -clustering-row-count=10000000  -clustering-row-size=2048 -rows-per-request=10 -timeout=240s -retry-number=10 -concurrency=400 -max-rate=64000  -duration=5760m -connection-count 400",
-             "scylla-bench -workload=uniform -mode=read -select-order-by=desc,asc,none -replication-factor=3 -partition-count=60 -clustering-row-count=10000000 -clustering-row-size=2048 -rows-per-request=2000 -timeout=240s -retry-number=10 -concurrency=400 -max-rate=64000  -duration=5760m -connection-count 400"
-]
+stress_cmd: ["scylla-bench -workload=uniform -mode=read -select-order-by=asc -replication-factor=3 -partition-count=60 -clustering-row-count=10000000 -clustering-row-size=2048 -rows-per-request=10 -timeout=180s -retry-number=10 -concurrency=400 -max-rate=64000  -duration=5760m -connection-count 400"]
 
 n_db_nodes: 4
 n_loaders: 3
@@ -30,7 +27,7 @@ round_robin: true
 nemesis_interval: 30
 nemesis_during_prepare: false
 
-user_prefix: 'longevity-large-partitions-4d'
+user_prefix: 'large-partitions-asc-only'
 
 space_node_threshold: 644245094
 
