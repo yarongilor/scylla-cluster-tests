@@ -1,0 +1,47 @@
+test_duration: 3000
+# Run ycsb load using the max integer value of 2147483647 (2^31-1) for number of records per client.
+prepare_write_cmd:
+  - >-
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 20 -p recordcount=4304304301
+    -p fieldcount=2 -p fieldlength=16
+    -p insertstart=0 -p insertcount=2147483600  -p table=usertable -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=43200
+
+  - >-
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 20 -p recordcount=4304304301
+    -p fieldcount=2 -p fieldlength=16
+    -p insertstart=2147483600 -p insertcount=2147483600 -p table=usertable -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=43200
+
+
+round_robin: true
+
+dynamodb_primarykey_type: HASH_AND_RANGE
+
+n_loaders: 2
+instance_type_db: 'i3.4xlarge'
+n_monitor_nodes: 1
+n_db_nodes: 4
+
+nemesis_class_name: 'NoOpMonkey'
+nemesis_seed: '007'
+nemesis_interval: 30
+nemesis_during_prepare: false
+
+user_prefix: 'alternator-24h-ttl-lwt'
+
+alternator_port: 8080
+alternator_use_dns_routing: true
+
+alternator_enforce_authorization: true
+alternator_access_key_id: 'alternator'
+alternator_secret_access_key: 'password'
+
+# Set Alternator TTL parameters
+# ---------------------------------------------
+# TTL mode is experimental in version 5.1.
+# Enable TTL feature in Scylla.
+# Set 'alternator_ttl_period_in_seconds' to 1 hour for the TTL scan interval.
+experimental: true
+append_scylla_yaml: |
+  experimental_features:
+    - alternator-ttl
+  alternator_ttl_period_in_seconds: 3600
