@@ -1,0 +1,3 @@
+stress_cmd: ["scylla-bench -workload=uniform -mode=read -select-order-by=desc -replication-factor=3 -partition-count=800 -clustering-row-count=50000 -clustering-row-size=uniform:100..5120 -rows-per-request=2000 -timeout=240s -retry-number=10 -concurrency=400 -duration=44h -connection-count 400"
+]
+user_prefix: 'longevity-large-partitions-order-by-desc'
