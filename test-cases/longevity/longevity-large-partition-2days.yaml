@@ -20,7 +20,8 @@ n_monitor_nodes: 1
 
 instance_type_db: 'i4i.4xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+#nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'NoOpMonkey'
 nemesis_seed: '001'
 instance_type_loader: 'c5n.2xlarge'
 round_robin: true
@@ -38,4 +39,4 @@ table_name: "scylla_bench.test"
 primary_key_column: "pk"
 
 
-run_full_partition_scan: '{"ks_cf": "scylla_bench.test", "interval": 3600, "pk_name":"pk", "rows_count": 50000, "validate_data": "true"}' # 'ks.cf, interval(sec), partition-key name, number-of-rows-per-partition, validate reversed query output, include data-column or only validate pk + ck'
+#run_full_partition_scan: '{"ks_cf": "scylla_bench.test", "interval": 3600, "pk_name":"pk", "rows_count": 50000, "validate_data": "true"}' # 'ks.cf, interval(sec), partition-key name, number-of-rows-per-partition, validate reversed query output, include data-column or only validate pk + ck'
