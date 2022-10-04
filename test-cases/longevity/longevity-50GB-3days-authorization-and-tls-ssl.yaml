@@ -1,25 +1,22 @@
 test_duration: 5000
-prepare_write_cmd: ["cassandra-stress write cl=QUORUM n=100000000 -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=100 -pop seq=1..100000000"]
+prepare_write_cmd: ["cassandra-stress write cl=QUORUM n=100000000 -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -port jmx=6868 -mode cql3 native -rate threads=100 -pop seq=1..100000000"]
 
-stress_cmd: ["cassandra-stress mixed cl=QUORUM duration=4320m -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native  -rate threads=100 -pop seq=1..100000000 -log interval=5",
-             "cassandra-stress user profile=/tmp/cs_mv_profile.yaml ops'(insert=3,read1=1,read2=1,read3=1)' cl=QUORUM duration=4320m -mode cql3 native -rate threads=20"]
+stress_cmd: ["cassandra-stress write cl=QUORUM duration=4320m -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -port jmx=6868 -mode cql3 native  -rate threads=1 -pop seq=1..100000000 -log interval=5"]
 
-stress_read_cmd: ["cassandra-stress read cl=QUORUM duration=4320m -mode cql3 native  -rate threads=50 -pop seq=1..100000000 -log interval=5"]
-
-run_fullscan: '{"ks_cf": "keyspace1.standard1", "interval": 60}' # 'ks.cf|random, interval(min)'
+run_fullscan: '{"ks_cf": "keyspace1.standard1", "interval": 10}' # 'ks.cf|random, interval(min)'
 n_db_nodes: 6
-n_loaders: 3
+n_loaders: 1
 n_monitor_nodes: 1
 
-instance_type_db: 'i4i.4xlarge'
+instance_type_db: 'i3.4xlarge'
 # Seems the c5.xlarge type is small for this load - I receive OOM on 2 loaders
 instance_type_loader: 'c5.2xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
-nemesis_seed: '027'
+nemesis_class_name: 'NoOpMonkey'
+#nemesis_seed: '027'
 nemesis_interval: 5
 
-user_prefix: 'longevity-tls-50gb-3d'
+user_prefix: 'repro_timeout_9621-tls-50gb-3d'
 
 space_node_threshold: 644245094
 
@@ -31,4 +28,4 @@ authenticator_user: cassandra
 authenticator_password: cassandra
 authorizer: 'CassandraAuthorizer'
 
-use_mgmt: true
+use_mgmt: false
