@@ -148,6 +148,112 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                 self.assertEqual(partitions_dict_before, partitions_dict_after,
                                  msg='Row amount in partitions is not same before and after running of nemesis')
 
+    def test_custom_time_repeat_stress_cmd(self):
+        """
+        Run cassandra-stress with params defined in data_dir/scylla.yaml
+        """
+        # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+
+        self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(),
+                                    tester_obj=self)
+        stress_queue = []
+
+        # prepare write workload
+        prepare_write_cmd = self.params.get('prepare_write_cmd')
+        keyspace_num = self.params.get('keyspace_num')
+
+        self.pre_create_alternator_tables()
+
+        self.run_pre_create_keyspace()
+        self.run_pre_create_schema()
+
+        if fullscan_params := self._get_scan_operation_params(scan_operation='run_fullscan'):
+            self.run_fullscan_thread(ks_cf=fullscan_params['ks_cf'], interval=fullscan_params['interval'])
+
+        if full_partition_scan_params := self._get_scan_operation_params(scan_operation='run_full_partition_scan'):
+            self.run_full_partition_scan_thread(**full_partition_scan_params)
+
+        self.run_prepare_write_cmd()
+
+        # Collect data about partitions and their rows amount
+        validate_partitions = self.params.get('validate_partitions')
+        table_name, primary_key_column, partitions_dict_before = '', '', {}
+        if validate_partitions:
+            table_name = self.params.get('table_name')
+            primary_key_column = self.params.get('primary_key_column')
+            self.log.debug('Save partitions info before reads')
+            partitions_dict_before = self.collect_partitions_info(table_name=table_name,
+                                                                  primary_key_column=primary_key_column,
+                                                                  save_into_file_name='partitions_rows_before.log')
+            if partitions_dict_before is None:
+                validate_partitions = False
+
+        stress_cmd = self.params.get('stress_cmd')
+        if stress_cmd:
+            # Stress: Same as in prepare_write - allow the load to be spread across all loaders when using multi ks
+            if keyspace_num > 1 and self.params.get('round_robin'):
+                self.log.debug("Using round_robin for multiple Keyspaces...")
+                for i in range(1, keyspace_num + 1):
+                    keyspace_name = self._get_keyspace_name(i)
+                    params = {'keyspace_name': keyspace_name, 'round_robin': True, 'stress_cmd': stress_cmd}
+
+                    self._run_all_stress_cmds(stress_queue, params)
+
+            # The old method when we run all stress_cmds for all keyspace on the same loader, or in round-robin if defined in test yaml
+            else:
+                params = {'keyspace_num': keyspace_num, 'stress_cmd': stress_cmd,
+                          'round_robin': self.params.get('round_robin')}
+                self._run_all_stress_cmds(stress_queue, params)
+
+        customer_profiles = self.params.get('cs_user_profiles')
+        if customer_profiles:
+            cs_duration = self.params.get('cs_duration')
+            for cs_profile in customer_profiles:
+                assert os.path.exists(cs_profile), 'File not found: {}'.format(cs_profile)
+                self.log.debug('Run stress test with user profile {}, duration {}'.format(cs_profile, cs_duration))
+                profile_dst = os.path.join('/tmp', os.path.basename(cs_profile))
+                with open(cs_profile, encoding="utf-8") as pconf:
+                    cont = pconf.readlines()
+                    user_profile_table_count = self.params.get(  # pylint: disable=invalid-name
+                        'user_profile_table_count')
+                    for i in range(user_profile_table_count):
+                        for cmd in [line.lstrip('#').strip() for line in cont if line.find('cassandra-stress') > 0]:
+                            stress_cmd = (cmd.format(profile_dst, cs_duration))
+                            params = {'stress_cmd': stress_cmd, 'profile': cs_profile}
+                            self.log.debug('Stress cmd: {}'.format(stress_cmd))
+                            self._run_all_stress_cmds(stress_queue, params)
+
+        # Check if we shall wait for total_used_space or if nemesis wasn't started
+        if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):
+            self.db_cluster.wait_total_space_used_per_node(keyspace=None)
+            self.db_cluster.start_nemesis()
+
+        stress_read_cmd = self.params.get('stress_read_cmd')
+        if stress_read_cmd:
+            params = {'keyspace_num': keyspace_num, 'stress_cmd': stress_read_cmd}
+            self._run_all_stress_cmds(stress_queue, params)
+
+        for stress in stress_queue:
+            self.verify_stress_thread(cs_thread_pool=stress)
+
+        if (stress_read_cmd or stress_cmd) and validate_partitions:
+            self.log.debug('Save partitions info after reads')
+            partitions_dict_after = self.collect_partitions_info(table_name=table_name,
+                                                                 primary_key_column=primary_key_column,
+                                                                 save_into_file_name='partitions_rows_after.log')
+            if partitions_dict_after is not None:
+                self.assertEqual(partitions_dict_before, partitions_dict_after,
+                                 msg='Row amount in partitions is not same before and after running of nemesis')
+
+        # Rerun the stress_cmd a second time
+        if stress_cmd:
+            stress_queue = []
+
+            self._run_all_stress_cmds(stress_queue, params)
+
+            for stress in stress_queue:
+                self.verify_stress_thread(cs_thread_pool=stress)
+
     def test_batch_custom_time(self):
         """
         The test runs like test_custom_time but designed for running multiple stress commands in batches.

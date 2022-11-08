@@ -3,25 +3,19 @@ test_duration: 3000
 # ( The prepare_write_cmd is for the later read-stress and in order to trigger post_prepare_cql_cmds )
 prepare_write_cmd:
   - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 5 -p recordcount=130301
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=0 -p insertcount=10049672  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
-
-  - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
-    -p fieldcount=2 -p fieldlength=8
-    -p insertstart=10049672 -p insertcount=10049672 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+    -p insertstart=0 -p insertcount=130300  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
 stress_cmd:
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=0 -p insertcount=10049672  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
-
+    -p insertstart=0 -p insertcount=11006000  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=10049672 -p insertcount=10049672 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+    -p insertstart=11006000 -p insertcount=11006000 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
 
 round_robin: true
@@ -51,12 +45,12 @@ alternator_secret_access_key: 'password'
 # ---------------------------------------------
 # TTL mode is experimental in version 5.1.
 # Enable TTL feature in Scylla.
-# Set 'alternator_ttl_period_in_seconds' to 1 hour for the TTL scan interval.
+# Set 'alternator_ttl_period_in_seconds' to 4 minutes for the TTL scan interval.
 experimental: true
 append_scylla_yaml: |
   experimental_features:
     - alternator-ttl
   alternator_ttl_period_in_seconds: 240
 
-# Set 'gc_grace_seconds' for 2 hours
+# Set 'gc_grace_seconds' for 8 minutes
 post_prepare_cql_cmds: "ALTER TABLE alternator_usertable_no_lwt.usertable_no_lwt with gc_grace_seconds = 480;"
