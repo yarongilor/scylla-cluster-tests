@@ -3,19 +3,25 @@ test_duration: 3000
 # ( The prepare_write_cmd is for the later read-stress and in order to trigger post_prepare_cql_cmds )
 prepare_write_cmd:
   - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 5 -p recordcount=630301
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=0 -p insertcount=630300  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+    -p insertstart=0 -p insertcount=10049672  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+
+  - >-
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
+    -p fieldcount=2 -p fieldlength=8
+    -p insertstart=10049672 -p insertcount=10049672 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
 stress_cmd:
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=0 -p insertcount=12006000  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+    -p insertstart=0 -p insertcount=10049672  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=12006000 -p insertcount=12006000 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
+    -p insertstart=10049672 -p insertcount=10049672 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
 
 round_robin: true
@@ -32,7 +38,7 @@ nemesis_seed: '033'
 nemesis_interval: 5
 nemesis_during_prepare: true
 
-user_prefix: '4m-scan-36m-ttl-8m-grace-sisyphus'
+user_prefix: '4m-scan-36m-ttl-8m-grace-sisyphus-rewrite-expired'
 
 alternator_port: 8080
 alternator_use_dns_routing: true
