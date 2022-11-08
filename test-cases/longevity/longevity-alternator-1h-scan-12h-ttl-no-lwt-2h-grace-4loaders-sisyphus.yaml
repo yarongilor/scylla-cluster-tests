@@ -3,51 +3,37 @@ test_duration: 3000
 # ( The prepare_write_cmd is for the later read-stress and in order to trigger post_prepare_cql_cmds )
 prepare_write_cmd:
   - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 10 -p recordcount=1200301
-    -p fieldcount=4 -p fieldlength=32
-    -p insertstart=0 -p insertcount=1200300  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5400
+    bin/ycsb load dynamodb -P workloads/workloadc -threads 5 -p recordcount=600301
+    -p fieldcount=2 -p fieldlength=8
+    -p insertstart=0 -p insertcount=600300  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
 stress_cmd:
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 13 -p recordcount=8589934401
-    -p fieldcount=4 -p fieldlength=32
-    -p insertstart=0 -p insertcount=21474836  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5400
+    -p fieldcount=2 -p fieldlength=8
+    -p insertstart=0 -p insertcount=42949672  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 13 -p recordcount=8589934401
-    -p fieldcount=4 -p fieldlength=32
-    -p insertstart=21474836 -p insertcount=21474836 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5400
+    -p fieldcount=2 -p fieldlength=8
+    -p insertstart=42949672 -p insertcount=42949672 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=2160
 
-  - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 13 -p recordcount=8589934401
-    -p fieldcount=4 -p fieldlength=32
-    -p insertstart=4294967200 -p insertcount=21474836  -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5400
-
-  - >-
-    bin/ycsb load dynamodb -P workloads/workloadc -threads 13 -p recordcount=8589934401
-    -p fieldcount=4 -p fieldlength=32
-    -p insertstart=6442450800 -p insertcount=21474836 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=5400
-
-  - >-
-    bin/ycsb run dynamodb -P workloads/workloada -threads 10 -p recordcount=21474836
-    -p readproportion=1 -p updateproportion=0 -p scanproportion=0 -p insertproportion=0 -p requestdistribution=uniform
-    -p fieldcount=4 -p fieldlength=32 -p operationcount=21474836 -p table=usertable_no_lwt
 
 round_robin: true
 
 dynamodb_primarykey_type: HASH_AND_RANGE
 
-n_loaders: 4
-instance_type_db: 'i3.4xlarge'
+n_loaders: 2
+instance_type_db: 'i3.large'
 n_monitor_nodes: 1
 n_db_nodes: 4
 
-nemesis_class_name: 'NoOpMonkey'
+nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '033'
-nemesis_interval: 10
+nemesis_interval: 5
 nemesis_during_prepare: true
 
-user_prefix: '3h-ttl-128k-data'
+user_prefix: '36m-ttl-5GB-dataset'
 
 alternator_port: 8080
 alternator_use_dns_routing: true
@@ -65,7 +51,7 @@ experimental: true
 append_scylla_yaml: |
   experimental_features:
     - alternator-ttl
-  alternator_ttl_period_in_seconds: 3600
+  alternator_ttl_period_in_seconds: 240
 
 # Set 'gc_grace_seconds' for 2 hours
-post_prepare_cql_cmds: "ALTER TABLE alternator_usertable_no_lwt.usertable_no_lwt with gc_grace_seconds = 5400;"
+post_prepare_cql_cmds: "ALTER TABLE alternator_usertable_no_lwt.usertable_no_lwt with gc_grace_seconds = 480;"
