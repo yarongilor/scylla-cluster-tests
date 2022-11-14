@@ -96,7 +96,7 @@ class ServiceLevel:
 
     @property
     def created(self) -> bool:
-        return self._created
+        return self.created
 
     @created.setter
     def created(self, created: bool):
