@@ -2546,7 +2546,7 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
                            publish_event=publish_event) as nodetool_event:
             try:
                 result = \
-                    self.remoter.run(cmd, timeout=timeout, ignore_status=ignore_status, verbose=verbose, retry=retry)
+                    self.remoter.run(cmd, timeout=300, ignore_status=ignore_status, verbose=verbose, retry=retry)
                 self.log.debug("Command '%s' duration -> %s s" % (result.command, result.duration))
 
                 nodetool_event.duration = result.duration
