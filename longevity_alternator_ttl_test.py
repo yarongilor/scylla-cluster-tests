@@ -1,6 +1,4 @@
 from longevity_test import LongevityTest
-from test_lib.compaction import CompactionStrategy
-from test_lib.scylla_bench_tools import create_scylla_bench_table_query
 
 
 class AlternatorTtlLongevityTest(LongevityTest):
@@ -26,14 +24,49 @@ class AlternatorTtlLongevityTest(LongevityTest):
             for stress in stress_queue:
                 self.verify_stress_thread(cs_thread_pool=stress)
 
-    def test_custom_time_validate_expired_data(self):
+    def test_disable_enable_ttl_scan(self):
         """
-        #  TODO: implement the below:
-        1. This test run the original test_custom_time first.
-        2. After finished it waits for gc-grace-seconds.
-        3. Wait for TTL-scan interval.
-        4. Select a node and run major compaction (wait for completion).
-        5. Verify a 'select' query returns no data for the Alternator TTL table.
-        6. Print statistics of cfstat like number of sstables and nodetool status.
+        1. Run pre-create schema for Alternator, disabling TTL for tables.
+        2. Run the original test_custom_time prepare step.
+        3. Enable TTL for tables.
+        4. Wait for TTL-scan intervals to run
+        5. Run a background read stress while data is being expired.
         """
-        pass
+        # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+
+        self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(),
+                                    tester_obj=self)
+        stress_queue = []
+        # prepare write workload
+        prepare_write_cmd = self.params.get('prepare_write_cmd')
+        keyspace_num = 1
+        self.pre_create_alternator_tables()
+        # Disable TTL
+        self.alternator.modify_alternator_ttl_spec(enabled=False, node=self.db_cluster.nodes[0])
+
+        # Run write stress
+        self.run_prepare_write_cmd()
+        stress_cmd = self.params.get('stress_cmd')
+        if stress_cmd:
+            params = {'keyspace_num': keyspace_num, 'stress_cmd': stress_cmd,
+                      'round_robin': self.params.get('round_robin')}
+            self._run_all_stress_cmds(stress_queue, params)
+
+        if not prepare_write_cmd or not self.params.get('nemesis_during_prepare'):
+            self.db_cluster.start_nemesis()
+
+        for stress in stress_queue:
+            self.verify_stress_thread(cs_thread_pool=stress)
+
+        # Enable TTL
+        self.alternator.modify_alternator_ttl_spec(enabled=True, node=self.db_cluster.nodes[0])
+        stress_queue = []
+
+        # Run read stress as a background thread while TTL scans are going over existing data.
+        stress_read_cmd = self.params.get('stress_read_cmd')
+        if stress_read_cmd:
+            params = {'keyspace_num': keyspace_num, 'stress_cmd': stress_read_cmd}
+            self._run_all_stress_cmds(stress_queue, params)
+
+        for stress in stress_queue:
+            self.verify_stress_thread(cs_thread_pool=stress)
