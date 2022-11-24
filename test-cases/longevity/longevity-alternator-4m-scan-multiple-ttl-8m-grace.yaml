@@ -70,7 +70,7 @@ stress_cmd:
   - >-
     bin/ycsb load dynamodb -P workloads/workloadc -threads 5 -p recordcount=8589934401
     -p fieldcount=2 -p fieldlength=8
-    -p insertstart=168084000 -p insertcount=12006000 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=864000
+    -p insertstart=168084000 -p insertcount=5555 -p table=usertable_no_lwt -p dynamodb.ttlKey=ttl -p dynamodb.ttlDuration=864000
 
 round_robin: true
 
