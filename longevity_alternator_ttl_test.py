@@ -1,4 +1,7 @@
+import time
+
 from longevity_test import LongevityTest
+from sdcm.utils.alternator.consts import NO_LWT_TABLE_NAME
 
 
 class AlternatorTtlLongevityTest(LongevityTest):
@@ -70,3 +73,34 @@ class AlternatorTtlLongevityTest(LongevityTest):
 
         for stress in stress_queue:
             self.verify_stress_thread(cs_thread_pool=stress)
+
+    def test_multiple_ttl(self):
+        """
+        This test run the original test_custom_time first.
+        It assumes multiple TTL values to run in stress commands.
+        It then waits a TTL+scan-interval duration for the second longest TTL stress:
+        2.5 hours (second longer stress TTL) + 4 minutes (scan-interval) + 10 minutes (max estimated scan duration)
+        This sums up to: 2 hours and 45 minutes (=165 minutes).
+        Then after finished it run a table full scan.
+        It validates only the data of longest TTL stress (10 days) exist.
+        """
+
+        # Run the stress_cmd and wait for finish
+        self.test_custom_time()
+
+        self.log.info('Wait second-longer-stress TTL + scan-interval + max-estimated-scan-duration')
+        wait_for_expired_items = 3 * 60
+        time.sleep(wait_for_expired_items)
+
+        stress_cmd = self.params.get('stress_cmd')
+        longest_ttl_stress_cmd = stress_cmd[-1]
+        insert_count = [param for param in longest_ttl_stress_cmd.split() if 'insertcount=' in param]
+        insert_count = int(insert_count[0].split('=')[1])
+        self.log.info('The longest-TTL-load number of items is: %s', insert_count)
+
+        self.log.info('Run a table scan to count number of existing items')
+        keyspace = f"alternator_{NO_LWT_TABLE_NAME}"
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
+            result = session.execute(f"SELECT count(*) FROM {keyspace}.{NO_LWT_TABLE_NAME}")
+            assert result.current_rows[
+                0].count == insert_count, f"Result: {result.current_rows[0].count}, Expected: {insert_count}"
