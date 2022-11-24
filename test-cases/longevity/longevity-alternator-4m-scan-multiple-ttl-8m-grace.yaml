@@ -21,7 +21,7 @@ round_robin: true
 dynamodb_primarykey_type: HASH_AND_RANGE
 
 n_loaders: 1
-instance_type_db: 'i3.4xlarge'
+instance_type_db: 'i3.xlarge'
 n_monitor_nodes: 0
 n_db_nodes: 3
 
@@ -29,7 +29,7 @@ nemesis_class_name: 'NoOpMonkey'
 nemesis_seed: '033'
 nemesis_interval: 5
 
-user_prefix: 'longevity-alternator-multiple-ttl'
+user_prefix: 'alternator-multiple-ttl'
 
 alternator_port: 8080
 alternator_use_dns_routing: true
@@ -52,3 +52,4 @@ append_scylla_yaml: |
   alternator_ttl_period_in_seconds: 10
 
 post_prepare_cql_cmds: "ALTER TABLE alternator_usertable_no_lwt.usertable_no_lwt with gc_grace_seconds = 480;"
+use_mgmt: false
