@@ -78,11 +78,11 @@ class AlternatorTtlLongevityTest(LongevityTest):
         """
         This test run the original test_custom_time first.
         It assumes multiple TTL values to run in stress commands.
-        It then waits a TTL+scan-interval duration for the second longest TTL stress:
+        It then waits a TTL-scan-interval duration for the second longest TTL stress:
         2.5 hours (second longer stress TTL) + 4 minutes (scan-interval) + 10 minutes (max estimated scan duration)
         This sums up to: 2 hours and 45 minutes (=165 minutes).
-        Then after finished it run a table full scan.
-        It validates only the data of longest TTL stress (10 days) exist.
+        Then after finishing it run a table full scan.
+        It validates that only the data of longest TTL stress (10 days) exist.
         """
 
         # Run the stress_cmd and wait for finish
@@ -105,7 +105,26 @@ class AlternatorTtlLongevityTest(LongevityTest):
 
         self.log.info('Run a table scan to count number of existing items and compare to expected')
         keyspace = f"alternator_{NO_LWT_TABLE_NAME}"
-        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], connect_timeout=600) as session:
-            result = session.execute(f"SELECT count(*) FROM {keyspace}.{NO_LWT_TABLE_NAME}")
-            assert result.current_rows[
-                0].count == insert_count, f"Result: {result.current_rows[0].count}, Expected: {insert_count}"
+        try:
+            with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], connect_timeout=600) as session:
+                result = session.execute(f"SELECT count(*) FROM {keyspace}.{NO_LWT_TABLE_NAME} using timeout 10m")
+        except Exception as error:  # pylint: disable=broad-except
+            self.log.error('Got query exception: %s', error)
+
+            # Try with cqlsh:
+            try:
+                cql_result = self.db_cluster.nodes[0].run_cqlsh(f"SELECT count(*) FROM {keyspace}.{NO_LWT_TABLE_NAME} using timeout 10m",
+                                                   timeout=600, connect_timeout=600)
+                for line in cql_result:
+                    self.log.info(f'next line is: {line}')
+                    if '|' not in line:
+                        # NOTE: skip non-rows and header lines
+                        continue
+                    line_splitted = line.split('|')
+                    self.log.info(f'next line_splitted is: {line_splitted}')
+            except Exception as error:  # pylint: disable=broad-except
+                self.log.error('Got query exception for cqlsh: %s', error)
+            return
+
+        assert result.current_rows[
+            0].count == insert_count, f"Result: {result.current_rows[0].count}, Expected: {insert_count}"
