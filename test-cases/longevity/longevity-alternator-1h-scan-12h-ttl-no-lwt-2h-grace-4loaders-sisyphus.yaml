@@ -28,12 +28,12 @@ instance_type_db: 'i3.large'
 n_monitor_nodes: 1
 n_db_nodes: 4
 
-nemesis_class_name: 'MgmtRepair'
+nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '033'
-nemesis_interval: 30
+nemesis_interval: 5
 nemesis_during_prepare: true
 
-user_prefix: '36m-ttl-resharding-nemesis'
+user_prefix: '36m-ttl-resharding-mgmtrepair'
 
 alternator_port: 8080
 alternator_use_dns_routing: true
