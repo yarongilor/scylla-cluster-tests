@@ -24,7 +24,7 @@ nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '001'
 # Set cql_schema_seed in order to get: "CLUSTERING ORDER BY (ck ASC)"
 cql_schema_seed: '933'
-instance_type_loader: 'c5n.2xlarge'
+instance_type_loader: 'c5n.4xlarge'
 round_robin: true
 nemesis_interval: 30
 nemesis_during_prepare: false
