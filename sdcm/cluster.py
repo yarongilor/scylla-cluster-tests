@@ -50,6 +50,7 @@ from cassandra.cluster import Cluster as ClusterDriver  # pylint: disable=no-nam
 from cassandra.cluster import NoHostAvailable  # pylint: disable=no-name-in-module
 from cassandra.policies import RetryPolicy
 from cassandra.policies import WhiteListRoundRobinPolicy, HostFilterPolicy, RoundRobinPolicy
+from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 
 from argus.db.cloud_types import ResourceState, CloudInstanceDetails, CloudResource
 from argus.db.db_types import NemesisStatus
@@ -3490,16 +3491,22 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
         return list(regular_table_names - materialized_view_table_names)
 
-    def is_table_has_data(self, session, table_name: str) -> bool:
+    def is_table_has_data(self, session, table_name: str) -> (bool, Optional[Exception]):
         """
-        Return True if `table_name` has data in it
+        Return True if `table_name` has data in it.
+        Checking if a result page with any data is received.
         """
-        current_rows = 0
+        error = None
         try:
-            current_rows = session.execute(f"SELECT * FROM {table_name} LIMIT 1").current_rows
+            query = f"SELECT * FROM {table_name}"
+            statement = SimpleStatement(query, fetch_size=10)
+            for paged_result in session.execute(statement):
+                return bool(len(paged_result.current_rows)), None
+
         except Exception as exc:  # pylint: disable=broad-except
             self.log.warning(f'Failed to get rows from {table_name} table. Error: {exc}')
-        return bool(current_rows)
+            error = exc
+        return False, error
 
     def get_all_tables_with_cdc(self, db_node: BaseNode) -> List[str]:
         """Return list of all tables with enabled cdc feature
