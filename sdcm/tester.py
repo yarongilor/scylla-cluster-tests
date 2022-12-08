@@ -2497,16 +2497,19 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         with open(partitions_stats_file, 'a', encoding="utf-8") as stats_file:
             for i in pk_list:
                 self.log.debug("Next PK: {}".format(i))
-                count_partition_keys_cmd = f'select count(*) from {table_name} where {primary_key_column} = {i}'
+                count_partition_keys_cmd = f'select count(*) from {table_name} where {primary_key_column} = {i}' \
+                                           ' using timeout 5m'
                 try:
-                    out = self.db_cluster.nodes[0].run_cqlsh(cmd=count_partition_keys_cmd, timeout=600, split=True,
-                                                             num_retry_on_failure=5)
+                    with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0],
+                                                                connect_timeout=600) as session:
+                        session.default_consistency_level = ConsistencyLevel.QUORUM
+                        out = session.execute(count_partition_keys_cmd)
                 except Exception as exc:  # pylint: disable=broad-except
                     self.log.error("Failed to collect partition info. Error details: %s", str(exc))
                     return None
 
                 self.log.debug('Count result: {}'.format(out))
-                partitions[i] = out[3] if len(out) > 3 else None
+                partitions[i] = out.current_rows[0].count
                 stats_file.write('{i}:{rows}, '.format(i=i, rows=partitions[i]))
         self.log.info('File with partitions row data: {}'.format(partitions_stats_file))
 
