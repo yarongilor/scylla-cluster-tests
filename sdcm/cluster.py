@@ -3498,10 +3498,10 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         """
         error = None
         try:
-            query = f"SELECT * FROM {table_name}"
-            statement = SimpleStatement(query, fetch_size=10)
-            for paged_result in session.execute(statement):
-                return bool(len(paged_result.current_rows)), None
+            result = session.execute(SimpleStatement(f"SELECT * FROM {table_name}", fetch_size=10))
+            self.log.debug(f'Got paged_result: {result.current_rows}')
+            self.log.debug(f'len(paged_result.current_rows): {len(result.current_rows)}')
+            return bool(len(result.one())), None
 
         except Exception as exc:  # pylint: disable=broad-except
             self.log.warning(f'Failed to get rows from {table_name} table. Error: {exc}')
