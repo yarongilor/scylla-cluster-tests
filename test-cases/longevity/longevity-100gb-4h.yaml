@@ -23,3 +23,5 @@ space_node_threshold: 0  # 64424
 
 sstable_size: 100
 nemesis_during_prepare: true
+
+use_mgmt: false
