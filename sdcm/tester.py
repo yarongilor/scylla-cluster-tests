@@ -539,11 +539,18 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
         self.log.debug("search_ldap_entry result: %s", res)
         distinguished_name = str(res).split()[1]
+        self.log.debug("search_ldap_entry type(res): %s", type(res))
+        self.log.debug("search_ldap_entry str(res).split(): %s", str(res).split())
+
+        self.log.debug("distinguished_name result: %s", distinguished_name)
         res = self.localhost.modify_ldap_entry(distinguished_name, {'uniqueMember': [('MODIFY_DELETE',
                                                                               [f'uid={ldap_role_name},ou=Person,'
                                                                                f'{LDAP_BASE_OBJECT}'])]})
-        if not res and raise_error:
-            raise Exception(f'Failed to delete user {ldap_role_name} from Ldap.')
+        res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
+        self.log.debug("search_ldap_entry result after deletion: %s", res)
+
+        # if not res and raise_error:
+        #     raise Exception(f'Failed to delete user {ldap_role_name} from Ldap.')
 
     def add_user_in_ldap(self, username: str):
         user_entry = [
