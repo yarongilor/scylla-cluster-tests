@@ -1102,7 +1102,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
 
             self.log.debug("Create new role and user in Ldap")
-            if self.params.get('prepare_saslauthd'):
+            if self.cluster.params.get('prepare_saslauthd'):
                 self.tester.add_user_in_ldap(username=authorized_user)
             self.tester.create_role_in_ldap(ldap_role_name=empty_role, unique_members=[authorized_user])
 
