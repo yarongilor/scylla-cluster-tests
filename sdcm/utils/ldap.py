@@ -35,6 +35,7 @@ LDAP_BASE_OBJECT = (lambda l: ','.join([f'dc={part}' for part in l.split('.')]))
 SASLAUTHD_AUTHENTICATOR = 'com.scylladb.auth.SaslauthdAuthenticator'
 LOGGER = logging.getLogger(__name__)
 
+
 class LdapServerNotReady(Exception):
     pass
 

@@ -483,11 +483,12 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         create_role_cmd = f'CREATE ROLE IF NOT EXISTS \'{role_name}\''
         if is_superuser:
             create_role_cmd += f' WITH SUPERUSER=true'
-        if is_login:
-            create_role_cmd += f' WITH login=true'  #  and password=\'{LDAP_PASSWORD}\''
         node.run_cqlsh(create_role_cmd)
         if is_login:
-            node.run_cqlsh(f'ALTER ROLE \'{role_name}\' with password=\'{LDAP_PASSWORD}\'')
+            alter_role_cmd = f'ALTER ROLE \'{role_name}\' WITH login=true'
+            if not self.params.get('prepare_saslauthd'):
+                alter_role_cmd += f' AND password=\'{LDAP_PASSWORD}\''
+            node.run_cqlsh(alter_role_cmd)
 
     def _setup_ldap_roles(self, db_cluster: BaseScyllaCluster):
         self.log.debug("Configuring LDAP Roles.")
@@ -516,10 +517,10 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                                       user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
         self.log.debug(f"_add_ldap_entry ended")
 
-    def create_role_in_ldap(self, ldap_role_name: str, ldap_users: list):
+    def create_role_in_ldap(self, ldap_role_name: str, unique_members: list):
         # ldap_username = f'cn=admin,{LDAP_BASE_OBJECT}'
         # ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
-        unique_members_list = [f'uid={user},ou=Person,{LDAP_BASE_OBJECT}' for user in ldap_users]
+        unique_members_list = [f'uid={user},ou=Person,{LDAP_BASE_OBJECT}' for user in unique_members]
         role_entry = [
             f'cn={ldap_role_name},{LDAP_BASE_OBJECT}',
             ['groupOfUniqueNames', 'simpleSecurityObject', 'top'],
@@ -533,8 +534,11 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         #                               user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
     def delete_role_in_ldap(self, ldap_role_name: str, raise_error: bool = True):
-        distinguished_name = str(self.localhost.search_ldap_entry(LDAP_BASE_OBJECT,
-                                                         f'(cn={ldap_role_name})')).split()[1]
+        ldap_entry = f'(cn={ldap_role_name})'
+        self.log.debug("search_ldap_entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)  # TODO: DBG REMOVE
+        res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
+        self.log.debug("search_ldap_entry result: %s", res)
+        distinguished_name = str(res).split()[1]
         res = self.localhost.modify_ldap_entry(distinguished_name, {'uniqueMember': [('MODIFY_DELETE',
                                                                               [f'uid={ldap_role_name},ou=Person,'
                                                                                f'{LDAP_BASE_OBJECT}'])]})
@@ -572,30 +576,31 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
                                       user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
-        organizational_unit_entry = [
-            f'ou=Person,{LDAP_BASE_OBJECT}',
-            ['organizationalUnit', 'top'],
-            {
-                'ou': 'Person'
-            }
-        ]
-        self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
-                                      user=ldap_username, password=LDAP_PASSWORD, ldap_entry=organizational_unit_entry)
-
-        # Built-in user also need to be added in ldap server, otherwise it can't log in to create LDAP_USERS
-        for user in [self.params.get('authenticator_user')] + LDAP_USERS:
-            password = LDAP_PASSWORD if user in LDAP_USERS else self.params.get("authenticator_password")
-            user_entry = [
-                f'uid={user},ou=Person,{LDAP_BASE_OBJECT}',
-                ['uidObject', 'organizationalPerson', 'top'],
+        if self.params.get('prepare_saslauthd'):
+            organizational_unit_entry = [
+                f'ou=Person,{LDAP_BASE_OBJECT}',
+                ['organizationalUnit', 'top'],
                 {
-                    'userPassword': password,
-                    'sn': 'PersonSn',
-                    'cn': 'PersonCn'
+                    'ou': 'Person'
                 }
             ]
             self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
-                                          user=ldap_username, password=LDAP_PASSWORD, ldap_entry=user_entry)
+                                          user=ldap_username, password=LDAP_PASSWORD, ldap_entry=organizational_unit_entry)
+
+            # Built-in user also need to be added in ldap server, otherwise it can't log in to create LDAP_USERS
+            for user in [self.params.get('authenticator_user')] + LDAP_USERS:
+                password = LDAP_PASSWORD if user in LDAP_USERS else self.params.get("authenticator_password")
+                user_entry = [
+                    f'uid={user},ou=Person,{LDAP_BASE_OBJECT}',
+                    ['uidObject', 'organizationalPerson', 'top'],
+                    {
+                        'userPassword': password,
+                        'sn': 'PersonSn',
+                        'cn': 'PersonCn'
+                    }
+                ]
+                self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
+                                              user=ldap_username, password=LDAP_PASSWORD, ldap_entry=user_entry)
 
     def _init_test_timeout_thread(self) -> threading.Timer:
         start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time))
