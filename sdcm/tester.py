@@ -543,9 +543,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.debug("search_ldap_entry str(res).split(): %s", str(res).split())
 
         self.log.debug("distinguished_name result: %s", distinguished_name)
-        res = self.localhost.modify_ldap_entry(distinguished_name, {'uniqueMember': [('MODIFY_DELETE',
-                                                                              [f'uid={member_name},ou=Person,'
-                                                                               f'{LDAP_BASE_OBJECT}'])]})
+        res = self.localhost.modify_ldap_entry(distinguished_name, {'uniqueMember': [('MODIFY_DELETE', [])]})
         self.log.debug("modify_ldap_entry result after deletion: %s", str(res))
         res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
         self.log.debug("search_ldap_entry result after deletion: %s", res)
