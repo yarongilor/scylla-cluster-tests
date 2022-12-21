@@ -1078,8 +1078,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     'replication_factor': 1} """)
                 self.cluster.wait_for_schema_agreement()
                 session.execute(
-                    """ CREATE TABLE IF NOT EXISTS customer.info (ssid UUID, name text, DOB text, telephone text, 
-                    email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
+                    """ CREATE TABLE IF NOT EXISTS customer.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
+                session.execute('INSERT INTO customer.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
                 self.cluster.wait_for_schema_agreement()
                 self.log.debug("Grant and revoke permissions to different roles")
                 session.execute(f"GRANT SELECT ON customer.info TO {customer_role}")
@@ -1149,9 +1149,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 session.execute(f" DROP ROLE IF EXISTS {customer_role} ")
                 session.execute(f" DROP ROLE IF EXISTS {empty_role} ")
 
-            # self.tester.delete_role_in_ldap(ldap_role_name=authorized_user)
-            self.tester.delete_member_from_ldap_role(ldap_role_name=customer_role, member_name=authorized_user)
-            self.tester.delete_member_from_ldap_role(ldap_role_name=empty_role, member_name=authorized_user)
+            self.tester.delete_ldap_role(ldap_role_name=customer_role)
+            self.tester.delete_ldap_role(ldap_role_name=empty_role)
         except Exception as error:
             self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
             raise

@@ -533,23 +533,17 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         # self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
         #                               user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
-    def delete_member_from_ldap_role(self, ldap_role_name: str, member_name: str, raise_error: bool = True):
+    def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
         ldap_entry = f'(cn={ldap_role_name})'
-        self.log.debug("search_ldap_entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)  # TODO: DBG REMOVE
+        self.log.debug("Searching for Ldap entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)
         res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
-        self.log.debug("search_ldap_entry result: %s", res)
-        distinguished_name = str(res).split()[1]
-        self.log.debug("search_ldap_entry type(res): %s", type(res))
-        self.log.debug("search_ldap_entry str(res).split(): %s", str(res).split())
-
-        self.log.debug("distinguished_name result: %s", distinguished_name)
-        res = self.localhost.modify_ldap_entry(distinguished_name, {'uniqueMember': [('MODIFY_DELETE', [])]})
-        self.log.debug("modify_ldap_entry result after deletion: %s", str(res))
-        res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
-        self.log.debug("search_ldap_entry result after deletion: %s", res)
-
         if not res and raise_error:
-            raise Exception(f'Failed to delete user {ldap_role_name} from Ldap.')
+            raise Exception(f'Failed to find {ldap_role_name} in Ldap.')
+        distinguished_name = str(res).split()[1]
+        self.log.debug("Deleting Ldap entry: %s", distinguished_name)
+        res = self.localhost.delete_ldap_entry(distinguished_name)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
 
     def add_user_in_ldap(self, username: str):
         user_entry = [
