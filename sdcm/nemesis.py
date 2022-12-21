@@ -1150,8 +1150,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 session.execute(f" DROP ROLE IF EXISTS {empty_role} ")
 
             # self.tester.delete_role_in_ldap(ldap_role_name=authorized_user)
-            self.tester.delete_role_in_ldap(ldap_role_name=customer_role)
-            self.tester.delete_role_in_ldap(ldap_role_name=empty_role)
+            self.tester.delete_member_from_ldap_role(ldap_role_name=customer_role, member_name=authorized_user)
+            self.tester.delete_member_from_ldap_role(ldap_role_name=empty_role, member_name=authorized_user)
         except Exception as error:
             self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
             raise
