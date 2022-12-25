@@ -1042,7 +1042,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         ContainerManager.unpause_container(self.tester.localhost, 'ldap')
         self.log.info('finished with nemesis')
 
-    def disrupt_ldap_grant_revoke_roles(self):
+    def disrupt_ldap_grant_revoke_roles2(self):
         """
         Scenario:
         1. Create a new keyspace and a table (by root user).
@@ -1074,7 +1074,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
 
                 session.execute(
-                    """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy', 
+                    """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
                     'replication_factor': 1} """)
                 self.cluster.wait_for_schema_agreement()
                 session.execute(
@@ -1088,7 +1088,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 session.execute(f"REVOKE MODIFY ON ALL KEYSPACES FROM {empty_role}")
                 session.execute(f"REVOKE CREATE ON ALL KEYSPACES FROM {empty_role}")
                 self.cluster.wait_for_schema_agreement()
-                res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
+                res = session.execute(f"LIST ALL PERMISSIONS OF '{authorized_user}'")  # TODO: DBG REMOVE
                 authorized_user_permissions = [row for row in res]
                 self.log.debug("authorized_user permissions list before assigned Ldap role: %s",
                                authorized_user_permissions)
@@ -1108,7 +1108,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
             with self.cluster.cql_connection_patient(node=node, user=authorized_user,
                                                      password=LDAP_PASSWORD) as session:
-                res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
+                res = session.execute(f"LIST ALL PERMISSIONS OF '{authorized_user}'")  # TODO: DBG REMOVE
                 authorized_user_permissions = [row for row in res]
                 self.log.debug("authorized_user permissions list after added Ldap empty_role: %s",
                                authorized_user_permissions)
@@ -1127,7 +1127,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             with self.cluster.cql_connection_patient(node=node, user=authorized_user,
                                                      password=LDAP_PASSWORD) as session:
 
-                res = session.execute(f"LIST ALL PERMISSIONS OF {authorized_user}")  # TODO: DBG REMOVE
+                res = session.execute(f"LIST ALL PERMISSIONS OF '{authorized_user}'")  # TODO: DBG REMOVE
                 authorized_user_permissions = [row for row in res]
                 self.log.debug("authorized_user permissions list after added Ldap customer_role: %s",
                                authorized_user_permissions)
@@ -1151,6 +1151,115 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
             self.tester.delete_ldap_role(ldap_role_name=customer_role)
             self.tester.delete_ldap_role(ldap_role_name=empty_role)
+        except Exception as error:
+            self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
+            raise
+
+    def disrupt_ldap_role_add_remove_permission(self):
+        """
+        Scenario:
+        1. Create new user in Scylla
+        2. Create new role in Ldap containing the new user as a member.
+        3. Create a new keyspace and a table (by user Ldap permission).
+        2. Add a role named authorized_user to scylla and Ldap without permissions as a user.
+        3. Add a role named customer_role to Scylla with permissions.
+        4. Try select/create operations by authorized_user ==> expected to fail)
+        5. Add a role named customer_role to Ldap, including member authorized_user.
+        6. Try again select/create operations by authorized_user ==> expected to succeed.
+        7. Remove all created schema and roles in Scylla and Ldap.
+
+        """
+        if not self.cluster.params.get('use_ldap_authorization'):
+            raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
+        if not self.target_node.is_enterprise:
+            raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
+        node = self.cluster.nodes[0]
+        superuser_role = 'superuser_role'
+        scylla_qa2 = 'scylla_qa2'
+        try:
+            self.log.debug("Create new user in Scylla")
+            self.tester.create_role_in_scylla(node=node, role_name=scylla_qa2, is_superuser=False,
+                                              is_login=True)
+            self.cluster.wait_for_schema_agreement()
+            try:
+                with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+                    session.execute(
+                        """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
+                        'replication_factor': 1} """)
+            except Exception as error:
+                self.log.error("CREATE KEYSPACE IF NOT EXISTS got exception: %s", error)
+
+            self.log.debug("Create a new super-user role in Scylla")
+            self.tester.create_role_in_scylla(node=node, role_name=superuser_role, is_superuser=True,
+                                              is_login=False)
+
+            self.log.debug("Create a new super-user role in Ldap, associated with the new user")
+            if self.cluster.params.get('prepare_saslauthd'):
+                self.tester.add_user_in_ldap(username=scylla_qa2)
+            # self.tester.create_role_in_ldap(ldap_role_name=new_ldap_role, unique_members=[scylla_qa2, LDAP_USERS[1]])
+            self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[scylla_qa2, LDAP_USERS[1]])
+
+            self.log.debug("Create keyspace and table")
+            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+                session.execute(
+                    """ CREATE TABLE IF NOT EXISTS customer.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
+                session.execute('INSERT INTO customer.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
+                self.cluster.wait_for_schema_agreement()
+                session.execute("SELECT * from customer.info LIMIT 1")
+                # self.log.debug("Grant and revoke permissions to different roles")
+                # res = session.execute(f"LIST ALL PERMISSIONS OF '{scylla_qa2}'")  # TODO: DBG REMOVE
+                # authorized_user_permissions = [row for row in res]
+
+                # self.log.debug("scylla_qa2 permissions list after assigned Ldap superuser role: %s",
+                #                authorized_user_permissions)  # TODO: DBG REMOVE
+
+            self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=scylla_qa2)
+            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
+                                                     password=LDAP_PASSWORD) as session:
+                session.execute(
+                    """ CREATE TABLE IF NOT EXISTS customer.new_info (ssid UUID, name text, DOB text, telephone text,
+                    email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
+
+                session.execute("SELECT * from customer.info LIMIT 1")
+
+            # with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
+            #                                          password=LDAP_PASSWORD) as session:
+                # res = session.execute(f"LIST ALL PERMISSIONS OF '{scylla_qa2}'")  # TODO: DBG REMOVE
+                # scylla_qa2_permissions = [row for row in res]
+                # self.log.debug("scylla_qa2 permissions list after removed from Ldap role: %s",
+                #                scylla_qa2_permissions)
+
+            self.tester.delete_ldap_role(ldap_role_name=superuser_role)
+            # with pytest.raises(Unauthorized, match=rf"User {authorized_user} has no SELECT permission on "):  # TODO: catch expected failure
+            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
+                                                     password=LDAP_PASSWORD) as session:
+                session.execute("SELECT * from customer.info LIMIT 1")
+
+                session.execute(
+                    """ CREATE TABLE IF NOT EXISTS customer.new_info2 (ssid UUID, name text, DOB text, telephone text,
+                    email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
+
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS customer2 WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+
+        except Exception as error:
+            self.log.error("disrupt_ldap_grant_revoke_roles got exception: %s", error)
+
+        try:
+            with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
+
+                session.execute(""" DROP TABLE IF EXISTS customer.info """)
+                session.execute(""" DROP TABLE IF EXISTS customer.new_info """)
+                session.execute(""" DROP KEYSPACE IF EXISTS customer """)
+                session.execute(f"DROP ROLE IF EXISTS {scylla_qa2}")
+
+            self.tester.delete_ldap_role(ldap_role_name=superuser_role)
+
         except Exception as error:
             self.log.error("disrupt_ldap_grant_revoke_roles got exception on cleanup: %s", error)
             raise
@@ -3841,12 +3950,12 @@ class ToggleLdapConfiguration(Nemesis):
         self.disrupt_disable_enable_ldap_authorization()
 
 
-class LdapGrantRevokeRolePermission(Nemesis):
+class LdapRoleAddRemovePermission(Nemesis):
     disruptive = False
     limited = True
 
     def disrupt(self):
-        self.disrupt_ldap_grant_revoke_roles()
+        self.disrupt_ldap_role_add_remove_permission()
 
 
 class NoOpMonkey(Nemesis):

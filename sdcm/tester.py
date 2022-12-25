@@ -533,13 +533,27 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         # self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
         #                               user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
-    def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
+    def search_ldap_role(self, ldap_role_name: str, raise_error: bool = True) -> str:
         ldap_entry = f'(cn={ldap_role_name})'
         self.log.debug("Searching for Ldap entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)
         res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
+        self.log.debug("Ldap entry Search result: %s", res)  # TODO: DBG REMOVE
         if not res and raise_error:
             raise Exception(f'Failed to find {ldap_role_name} in Ldap.')
         distinguished_name = str(res).split()[1]
+        return distinguished_name
+
+    def modify_ldap_role_delete_member(self, ldap_role_name: str, member_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
+        self.log.debug("Deleting member %s from Ldap entry: %s", member_name, distinguished_name)
+        unique_member_update = {'uniqueMember': [('MODIFY_DELETE', [f'uid={member_name},ou=Person,{LDAP_BASE_OBJECT}'])]}
+        res = self.localhost.modify_ldap_entry(distinguished_name, unique_member_update)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap role {ldap_role_name}')
+        self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)  # TODO: DBG REMOVE
+
+    def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
         self.log.debug("Deleting Ldap entry: %s", distinguished_name)
         res = self.localhost.delete_ldap_entry(distinguished_name)
         if not res and raise_error:

@@ -13,7 +13,7 @@ n_monitor_nodes: 0
 
 instance_type_db: 'i3.large'
 
-nemesis_class_name: 'LdapGrantRevokeRolePermission'
+nemesis_class_name: 'LdapRoleAddRemovePermission'
 nemesis_seed: '032'
 nemesis_interval: 50
 nemesis_filter_seeds: false
