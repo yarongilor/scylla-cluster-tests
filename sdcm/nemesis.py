@@ -35,7 +35,8 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from types import MethodType  # pylint: disable=no-name-in-module
 
-from cassandra import ConsistencyLevel
+import pytest
+from cassandra import ConsistencyLevel, Unauthorized
 from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
 from invoke import UnexpectedExit
 from elasticsearch.exceptions import ConnectionTimeout as ElasticSearchConnectionTimeout
@@ -93,7 +94,7 @@ from sdcm.utils.k8s import (
     convert_cpu_units_to_k8s_value,
     convert_cpu_value_from_k8s_to_units,
 )
-from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR
+from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LDAP_USERS, LDAP_PASSWORD
 from sdcm.utils.replication_strategy_utils import temporary_replication_strategy_setter, \
     NetworkTopologyReplicationStrategy, ReplicationStrategy, SimpleReplicationStrategy
 from sdcm.utils.sstable.load_utils import SstableLoadUtils
@@ -1071,6 +1072,79 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.log.info('Will now resume the LDAP container')
         ContainerManager.unpause_container(self.tester.localhost, 'ldap')
         self.log.info('finished with nemesis')
+
+    def disrupt_ldap_role_add_remove_permission(self):
+        """
+        Scenario:
+        1. Create new user in Scylla
+        2. Create new role in Ldap containing the new user as a member.
+        3. Verify this new user is unauthorised on resources (create a keyspace).
+        4. Create a new super-user role in Scylla.
+        5. Create a new super-user role in Ldap, with the new user as a member.
+        6. Verify this new user is authorised on resources.
+        7. Modify Ldap role to remove membership of new user.
+        8. Verify the new user is unauthorised on resources (create a table).
+        9. Do clean-up: delete Ldap Role, Scylla roles and keyspace/tables.
+
+        """
+        if not self.cluster.params.get('use_ldap_authorization'):
+            raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
+        if not self.target_node.is_enterprise:
+            raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
+        node = self.cluster.nodes[0]
+        superuser_role = 'superuser_role'
+        scylla_qa2 = 'scylla_qa2'
+        self.log.debug("Create new user in Scylla")
+        self.tester.create_role_in_scylla(node=node, role_name=scylla_qa2, is_superuser=False,
+                                          is_login=True)
+        with pytest.raises(Unauthorized, match="has no CREATE permission"):
+            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+
+        self.log.debug("Create a new super-user role in Scylla")
+        self.tester.create_role_in_scylla(node=node, role_name=superuser_role, is_superuser=True,
+                                          is_login=False)
+
+        self.log.debug("Create a new super-user role in Ldap, associated with the new user")
+        if self.cluster.params.get('prepare_saslauthd'):
+            self.tester.add_user_in_ldap(username=scylla_qa2)
+        self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[scylla_qa2, LDAP_USERS[1]])
+        self.cluster.wait_for_schema_agreement()
+        self.log.debug("Create keyspace and table where authorized")
+        with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+
+            session.execute(
+                """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
+                'replication_factor': 1} """)
+            session.execute(
+                """ CREATE TABLE IF NOT EXISTS customer.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
+            session.execute('INSERT INTO customer.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
+            session.execute("SELECT * from customer.info LIMIT 1")
+
+        self.log.debug("Remove authorization and verify unauthorized user")
+        self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=scylla_qa2)
+        self.cluster.wait_for_schema_agreement()
+        with pytest.raises(Unauthorized, match="has no CREATE permission"):
+            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
+                                                     password=LDAP_PASSWORD) as session:
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS customer2 WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+
+        # Clean-up resources
+        self.tester.delete_ldap_role(ldap_role_name=superuser_role)
+        if self.cluster.params.get('prepare_saslauthd'):
+            self.tester.delete_ldap_role(ldap_role_name=scylla_qa2)
+
+        with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
+
+            session.execute(""" DROP TABLE IF EXISTS customer.info """)
+            session.execute(""" DROP KEYSPACE IF EXISTS customer """)
+            session.execute(""" DROP KEYSPACE IF EXISTS customer2 """)
+            session.execute(f"DROP ROLE IF EXISTS {scylla_qa2}")
+            session.execute(f"DROP ROLE IF EXISTS {superuser_role}")
 
     def disrupt_disable_enable_ldap_authorization(self):
         if not self.cluster.params.get('use_ldap_authorization'):
@@ -3908,6 +3982,14 @@ class ToggleLdapConfiguration(Nemesis):
 
     def disrupt(self):
         self.disrupt_disable_enable_ldap_authorization()
+
+
+class LdapRoleAddRemovePermission(Nemesis):
+    disruptive = False
+    limited = True
+
+    def disrupt(self):
+        self.disrupt_ldap_role_add_remove_permission()
 
 
 class NoOpMonkey(Nemesis):
