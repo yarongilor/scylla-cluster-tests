@@ -1097,7 +1097,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.log.debug("Create new user in Scylla")
         self.tester.create_role_in_scylla(node=node, role_name=scylla_qa2, is_superuser=False,
                                           is_login=True)
-        with pytest.raises(Unauthorized, match=rf"User {scylla_qa2} has no CREATE permission"):
+        with pytest.raises(Unauthorized, match="has no CREATE permission"):
             with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
                 session.execute(
                     """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
@@ -1112,6 +1112,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             self.tester.add_user_in_ldap(username=scylla_qa2)
         self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[scylla_qa2, LDAP_USERS[1]])
 
+        self.cluster.wait_for_schema_agreement()
         self.log.debug("Create keyspace and table")
         with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
 
@@ -1124,23 +1125,24 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             session.execute("SELECT * from customer.info LIMIT 1")
 
         self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=scylla_qa2)
-        with pytest.raises(Unauthorized, match=rf"User {scylla_qa2} has no CREATE permission"):
+        self.cluster.wait_for_schema_agreement()
+        with pytest.raises(Unauthorized, match="has no CREATE permission"):
             with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
                                                      password=LDAP_PASSWORD) as session:
                 session.execute(
-                    """ CREATE TABLE IF NOT EXISTS customer.new_info (ssid UUID, name text, DOB text, telephone text,
-                    email text, memberid text, PRIMARY KEY (ssid,  name, memberid)) """)
-
-                session.execute("SELECT * from customer.info LIMIT 1")
+                    """ CREATE KEYSPACE IF NOT EXISTS customer2 WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
 
         self.tester.delete_ldap_role(ldap_role_name=superuser_role)
-
+        if self.cluster.params.get('prepare_saslauthd'):
+            self.tester.delete_ldap_role(ldap_role_name=scylla_qa2)
         with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
 
             session.execute(""" DROP TABLE IF EXISTS customer.info """)
-            session.execute(""" DROP TABLE IF EXISTS customer.new_info """)
             session.execute(""" DROP KEYSPACE IF EXISTS customer """)
+            session.execute(""" DROP KEYSPACE IF EXISTS customer2 """)
             session.execute(f"DROP ROLE IF EXISTS {scylla_qa2}")
+            session.execute(f"DROP ROLE IF EXISTS {superuser_role}")
 
     def disrupt_disable_enable_ldap_authorization(self):
         if not self.cluster.params.get('use_ldap_authorization'):

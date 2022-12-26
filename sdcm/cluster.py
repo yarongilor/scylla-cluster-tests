@@ -3334,6 +3334,8 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
         if ssl_opts is None and self.params.get('client_encrypt'):
             ssl_opts = {'ca_certs': './data_dir/ssl_conf/client/catest.pem'}
         self.log.debug(str(ssl_opts))
+        self.log.debug("[_create_session] user: %s , password: %s", user, password)
+        self.log.debug("[_create_session] auth_provider: %s", auth_provider)
         kwargs = dict(contact_points=node_ips, port=port, ssl_options=ssl_opts)
         if connection_bundle_file:
             kwargs = dict(scylla_cloud=connection_bundle_file)
