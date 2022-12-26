@@ -511,6 +511,16 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
     def _init_ldap_openldap(self):
         self.configure_ldap(node=self.localhost, use_ssl=False)
 
+    def create_role_in_scylla(self, node: BaseNode, role_name: str, is_superuser: bool = True,
+                              is_login: bool = True):
+        self.log.debug("Configuring an LDAP Role %s in Scylla DB", role_name)
+        create_role_cmd = f'CREATE ROLE IF NOT EXISTS \'{role_name}\''
+        if is_superuser:
+            create_role_cmd += ' WITH SUPERUSER=true'
+        if is_login:
+            create_role_cmd += f' WITH login=true and password=\'{LDAP_PASSWORD}\''
+        node.run_cqlsh(create_role_cmd)
+
     def _setup_ldap_roles(self, db_cluster: BaseScyllaCluster):
         self.log.debug("Configuring LDAP Roles.")
         node = db_cluster.nodes[0]
@@ -519,6 +529,72 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             node.run_cqlsh(f'CREATE ROLE \'{user}\' WITH login=true')
         node.run_cqlsh(f'ALTER ROLE \'{LDAP_USERS[0]}\' with SUPERUSER=true and password=\'{LDAP_PASSWORD}\'')
         self.params['are_ldap_users_on_scylla'] = True
+
+    @property
+    def ldap_ip(self) -> str:
+        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[0]
+
+    @property
+    def ldap_port(self) -> str:
+        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[1]
+
+    def _add_ldap_entry(self, ldap_entry: list):
+        self.log.debug("Adding an Ldap entry of: %s", ldap_entry)
+        username = f'cn=admin,{LDAP_BASE_OBJECT}'
+        self.localhost.add_ldap_entry(ip=self.ldap_ip, ldap_port=self.ldap_port,
+                                      user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
+
+    def create_role_in_ldap(self, ldap_role_name: str, unique_members: list):
+        unique_members_list = [f'uid={user},ou=Person,{LDAP_BASE_OBJECT}' for user in unique_members]
+        role_entry = [
+            f'cn={ldap_role_name},{LDAP_BASE_OBJECT}',
+            ['groupOfUniqueNames', 'simpleSecurityObject', 'top'],
+            {
+                'uniqueMember': unique_members_list,
+                'userPassword': LDAP_PASSWORD
+            }
+        ]
+        self._add_ldap_entry(ldap_entry=role_entry)
+
+    def search_ldap_role(self, ldap_role_name: str, raise_error: bool = True) -> str:
+        ldap_entry = f'(cn={ldap_role_name})'
+        self.log.debug("Searching for Ldap entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)
+        res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
+        self.log.debug("Ldap entry Search result: %s", res)
+        if not res and raise_error:
+            raise Exception(f'Failed to find {ldap_role_name} in Ldap.')
+        distinguished_name = str(res).split()[1]
+        return distinguished_name
+
+    def modify_ldap_role_delete_member(self, ldap_role_name: str, member_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
+        self.log.debug("Deleting member %s from Ldap entry: %s", member_name, distinguished_name)
+        unique_member_update = {'uniqueMember': [
+            ('MODIFY_DELETE', [f'uid={member_name},ou=Person,{LDAP_BASE_OBJECT}'])]}
+        res = self.localhost.modify_ldap_entry(distinguished_name, unique_member_update)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap role {ldap_role_name}')
+
+    def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
+        self.log.debug("Deleting Ldap entry: %s", distinguished_name)
+        res = self.localhost.delete_ldap_entry(distinguished_name)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
+
+    def add_user_in_ldap(self, username: str):
+        user_entry = [
+            f'uid={username},ou=Person,{LDAP_BASE_OBJECT}',
+            ['uidObject', 'organizationalPerson', 'top'],
+            {
+                'userPassword': LDAP_PASSWORD,
+                'sn': 'PersonSn',
+                'cn': 'PersonCn'
+            }
+        ]
+        self._add_ldap_entry(ldap_entry=user_entry)
 
     def configure_ldap(self, node, use_ssl=False):
         self.test_config.configure_ldap(node=node, use_ssl=use_ssl)
