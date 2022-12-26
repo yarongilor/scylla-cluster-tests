@@ -36,7 +36,7 @@ import yaml
 from invoke.exceptions import UnexpectedExit, Failure
 
 from cassandra.concurrent import execute_concurrent_with_args  # pylint: disable=no-name-in-module
-from cassandra import ConsistencyLevel
+from cassandra import ConsistencyLevel, Unauthorized
 
 from argus.db.db_types import TestStatus, PackageVersion
 from sdcm import nemesis, cluster_docker, cluster_k8s, cluster_baremetal, db_stats, wait
@@ -511,6 +511,15 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
     def _init_ldap_openldap(self):
         self.configure_ldap(node=self.localhost, use_ssl=False)
 
+    def create_role_in_scylla(self, node: BaseNode, role_name: str, is_superuser: bool = True,
+                              is_login: bool = True):
+        self.log.debug("Configuring an LDAP Role %s in Scylla DB", role_name)
+        create_role_cmd = f'CREATE ROLE IF NOT EXISTS \'{role_name}\''
+        superuser_argument = ' WITH SUPERUSER=true' if is_superuser else ' WITH SUPERUSER=false'
+        login_argument = ' AND login=true' if is_login else ' AND login=false'
+        create_role_cmd += superuser_argument + login_argument + f' AND password=\'{LDAP_PASSWORD}\''
+        node.run_cqlsh(create_role_cmd)
+
     def _setup_ldap_roles(self, db_cluster: BaseScyllaCluster):
         self.log.debug("Configuring LDAP Roles.")
         node = db_cluster.nodes[0]
@@ -519,6 +528,143 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             node.run_cqlsh(f'CREATE ROLE \'{user}\' WITH login=true')
         node.run_cqlsh(f'ALTER ROLE \'{LDAP_USERS[0]}\' with SUPERUSER=true and password=\'{LDAP_PASSWORD}\'')
         self.params['are_ldap_users_on_scylla'] = True
+
+    @property
+    def ldap_ip(self) -> str:
+        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[0]
+
+    @property
+    def ldap_port(self) -> str:
+        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
+        return ldap_address[1]
+
+    def _add_ldap_entry(self, ldap_entry: list):
+        self.log.debug("Adding an Ldap entry of: %s", ldap_entry)
+        username = f'cn=admin,{LDAP_BASE_OBJECT}'
+        self.localhost.add_ldap_entry(ip=self.ldap_ip, ldap_port=self.ldap_port,
+                                      user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
+
+    def create_role_in_ldap(self, ldap_role_name: str, unique_members: list):
+        unique_members_list = [f'uid={user},ou=Person,{LDAP_BASE_OBJECT}' for user in unique_members]
+        role_entry = [
+            f'cn={ldap_role_name},{LDAP_BASE_OBJECT}',
+            ['groupOfUniqueNames', 'simpleSecurityObject', 'top'],
+            {
+                'uniqueMember': unique_members_list,
+                'userPassword': LDAP_PASSWORD
+            }
+        ]
+        self._add_ldap_entry(ldap_entry=role_entry)
+
+    def search_ldap_role(self, ldap_role_name: str, raise_error: bool = True) -> str:
+        ldap_entry = f'(cn={ldap_role_name})'
+        self.log.debug("Searching for Ldap entry: %s, %s", LDAP_BASE_OBJECT, ldap_entry)
+        res = self.localhost.search_ldap_entry(LDAP_BASE_OBJECT, ldap_entry)
+        self.log.debug("Ldap entry Search result: %s", res)
+        if not res and raise_error:
+            raise Exception(f'Failed to find {ldap_role_name} in Ldap.')
+        distinguished_name = str(res).split()[1]
+        return distinguished_name
+
+    def modify_ldap_role_delete_member(self, ldap_role_name: str, member_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
+        self.log.debug("Deleting member %s from Ldap entry: %s", member_name, distinguished_name)
+        unique_member_update = {'uniqueMember': [
+            ('MODIFY_DELETE', [f'uid={member_name},ou=Person,{LDAP_BASE_OBJECT}'])]}
+        res = self.localhost.modify_ldap_entry(distinguished_name, unique_member_update)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap role {ldap_role_name}')
+
+    def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
+        self.log.debug("Deleting Ldap entry: %s", distinguished_name)
+        res = self.localhost.delete_ldap_entry(distinguished_name)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
+
+    @retrying(n=10, sleep_time=30, message='Waiting for no user permissions verification', allowed_exceptions=(ValueError,))
+    def wait_verify_user_no_permissions(self, username: str):
+        """
+        Checks for unauthorized user permission following roles update.
+        Creating a keyspace by the user and verify it fails as expected.
+        """
+        self.log.debug("Verifying user %s roles permission change in Scylla DB (following an LDAP Role update) ", username)
+
+        try:
+            with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], user=username,
+                                                        password=LDAP_PASSWORD) as session:
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS test_no_permission WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+                session.execute(""" DROP KEYSPACE IF EXISTS test_no_permission """)
+            raise ValueError('DID NOT RAISE')
+        except Unauthorized:
+            return
+
+    @retrying(n=10, sleep_time=30, message='Waiting for user permissions update', allowed_exceptions=Unauthorized)
+    def wait_verify_user_permissions(self, username: str):
+        """
+        Checks for authorized user permission following roles update.
+        Creating a keyspace by the user and verify it doesn't fail.
+        """
+        self.log.debug("Verifying user %s roles permission change in Scylla DB (following an LDAP Role update) ", username)
+
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], user=username,
+                                                    password=LDAP_PASSWORD) as session:
+            session.execute(
+                """ CREATE KEYSPACE IF NOT EXISTS test_permission_ks WITH replication = {'class': 'SimpleStrategy',
+                'replication_factor': 1} """)
+            session.execute(""" DROP KEYSPACE IF EXISTS test_permission_ks """)
+
+            session.execute(
+                """ CREATE KEYSPACE IF NOT EXISTS customer_ldap WITH replication = {'class': 'SimpleStrategy',
+                'replication_factor': 1} """)
+            session.execute(
+                """ CREATE TABLE IF NOT EXISTS customer_ldap.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
+            session.execute('INSERT INTO customer_ldap.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
+            session.execute("SELECT * from customer_ldap.info LIMIT 1")
+
+    @retrying(n=10, sleep_time=30, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
+    def wait_for_user_roles_update(self, username: str, are_roles_expected: bool):
+        """
+        Checks for updated output of user roles.
+        Example command: LIST ROLES OF new_user;
+        Example output:
+
+        LIST ROLES OF new_user;
+        ╭─────────┬─────────┬──────────────────────┬────────────╮
+        │role     │ super   │ login                │ options    │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │customer │ False   │ False                │ {}         │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │trainer  │ False   │ False                │ {}         │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │new_user │ False   │ True                 │ {}         │
+        ╰─────────┴─────────┴──────────────────────┴────────────╯
+        """
+        self.log.debug("Waiting user %s roles change in Scylla DB (following an LDAP Role update) ", username)
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
+            query = f"LIST ROLES OF '{username}';"
+            result = session.execute(query)
+            output = result.all()
+            self.log.debug("LIST ROLES OF %s: %s", username, output)
+            if are_roles_expected:
+                assert len(output) > 1
+            else:
+                assert len(output) == 1
+
+    def add_user_in_ldap(self, username: str):
+        user_entry = [
+            f'uid={username},ou=Person,{LDAP_BASE_OBJECT}',
+            ['uidObject', 'organizationalPerson', 'top'],
+            {
+                'userPassword': LDAP_PASSWORD,
+                'sn': 'PersonSn',
+                'cn': 'PersonCn'
+            }
+        ]
+        self._add_ldap_entry(ldap_entry=user_entry)
 
     def configure_ldap(self, node, use_ssl=False):
         self.test_config.configure_ldap(node=node, use_ssl=use_ssl)
@@ -539,30 +685,31 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
                                       user=ldap_username, password=LDAP_PASSWORD, ldap_entry=role_entry)
 
-        organizational_unit_entry = [
-            f'ou=Person,{LDAP_BASE_OBJECT}',
-            ['organizationalUnit', 'top'],
-            {
-                'ou': 'Person'
-            }
-        ]
-        self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
-                                      user=ldap_username, password=LDAP_PASSWORD, ldap_entry=organizational_unit_entry)
-
-        # Built-in user also need to be added in ldap server, otherwise it can't log in to create LDAP_USERS
-        for user in [self.params.get('authenticator_user')] + LDAP_USERS:
-            password = LDAP_PASSWORD if user in LDAP_USERS else self.params.get("authenticator_password")
-            user_entry = [
-                f'uid={user},ou=Person,{LDAP_BASE_OBJECT}',
-                ['uidObject', 'organizationalPerson', 'top'],
+        if self.params.get('prepare_saslauthd'):
+            organizational_unit_entry = [
+                f'ou=Person,{LDAP_BASE_OBJECT}',
+                ['organizationalUnit', 'top'],
                 {
-                    'userPassword': password,
-                    'sn': 'PersonSn',
-                    'cn': 'PersonCn'
+                    'ou': 'Person'
                 }
             ]
             self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
-                                          user=ldap_username, password=LDAP_PASSWORD, ldap_entry=user_entry)
+                                          user=ldap_username, password=LDAP_PASSWORD, ldap_entry=organizational_unit_entry)
+
+            # Built-in user also need to be added in ldap server, otherwise it can't log in to create LDAP_USERS
+            for user in [self.params.get('authenticator_user')] + LDAP_USERS:
+                password = LDAP_PASSWORD if user in LDAP_USERS else self.params.get("authenticator_password")
+                user_entry = [
+                    f'uid={user},ou=Person,{LDAP_BASE_OBJECT}',
+                    ['uidObject', 'organizationalPerson', 'top'],
+                    {
+                        'userPassword': password,
+                        'sn': 'PersonSn',
+                        'cn': 'PersonCn'
+                    }
+                ]
+                self.localhost.add_ldap_entry(ip=ldap_address[0], ldap_port=ldap_address[1],
+                                              user=ldap_username, password=LDAP_PASSWORD, ldap_entry=user_entry)
 
     def _init_test_timeout_thread(self) -> threading.Timer:
         start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time))
