@@ -1,0 +1,162 @@
+import datetime
+import logging
+import random
+import threading
+import time
+
+from sdcm import wait
+from sdcm.cluster import BaseScyllaCluster, BaseCluster
+from sdcm.remote import LocalCmdRunner
+from sdcm.sct_events import Severity
+from sdcm.sct_events.database import TombstoneGcVerificationEvent
+from sdcm.utils.decorators import retrying
+
+LOCAL_CMD_RUNNER = LocalCmdRunner()
+ERROR_SUBSTRINGS = ("timed out", "timeout")
+
+
+class NonDeletedTombstonesFound(Exception):
+    pass
+
+
+class NoSstableFound(Exception):
+    pass
+
+
+# pylint: disable=too-many-instance-attributes
+class TombstoneGcVerificationThread:
+
+    # pylint: disable=too-many-arguments
+    def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
+                 termination_event: threading.Event, ks_cf: str = None, **kwargs):
+        self.ks_cf = ks_cf
+        self.keyspace = None
+        self.table = None
+        self.db_cluster: [BaseScyllaCluster, BaseCluster] = db_cluster
+        self.duration = duration
+        self.interval = interval
+        self.db_node = None
+        self.termination_event = termination_event
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.user = kwargs.get("user", None)
+        self.password = kwargs.get("password", None)
+        self._thread = threading.Thread(daemon=True, name=self.__class__.__name__, target=self.run)
+
+    def wait_until_user_table_exists(self, db_node, table_name: str = 'random', timeout_min: int = 20):
+        text = f'Waiting until {table_name} user table exists'
+        if table_name.lower() == 'random':
+            wait.wait_for(func=lambda: len(self.db_cluster.get_non_system_ks_cf_list(db_node)) > 0, step=60,
+                          text=text, timeout=60 * timeout_min, throw_exc=True)
+        else:
+            wait.wait_for(func=lambda: table_name in (self.db_cluster.get_non_system_ks_cf_list(db_node)), step=60,
+                          text=text, timeout=60 * timeout_min, throw_exc=True)
+
+    @retrying(n=10, allowed_exceptions=NoSstableFound)
+    def _get_sstables(self, from_minutes_ago: int = 0):
+        ks_cf_path = self.ks_cf.replace('.', '/')
+        find_cmd = f"find /var/lib/scylla/data/{ks_cf_path}-*/*-big-Data.db -maxdepth 1 -type f"
+        if from_minutes_ago:
+            find_cmd += f" -cmin -{from_minutes_ago}"
+        sstables_res = self.db_node.remoter.sudo(find_cmd, verbose=True)  # TODO: change to verbose=False?
+        if sstables_res.stderr:
+            raise NoSstableFound(
+                'Failed to get sstables for {}. Error: {}'.format(ks_cf_path, sstables_res.stderr))
+
+        selected_sstables = sstables_res.stdout.split()
+        if not selected_sstables:
+            raise NoSstableFound('SStable Data files not found in {}'.format(ks_cf_path))
+
+        self.log.debug('Got %s sstables filtered by last %s minutes', len(selected_sstables),
+                       from_minutes_ago)
+        return selected_sstables
+
+    def _get_table_repair_date(self) -> str | None:
+        """
+        Search entries of requested table in system.repair_history
+        Return last entry found.
+        Example returned value: '2022-12-28 11:53:53'
+        """
+        with self.db_cluster.cql_connection_patient(node=self.db_node, connect_timeout=300,
+                                                    user=self.user, password=self.password) as session:
+            try:
+                query = f"SELECT repair_time from system.repair_history WHERE keyspace_name = '{self.keyspace}' " \
+                        f"AND table_name = '{self.table}' ALLOW FILTERING;"
+                results = session.execute(query)
+                return str(results[-1].repair_time)
+            except Exception as exc:  # pylint: disable=broad-except
+                self.log.warning('Failed to get repair date of %s.%s. Error: %s', self.keyspace, self.table, exc)
+                raise
+
+    @staticmethod
+    def get_tombstone_date(tombstone_deletion_info: str) -> datetime.datetime:
+        deletion_info_list = tombstone_deletion_info.split(':')
+        deletion_date, deletion_hour = deletion_info_list[2].split('T')
+        deletion_date = deletion_date.split('"')[1]
+        deletion_minutes = deletion_info_list[3]
+        deletion_seconds = deletion_info_list[4].split('.')[0]
+        full_deletion_date = f'{deletion_date} {deletion_hour}:{deletion_minutes}:{deletion_seconds}'
+        return datetime.datetime.strptime(full_deletion_date, '%Y-%m-%d %H:%M:%S')
+
+    def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime, sstable: str):
+        non_deleted_tombstones = []
+        self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
+        tombstones_deletion_info = self.db_node.remoter.run(
+            'sudo grep marked_deleted /tmp/sstabledump.json').stdout.split()
+        self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
+        for tombstone_deletion_info in tombstones_deletion_info:
+            tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
+            if tombstone_delete_date < table_repair_date:
+                non_deleted_tombstones.append(tombstone_delete_date)
+        if non_deleted_tombstones:
+            raise NonDeletedTombstonesFound(
+                f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}")
+
+    def tombstone_gc_verification(self, max_sstable_num: int = 50):
+        table_repair_date = self._get_table_repair_date()  # Example: 2022-12-28 11:53:53
+        table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
+        delta_repair_date_minutes = int((datetime.datetime.now() - table_repair_date).seconds / 60)
+        # TODO: subtract propagation_delay from delta_repair_date_minutes
+        sstables = self._get_sstables(from_minutes_ago=delta_repair_date_minutes)
+        self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
+                       len(sstables))
+        if max_sstable_num < len(sstables):
+            sstables = sstables[:max_sstable_num]
+        for sstable in sstables:
+            self.verify_post_repair_sstable_tombstones(table_repair_date=table_repair_date, sstable=sstable)
+
+    def run_tombstone_gc_verification(self):
+        db_node = self.db_node
+        if not self.ks_cf:
+            self.ks_cf = random.choice(self.db_cluster.get_non_system_ks_cf_list(db_node))
+            self.keyspace, self.table = self.ks_cf.split('.')
+        self.wait_until_user_table_exists(db_node=db_node, table_name=self.ks_cf)
+        with TombstoneGcVerificationEvent(node=db_node.name, ks_cf=self.ks_cf, message="") as tombstone_event:
+            if self.termination_event.is_set():
+                return
+
+            try:
+                self.tombstone_gc_verification()
+                tombstone_event.message = "Tombstone GC verification ended successfully"
+            except Exception as exc:  # pylint: disable=broad-except
+                msg = str(exc)
+                msg = f"{msg} while running Nemesis: {db_node.running_nemesis}" if db_node.running_nemesis else msg
+                tombstone_event.message = msg
+
+                if db_node.running_nemesis or any(s in msg.lower() for s in ERROR_SUBSTRINGS):
+                    tombstone_event.severity = Severity.WARNING
+                else:
+                    tombstone_event.severity = Severity.ERROR
+
+    def run(self):
+        end_time = time.time() + self.duration
+        while time.time() < end_time and not self.termination_event.is_set():
+            self.db_node = random.choice(self.db_cluster.nodes)
+            self.run_tombstone_gc_verification()
+            self.log.debug('Executed %s', TombstoneGcVerificationEvent.__name__)
+            time.sleep(self.interval)
+
+    def start(self):
+        self._thread.start()
+
+    def join(self, timeout=None):
+        return self._thread.join(timeout)

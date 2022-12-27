@@ -29,3 +29,5 @@ nemesis_during_prepare: false
 space_node_threshold: 64424
 
 user_prefix: 'longevity-lwt-500G-3d'
+post_prepare_cql_cmds: "ALTER TABLE cqlstress_lwt_example.blogposts with tombstone_gc = {'mode': 'repair'};"
+run_tombstone_gc_verification: '{"ks_cf": "cqlstress_lwt_example.blogposts", "interval": 300}' # 'ks.cf, interval(sec)
