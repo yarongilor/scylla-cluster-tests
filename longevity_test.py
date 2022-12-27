@@ -18,6 +18,7 @@ import re
 import string
 import tempfile
 import itertools
+import time
 
 import yaml
 from cassandra import AlreadyExists, InvalidRequest
@@ -147,6 +148,9 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
             if partitions_dict_after is not None:
                 self.assertEqual(partitions_dict_before, partitions_dict_after,
                                  msg='Row amount in partitions is not same before and after running of nemesis')
+
+        self.log.info('Sleeping a while for nemesis to run in background (debug)')
+        time.sleep(1800)
 
     def test_batch_custom_time(self):
         """
