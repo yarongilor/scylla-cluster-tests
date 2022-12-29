@@ -1093,12 +1093,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
         node = self.cluster.nodes[0]
         superuser_role = 'superuser_role'
-        scylla_qa2 = 'scylla_qa2'
+        new_test_user = 'new_test_user'
         self.log.debug("Create new user in Scylla")
-        self.tester.create_role_in_scylla(node=node, role_name=scylla_qa2, is_superuser=False,
+        self.tester.create_role_in_scylla(node=node, role_name=new_test_user, is_superuser=False,
                                           is_login=True)
         with pytest.raises(Unauthorized, match="has no CREATE permission"):
-            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+            with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
                 session.execute(
                     """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
                     'replication_factor': 1} """)
@@ -1109,11 +1109,11 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
         self.log.debug("Create a new super-user role in Ldap, associated with the new user")
         if self.cluster.params.get('prepare_saslauthd'):
-            self.tester.add_user_in_ldap(username=scylla_qa2)
-        self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[scylla_qa2, LDAP_USERS[1]])
+            self.tester.add_user_in_ldap(username=new_test_user)
+        self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[new_test_user, LDAP_USERS[1]])
         self.cluster.wait_for_schema_agreement()
         self.log.debug("Create keyspace and table where authorized")
-        with self.cluster.cql_connection_patient(node=node, user=scylla_qa2, password=LDAP_PASSWORD) as session:
+        with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
 
             session.execute(
                 """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
@@ -1124,10 +1124,10 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             session.execute("SELECT * from customer.info LIMIT 1")
 
         self.log.debug("Remove authorization and verify unauthorized user")
-        self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=scylla_qa2)
+        self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=new_test_user)
         self.cluster.wait_for_schema_agreement()
         with pytest.raises(Unauthorized, match="has no CREATE permission"):
-            with self.cluster.cql_connection_patient(node=node, user=scylla_qa2,
+            with self.cluster.cql_connection_patient(node=node, user=new_test_user,
                                                      password=LDAP_PASSWORD) as session:
                 session.execute(
                     """ CREATE KEYSPACE IF NOT EXISTS customer2 WITH replication = {'class': 'SimpleStrategy',
@@ -1136,14 +1136,14 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         # Clean-up resources
         self.tester.delete_ldap_role(ldap_role_name=superuser_role)
         if self.cluster.params.get('prepare_saslauthd'):
-            self.tester.delete_ldap_role(ldap_role_name=scylla_qa2)
+            self.tester.delete_ldap_role(ldap_role_name=new_test_user)
 
         with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
 
             session.execute(""" DROP TABLE IF EXISTS customer.info """)
             session.execute(""" DROP KEYSPACE IF EXISTS customer """)
             session.execute(""" DROP KEYSPACE IF EXISTS customer2 """)
-            session.execute(f"DROP ROLE IF EXISTS {scylla_qa2}")
+            session.execute(f"DROP ROLE IF EXISTS {new_test_user}")
             session.execute(f"DROP ROLE IF EXISTS {superuser_role}")
 
     def disrupt_disable_enable_ldap_authorization(self):
