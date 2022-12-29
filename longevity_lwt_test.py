@@ -41,32 +41,6 @@ class LWTLongevityTest(LongevityTest):
         with ignore_mutation_write_errors():
             super().run_prepare_write_cmd()
 
-        # Stop nemesis. Prefer all nodes will be run before collect data for validation
-        # Increase timeout to wait for nemesis finish
-        if self.db_cluster.nemesis_threads:
-            self.db_cluster.stop_nemesis(timeout=300)
-
-        # Wait for MVs data will be fully inserted (running on background)
-        time.sleep(300)
-
-        if self.db_cluster.nemesis_count > 1:
-            self.data_validator = MagicMock()
-            DataValidatorEvent.DataValidator(severity=Severity.WARNING,
-                                             message="Test runs with parallel nemesis. Data validator is disabled."
-                                             ).publish()
-        else:
-            self.data_validator = LongevityDataValidator(longevity_self_object=self,
-                                                         user_profile_name='c-s_lwt',
-                                                         base_table_partition_keys=self.BASE_TABLE_PARTITION_KEYS)
-
-        self.data_validator.copy_immutable_expected_data()
-        self.data_validator.copy_updated_expected_data()
-        self.data_validator.save_count_rows_for_deletion()
-
-        # Run nemesis during stress as it was stopped before copy expected data
-        if self.params.get('nemesis_during_prepare'):
-            self.start_nemesis()
-
     def start_nemesis(self):
         self.db_cluster.start_nemesis()
 
@@ -74,15 +48,3 @@ class LWTLongevityTest(LongevityTest):
         with ignore_mutation_write_errors():
             self.test_custom_time()
 
-            # Stop nemesis. Prefer all nodes will be run before collect data for validation
-            # Increase timeout to wait for nemesis finish
-            if self.db_cluster.nemesis_threads:
-                self.db_cluster.stop_nemesis(timeout=300)
-            self.validate_data()
-
-    def validate_data(self):
-        node = self.db_cluster.nodes[0]
-        with self.db_cluster.cql_connection_patient(node, keyspace=self.data_validator.keyspace_name) as session:
-            self.data_validator.validate_range_not_expected_to_change(session=session)
-            self.data_validator.validate_range_expected_to_change(session=session)
-            self.data_validator.validate_deleted_rows(session=session)
