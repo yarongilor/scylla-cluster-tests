@@ -128,7 +128,7 @@ class TombstoneGcVerificationThread:
         db_node = self.db_node
         if not self.ks_cf:
             self.ks_cf = random.choice(self.db_cluster.get_non_system_ks_cf_list(db_node))
-            self.keyspace, self.table = self.ks_cf.split('.')
+        self.keyspace, self.table = self.ks_cf.split('.')
         self.wait_until_user_table_exists(db_node=db_node, table_name=self.ks_cf)
         with TombstoneGcVerificationEvent(node=db_node.name, ks_cf=self.ks_cf, message="") as tombstone_event:
             if self.termination_event.is_set():
