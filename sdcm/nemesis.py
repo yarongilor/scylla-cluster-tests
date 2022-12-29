@@ -1456,6 +1456,14 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     def disrupt_kill_scylla(self):
         self._kill_scylla_daemon()
 
+# disrupt_repair_flush
+    def disrupt_repair_flush(self):
+
+        self.log.debug("Start target_node flush")
+        self.target_node.run_nodetool("flush")
+        self.log.debug("Start repair target_node")
+        self.target_node.run_nodetool(sub_cmd="repair")
+
     def disrupt_no_corrupt_repair(self):
         # prepare test tables and fill test data
         for i in range(10):
@@ -4072,6 +4080,15 @@ class NoCorruptRepairMonkey(Nemesis):
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
+
+
+class RepairFlushMonkey(Nemesis):
+    disruptive = False
+    kubernetes = True
+    limited = True
+
+    def disrupt(self):
+        self.disrupt_repair_flush()
 
 
 class MajorCompactionMonkey(Nemesis):
