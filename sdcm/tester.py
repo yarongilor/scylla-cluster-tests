@@ -583,6 +583,27 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if not res and raise_error:
             raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
 
+    @retrying(n=10, sleep_time=6, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
+    def wait_for_user_permission_update(self, are_permissions_expected: bool, username: str):
+        """
+        Checks for updated output of user permissions.
+        Example command: list ALL PERMISSIONS OF 'scylla_qa2'
+        Example output:
+             role       | username   | resource                  | permission
+            ------------+------------+---------------------------+------------
+             scylla_qa2 | scylla_qa2 |       <keyspace customer> |      ALTER
+        """
+        self.log.debug("Waiting user %s permissions change in Scylla DB after an LDAP Role update ", username)
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
+            query = f"list ALL PERMISSIONS OF '{username}';"
+            result = session.execute(query)
+            output = result.all()
+            self.log.debug("list ALL PERMISSIONS OF %s: %s", username, output)
+            if are_permissions_expected:
+                assert len(output) > 0
+            else:
+                assert len(output) == 0
+
     def add_user_in_ldap(self, username: str):
         user_entry = [
             f'uid={username},ou=Person,{LDAP_BASE_OBJECT}',
