@@ -1462,7 +1462,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.log.debug("Start target_node flush")
         self.target_node.run_nodetool("flush")
         self.log.debug("Start repair target_node")
-        self.target_node.run_nodetool(sub_cmd="repair")
+        self.target_node.run_nodetool(sub_cmd="repair", args="-- cqlstress_lwt_example")
+        time.sleep(300)
 
     def disrupt_no_corrupt_repair(self):
         # prepare test tables and fill test data
