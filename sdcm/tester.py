@@ -32,11 +32,12 @@ import sys
 import json
 
 import botocore
+import pytest
 import yaml
 from invoke.exceptions import UnexpectedExit, Failure
 
 from cassandra.concurrent import execute_concurrent_with_args  # pylint: disable=no-name-in-module
-from cassandra import ConsistencyLevel
+from cassandra import ConsistencyLevel, Unauthorized
 
 from argus.db.db_types import TestStatus, PackageVersion
 from sdcm import nemesis, cluster_docker, cluster_k8s, cluster_baremetal, db_stats, wait
@@ -598,6 +599,51 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.warning("User %s is not found in user list:", username, result_rows)
         return False
 
+    @retrying(n=10, sleep_time=30, message='Waiting for no user permissions verification', allowed_exceptions=(ValueError,))
+    def wait_verify_user_no_permissions(self, username: str):
+        """
+        Checks for unauthorized user permission following roles update.
+        Creating a keyspace by the user and verify it fails as expected.
+        """
+        self.log.debug("Verifying user %s roles permission change in Scylla DB (following an LDAP Role update) ", username)
+
+        try:
+            with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], user=username,
+                                                        password=LDAP_PASSWORD) as session:
+                session.execute(
+                    """ CREATE KEYSPACE IF NOT EXISTS test_no_permission WITH replication = {'class': 'SimpleStrategy',
+                    'replication_factor': 1} """)
+                session.execute(""" DROP KEYSPACE IF EXISTS test_no_permission """)
+            raise ValueError(f'DID NOT RAISE')
+        except ValueError:
+            raise
+        except Unauthorized:
+            return
+
+    @retrying(n=10, sleep_time=30, message='Waiting for user permissions update', allowed_exceptions=Unauthorized)
+    def wait_verify_user_permissions(self, username: str):
+        """
+        Checks for authorized user permission following roles update.
+        Creating a keyspace by the user and verify it doesn't fail.
+        """
+        self.log.debug("Verifying user %s roles permission change in Scylla DB (following an LDAP Role update) ", username)
+
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0], user=username,
+                                                    password=LDAP_PASSWORD) as session:
+            session.execute(
+                """ CREATE KEYSPACE IF NOT EXISTS test_permission_ks WITH replication = {'class': 'SimpleStrategy',
+                'replication_factor': 1} """)
+            session.execute(""" DROP KEYSPACE IF EXISTS test_permission_ks """)
+
+            session.execute(
+                """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
+                'replication_factor': 1} """)
+            session.execute(
+                """ CREATE TABLE IF NOT EXISTS customer.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
+            session.execute('INSERT INTO customer.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
+            session.execute("SELECT * from customer.info LIMIT 1")
+        return
+
     @retrying(n=10, sleep_time=30, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
     def wait_for_user_roles_update(self, username: str, are_roles_expected: bool):
         """
@@ -626,27 +672,6 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                 assert len(output) > 1
             else:
                 assert len(output) == 1
-
-    @retrying(n=10, sleep_time=6, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
-    def wait_for_user_permission_update(self, are_permissions_expected: bool, username: str):
-        """
-        Checks for updated output of user permissions.
-        Example command: list ALL PERMISSIONS OF 'scylla_qa2'
-        Example output:
-             role       | username   | resource                  | permission
-            ------------+------------+---------------------------+------------
-             scylla_qa2 | scylla_qa2 |       <keyspace customer> |      ALTER
-        """
-        self.log.debug("Waiting user %s permissions change in Scylla DB after an LDAP Role update ", username)
-        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
-            query = f"list ALL PERMISSIONS OF '{username}';"
-            result = session.execute(query)
-            output = result.all()
-            self.log.debug("list ALL PERMISSIONS OF %s: %s", username, output)
-            if are_permissions_expected:
-                assert len(output) > 0
-            else:
-                assert len(output) == 0
 
     def add_user_in_ldap(self, username: str):
         user_entry = [

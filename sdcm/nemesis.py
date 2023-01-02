@@ -1114,25 +1114,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
         self.tester.wait_for_user_roles_update(are_roles_expected=True, username=new_test_user)
         self.log.debug("Create keyspace and table where authorized")
-        with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
-
-            session.execute(
-                """ CREATE KEYSPACE IF NOT EXISTS customer WITH replication = {'class': 'SimpleStrategy',
-                'replication_factor': 1} """)
-            session.execute(
-                """ CREATE TABLE IF NOT EXISTS customer.info (key varchar, c varchar, v varchar, PRIMARY KEY(key, c)) """)
-            session.execute('INSERT INTO customer.info (key, c, v) VALUES (\'key1\', \'c1\', \'v1\')')
-            session.execute("SELECT * from customer.info LIMIT 1")
+        self.tester.wait_verify_user_permissions(username=new_test_user)
 
         self.log.debug("Remove authorization and verify unauthorized user")
         self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=new_test_user)
         self.tester.wait_for_user_roles_update(are_roles_expected=False, username=new_test_user)
-        with pytest.raises(Unauthorized, match="has no CREATE permission"):
-            with self.cluster.cql_connection_patient(node=node, user=new_test_user,
-                                                     password=LDAP_PASSWORD) as session:
-                session.execute(
-                    """ CREATE KEYSPACE IF NOT EXISTS customer2 WITH replication = {'class': 'SimpleStrategy',
-                    'replication_factor': 1} """)
+        self.tester.wait_verify_user_no_permissions(username=new_test_user)
 
         # Clean-up resources
         self.tester.delete_ldap_role(ldap_role_name=superuser_role)
@@ -1144,6 +1131,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             session.execute(""" DROP TABLE IF EXISTS customer.info """)
             session.execute(""" DROP KEYSPACE IF EXISTS customer """)
             session.execute(""" DROP KEYSPACE IF EXISTS customer2 """)
+            session.execute(""" DROP KEYSPACE IF EXISTS test_no_permission """)
+            session.execute(""" DROP KEYSPACE IF EXISTS test_permission_ks """)
             session.execute(f"DROP ROLE IF EXISTS {new_test_user}")
             session.execute(f"DROP ROLE IF EXISTS {superuser_role}")
 
