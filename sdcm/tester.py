@@ -598,7 +598,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.warning("User %s is not found in user list:", username, result_rows)
         return False
 
-    @retrying(n=18, sleep_time=10, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
+    @retrying(n=10, sleep_time=30, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
     def wait_for_user_roles_update(self, username: str, are_roles_expected: bool):
         """
         Checks for updated output of user roles.
@@ -618,7 +618,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         """
         self.log.debug("Waiting user %s roles change in Scylla DB (following an LDAP Role update) ", username)
         with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
-            query = f"LIST ROLES OF {username};"
+            query = f"LIST ROLES OF '{username}';"
             result = session.execute(query)
             output = result.all()
             self.log.debug("LIST ROLES OF %s: %s", username, output)
