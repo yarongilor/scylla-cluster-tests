@@ -583,6 +583,50 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if not res and raise_error:
             raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
 
+    def is_superuser(self, username: str) -> bool:
+        self.log.debug("Checking if user %s is a superuser ", username)
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
+            query = "LIST USERS;"
+            result = session.execute(query)
+            result_rows = result.all()
+            self.log.debug("Found users: %s", result_rows)
+            for row in result_rows:
+                self.log.debug("Found user %s with a superuser value of: %s", row.name, row.super)
+                if row.name == username:
+                    return row.super == 'True'
+
+        self.log.warning("User %s is not found in user list:", username, result_rows)
+        return False
+
+    @retrying(n=18, sleep_time=10, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
+    def wait_for_user_roles_update(self, username: str, are_roles_expected: bool):
+        """
+        Checks for updated output of user roles.
+        Example command: LIST ROLES OF new_user;
+        Example output:
+
+        LIST ROLES OF new_user;
+        ╭─────────┬─────────┬──────────────────────┬────────────╮
+        │role     │ super   │ login                │ options    │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │customer │ False   │ False                │ {}         │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │trainer  │ False   │ False                │ {}         │
+        ├─────────┼─────────┼──────────────────────┼────────────┤
+        │new_user │ False   │ True                 │ {}         │
+        ╰─────────┴─────────┴──────────────────────┴────────────╯
+        """
+        self.log.debug("Waiting user %s roles change in Scylla DB (following an LDAP Role update) ", username)
+        with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0]) as session:
+            query = f"LIST ROLES OF {username};"
+            result = session.execute(query)
+            output = result.all()
+            self.log.debug("LIST ROLES OF %s: %s", username, output)
+            if are_roles_expected:
+                assert len(output) > 1
+            else:
+                assert len(output) == 1
+
     @retrying(n=10, sleep_time=6, message='Waiting for user permissions update', allowed_exceptions=(AssertionError,))
     def wait_for_user_permission_update(self, are_permissions_expected: bool, username: str):
         """

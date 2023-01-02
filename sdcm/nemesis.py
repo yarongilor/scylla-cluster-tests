@@ -1112,7 +1112,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             self.tester.add_user_in_ldap(username=new_test_user)
         self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[new_test_user, LDAP_USERS[1]])
 
-        self.tester.wait_for_user_permission_update(are_permissions_expected=True, username=new_test_user)
+        self.tester.wait_for_user_roles_update(are_roles_expected=True, username=new_test_user)
         self.log.debug("Create keyspace and table where authorized")
         with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
 
@@ -1126,7 +1126,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
         self.log.debug("Remove authorization and verify unauthorized user")
         self.tester.modify_ldap_role_delete_member(ldap_role_name=superuser_role, member_name=new_test_user)
-        self.tester.wait_for_user_permission_update(are_permissions_expected=False, username=new_test_user)
+        self.tester.wait_for_user_roles_update(are_roles_expected=False, username=new_test_user)
         with pytest.raises(Unauthorized, match="has no CREATE permission"):
             with self.cluster.cql_connection_patient(node=node, user=new_test_user,
                                                      password=LDAP_PASSWORD) as session:
