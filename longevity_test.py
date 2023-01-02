@@ -150,7 +150,7 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                                  msg='Row amount in partitions is not same before and after running of nemesis')
 
         self.log.info('Sleeping a while for nemesis to run in background (debug)')
-        time.sleep(1800)
+        time.sleep(2800)
 
     def test_batch_custom_time(self):
         """
