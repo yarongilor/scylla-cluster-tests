@@ -63,9 +63,6 @@ class TombstoneGcVerificationThread:
                 'Failed to get sstables for {}. Error: {}'.format(ks_cf_path, sstables_res.stderr))
 
         selected_sstables = sstables_res.stdout.split()
-        if not selected_sstables:
-            raise NoSstableFound('SStable Data files not found in {}'.format(ks_cf_path))
-
         self.log.debug('Got %s sstables filtered by last %s minutes', len(selected_sstables),
                        from_minutes_ago)
         return selected_sstables
@@ -82,6 +79,11 @@ class TombstoneGcVerificationThread:
                 query = f"SELECT repair_time from system.repair_history WHERE keyspace_name = '{self.keyspace}' " \
                         f"AND table_name = '{self.table}' ALLOW FILTERING;"
                 results = session.execute(query)
+                output = results.all()
+                self.log.debug('SELECT repair_time results: %s', output)  # TODO: REMOVE
+                if len(output) == 0:
+                    self.log.debug('No repair history found for %s.%s', self.keyspace, self.table)
+                    return None
                 return str(results[-1].repair_time)
             except Exception as exc:  # pylint: disable=broad-except
                 self.log.warning('Failed to get repair date of %s.%s. Error: %s', self.keyspace, self.table, exc)
@@ -103,8 +105,10 @@ class TombstoneGcVerificationThread:
         tombstones_deletion_info = self.db_node.remoter.run(
             'sudo grep marked_deleted /tmp/sstabledump.json').stdout.split()
         self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
-        for tombstone_deletion_info in tombstones_deletion_info:
+        for tombstone_deletion_info in tombstones_deletion_info[:100]:  # TODO: remove [:100]
             tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
+            self.log.debug('Checking tombstone_delete_date (%s) < table_repair_date (%s)', tombstone_delete_date,
+                           table_repair_date)  # TODO: remove debugging
             if tombstone_delete_date < table_repair_date:
                 non_deleted_tombstones.append(tombstone_delete_date)
         if non_deleted_tombstones:
@@ -113,10 +117,16 @@ class TombstoneGcVerificationThread:
 
     def tombstone_gc_verification(self, max_sstable_num: int = 50):
         table_repair_date = self._get_table_repair_date()  # Example: 2022-12-28 11:53:53
+        if not table_repair_date:
+            return
         table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
         delta_repair_date_minutes = int((datetime.datetime.now() - table_repair_date).seconds / 60)
         # TODO: subtract propagation_delay from delta_repair_date_minutes
         sstables = self._get_sstables(from_minutes_ago=delta_repair_date_minutes)
+        if not sstables:
+            self.log.warning('No sstable with a creation time of last %s minutes found, aborting.',
+                             delta_repair_date_minutes)
+            return
         self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
                        len(sstables))
         if max_sstable_num < len(sstables):

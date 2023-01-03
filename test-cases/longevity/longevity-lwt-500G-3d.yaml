@@ -3,7 +3,7 @@ prepare_write_cmd: ["cassandra-stress user profile=/tmp/c-s_lwt_big_data.yaml n=
 stress_cmd: ["cassandra-stress user profile=/tmp/c-s_lwt_big_data.yaml ops'(lwt_update_one_column=1,lwt_update_two_columns=1,lwt_deletes=1)' cl=QUORUM duration=30m -mode native cql3 -rate threads=3"]
 stress_read_cmd: ["cassandra-stress user profile=/tmp/c-s_lwt_big_data.yaml ops'(select=1)' cl=SERIAL duration=30m -mode native cql3 -rate threads=3" ]
 
-n_db_nodes: 2
+n_db_nodes: 3
 n_loaders: 1
 n_monitor_nodes: 0
 round_robin: true
