@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import random
 import threading
@@ -88,23 +89,50 @@ class TombstoneGcVerificationThread:
                 self.log.warning('Failed to get repair date of %s.%s. Error: %s', self.keyspace, self.table, exc)
                 raise
 
-    @staticmethod
-    def get_tombstone_date(tombstone_deletion_info: str) -> datetime.datetime:
-        deletion_info_list = tombstone_deletion_info.split(':')
-        deletion_date, deletion_hour = deletion_info_list[2].split('T')
-        deletion_date = deletion_date.split('"')[1]
-        deletion_minutes = deletion_info_list[3]
-        deletion_seconds = deletion_info_list[4].split('.')[0]
+    # @staticmethod  # TODO: uncomment post debug
+    def get_tombstone_date(self, tombstone_deletion_info: str) -> datetime.datetime:
+        """
+        Parse a datetime value out of an sstable tombstone dump.
+        Example input is: '{ "name" : "name_list", "deletion_info" : { "marked_deleted" : "2023-01-03T18:06:36.559369Z",
+         "local_delete_time" : "2023-01-03T18:06:36Z" } },'
+        Example Output:  datetime.datetime(2023, 1, 3, 18, 5, 58)
+        """
+        self.log.debug('get_tombstone_date for: %s', tombstone_deletion_info)
+        tombstone_dict = json.loads(tombstone_deletion_info[:-1])
+        deletion_date, deletion_time = tombstone_dict['deletion_info']['marked_deleted'].split('T')
+        deletion_hour, deletion_minutes, deletion_seconds = deletion_time.split(':')
+        deletion_seconds = deletion_seconds.split('.')[0]
+
+        # deletion_info_list = tombstone_deletion_info.split(':')
+        # self.log.debug('deletion_info_list: %s', deletion_info_list)
+        # deletion_date, deletion_hour = deletion_info_list[3].split('T')
+        # self.log.debug('deletion_hour: %s', deletion_hour)
+        #
+        # deletion_date = deletion_date.split('"')[1]
+        # self.log.debug('deletion_date: %s', deletion_date)
+        #
+        # deletion_minutes = deletion_info_list[4]
+        # self.log.debug('deletion_minutes: %s', deletion_minutes)
+        #
+        # deletion_seconds = deletion_info_list[5].split('.')[0]
+        # self.log.debug('deletion_seconds: %s', deletion_seconds)
+
         full_deletion_date = f'{deletion_date} {deletion_hour}:{deletion_minutes}:{deletion_seconds}'
-        return datetime.datetime.strptime(full_deletion_date, '%Y-%m-%d %H:%M:%S')
+        self.log.debug('full_deletion_date: %s', full_deletion_date)
+
+        full_deletion_date_datetime = datetime.datetime.strptime(full_deletion_date, '%Y-%m-%d %H:%M:%S')
+        self.log.debug('full_deletion_date_datetime: %s', full_deletion_date_datetime)
+        return full_deletion_date_datetime
+        # return datetime.datetime.strptime(full_deletion_date, '%Y-%m-%d %H:%M:%S')
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime, sstable: str):
         non_deleted_tombstones = []
         self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
         tombstones_deletion_info = self.db_node.remoter.run(
-            'sudo grep marked_deleted /tmp/sstabledump.json').stdout.split()
+            'sudo grep marked_deleted /tmp/sstabledump.json').stdout.splitlines()
         self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
-        for tombstone_deletion_info in tombstones_deletion_info[:100]:  # TODO: remove [:100]
+        self.log.debug('First tombstone for sstable %s: %s', sstable, tombstones_deletion_info[0])
+        for tombstone_deletion_info in tombstones_deletion_info:
             tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
             self.log.debug('Checking tombstone_delete_date (%s) < table_repair_date (%s)', tombstone_delete_date,
                            table_repair_date)  # TODO: remove debugging
@@ -119,7 +147,7 @@ class TombstoneGcVerificationThread:
         if not table_repair_date:
             return
         table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
-        delta_repair_date_minutes = int((datetime.datetime.now() - table_repair_date).seconds / 60)
+        delta_repair_date_minutes = int((datetime.datetime.now() - table_repair_date).seconds / 60) - 1
         # TODO: subtract propagation_delay from delta_repair_date_minutes
         sstables = self._get_sstables(from_minutes_ago=delta_repair_date_minutes)
         if not sstables:
