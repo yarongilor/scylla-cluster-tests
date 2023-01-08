@@ -1,0 +1,9 @@
+use_ldap: true
+ldap_server_type: 'ms_ad'
+use_ldap_authorization: true
+use_ldap_authentication: false
+authenticator: 'PasswordAuthenticator'
+prepare_saslauthd: false
+authenticator_user: 'cassandra'
+authenticator_password: 'cassandra'
+authorizer: 'CassandraAuthorizer'
