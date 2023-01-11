@@ -794,7 +794,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
     # This nemesis should be run with "private" ip_ssh_connections till the issue #665 is not fixed
 
-    def disabled_disrupt_restart_then_repair_node(self):  # pylint: disable=invalid-name
+    def disrupt_restart_then_repair_node(self):  # pylint: disable=invalid-name
         # Task https://trello.com/c/llRuLIOJ/2110-add-dbeventfilter-for-nosuchcolumnfamily-error
         # If this error happens during the first boot with the missing disk this issue is expected and it's not an issue
         with DbEventsFilter(db_event=DatabaseLogEvent.DATABASE_ERROR,
@@ -4207,14 +4207,14 @@ class StopStartMonkey(Nemesis):
         self.disrupt_stop_start_scylla_server()
 
 
-# Disabling this nemesis due to mulitple known issues like (https://github.com/scylladb/scylla/issues/5080).
-# When this issue will be solved, we can re-enable this nemesis.
-# class RestartThenRepairNodeMonkey(Nemesis):
-#     disruptive = True
-#     kubernetes = True
-#
-#     def disrupt(self):
-#         self.disrupt_restart_then_repair_node()
+# Enabling this nemesis to check if https://github.com/scylladb/scylla/issues/5080 is resolved by:
+# https://github.com/scylladb/scylladb/commit/d819d98e78e1a3b861a17b7b49abf112b4b7a327
+class RestartThenRepairNodeMonkey(Nemesis):
+    disruptive = True
+    kubernetes = True
+
+    def disrupt(self):
+        self.disrupt_restart_then_repair_node()
 
 
 class MultipleHardRebootNodeMonkey(Nemesis):
