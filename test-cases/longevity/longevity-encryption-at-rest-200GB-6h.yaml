@@ -1,38 +1,29 @@
 test_duration: 550
-prepare_write_cmd: "cassandra-stress write cl=ALL n=200200300  -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=1000 -col 'size=FIXED(200) n=FIXED(5)' -pop seq=1..200200300 -log interval=15"
+#prepare_write_cmd: "cassandra-stress write cl=ALL n=200200300  -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=1000 -col 'size=FIXED(200) n=FIXED(5)' -pop seq=1..200200300 -log interval=15"
+#
+#stress_cmd: ["cassandra-stress write cl=QUORUM duration=360m  -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=50  -col 'size=FIXED(200) n=FIXED(5)' -pop seq=400200300..600200300 -log interval=15"]
+#stress_read_cmd: ["cassandra-stress read cl=ONE duration=360m -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=50  -col 'size=FIXED(200) n=FIXED(5)' -pop seq=1..200200300 -log interval=5"]
+#run_fullscan: '{"ks_cf": "keyspace1.standard1", "interval": 5}' # 'ks.cf|random, interval(min)'
+n_db_nodes: 2
+n_loaders: 0
+n_monitor_nodes: 0
 
-stress_cmd: ["cassandra-stress write cl=QUORUM duration=360m  -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=50  -col 'size=FIXED(200) n=FIXED(5)' -pop seq=400200300..600200300 -log interval=15"]
-stress_read_cmd: ["cassandra-stress read cl=ONE duration=360m -schema 'replication(factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=50  -col 'size=FIXED(200) n=FIXED(5)' -pop seq=1..200200300 -log interval=5"]
-run_fullscan: '{"ks_cf": "keyspace1.standard1", "interval": 5}' # 'ks.cf|random, interval(min)'
-n_db_nodes: 4
-n_loaders: 2
-n_monitor_nodes: 1
+instance_type_db: 'i3.large'
 
-instance_type_db: 'i3.4xlarge'
-
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'NoOpMonkey'
 nemesis_selector: ['limited']
 nemesis_seed: '028'
 nemesis_interval: 5
 nemesis_during_prepare: false
 
-user_prefix: 'longevity-encrypt-at-rest-200gb-6h-tls'
+user_prefix: 'kms-encrypt-at-rest'
 
 space_node_threshold: 644245094
 
-server_encrypt: true
-authenticator: 'PasswordAuthenticator'
-authenticator_user: cassandra
-authenticator_password: cassandra
-authorizer: 'CassandraAuthorizer'
+#server_encrypt: true
+#authenticator: 'PasswordAuthenticator'
+#authenticator_user: cassandra
+#authenticator_password: cassandra
+#authorizer: 'CassandraAuthorizer'
 
 pre_create_schema: True
-scylla_encryption_options: "{ 'cipher_algorithm' : 'AES/ECB/PKCS5Padding', 'secret_key_strength' : 128, 'key_provider': 'LocalFileSystemKeyProviderFactory', 'secret_key_file': '/etc/scylla/encrypt_conf/secret_key'}"
-
-# enable system_info_encryption, config kmip_hosts
-append_scylla_yaml: |
-  system_key_directory: /etc/encrypt_conf/
-  system_info_encryption:
-      enabled: True  # system_info_encryption
-      key_provider: LocalFileSystemKeyProviderFactory  # system_info_encryption
-      secret_key_file: '/etc/scylla/encrypt_conf/system_info_encryption_keyfile'
