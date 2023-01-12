@@ -191,6 +191,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     # i.e switch off/on network interface, network issues
     kubernetes: bool = False        # flag that signal that nemesis run with k8s cluster
     limited: bool = False           # flag that signal that nemesis are belong to limited set of nemesises
+    limited2: bool = False           # flag that signal that nemesis are belong to limited set of nemesises
     has_steady_run: bool = False    # flag that signal that nemesis should be run with perf tests with steady run
     schema_changes: bool = False
     config_changes: bool = False
@@ -4138,7 +4139,6 @@ class SslHotReloadingNemesis(Nemesis):
 
 class PauseLdapNemesis(Nemesis):
     disruptive = False
-    limited = True
 
     def disrupt(self):
         self.disrupt_ldap_connection_toggle()
@@ -4192,7 +4192,7 @@ class AddRemoveRackNemesis(Nemesis):
 class StopWaitStartMonkey(Nemesis):
     disruptive = True
     kubernetes = True
-    limited = True
+    limited2 = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -4212,6 +4212,7 @@ class StopStartMonkey(Nemesis):
 class RestartThenRepairNodeMonkey(Nemesis):
     disruptive = True
     kubernetes = True
+    limited2 = True
 
     def disrupt(self):
         self.disrupt_restart_then_repair_node()
@@ -4229,7 +4230,7 @@ class MultipleHardRebootNodeMonkey(Nemesis):
 class HardRebootNodeMonkey(Nemesis):
     disruptive = True
     kubernetes = True
-    limited = True
+    limited2 = True
     free_tier_set = True
 
     def disrupt(self):
@@ -4292,7 +4293,7 @@ class DecommissionSeedNode(Nemesis):
 class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
-    limited = True
+    limited2 = True
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
