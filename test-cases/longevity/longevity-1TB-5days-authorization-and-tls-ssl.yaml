@@ -28,13 +28,13 @@ instance_type_loader: 'c5.4xlarge'
 gce_instance_type_loader: 'c2-standard-16'
 
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'NodeTerminateAndReplace'
 nemesis_seed: '031'
-nemesis_interval: 30
+nemesis_interval: 5
 nemesis_filter_seeds: false
 
 
-user_prefix: 'longevity-tls-1tb-7d'
+user_prefix: 'terminate-and-replace-tls-1tb-7d'
 space_node_threshold: 644245094
 server_encrypt: true
 client_encrypt: true
@@ -44,5 +44,5 @@ authenticator_user: 'cassandra'
 authenticator_password: 'cassandra'
 authorizer: 'CassandraAuthorizer'
 
-nemesis_during_prepare: false
+nemesis_during_prepare: true
 use_preinstalled_scylla: true
