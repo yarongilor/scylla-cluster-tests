@@ -1135,6 +1135,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.log.debug("Create new user in Scylla")
         self.tester.create_role_in_scylla(node=node, role_name=new_test_user, is_superuser=False,
                                           is_login=True)
+        if self.cluster.params.get('prepare_saslauthd'):
+            self.tester.add_user_in_ldap(username=new_test_user)
         with pytest.raises(Unauthorized, match="has no CREATE permission"):
             with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
                 session.execute(
@@ -1146,8 +1148,6 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                                           is_login=False)
         self.cluster.wait_for_schema_agreement()
         self.log.debug("Create a new super-user role in Ldap, associated with the new user")
-        if self.cluster.params.get('prepare_saslauthd'):
-            self.tester.add_user_in_ldap(username=new_test_user)
         self.tester.create_role_in_ldap(ldap_role_name=superuser_role, unique_members=[new_test_user, LDAP_USERS[1]])
 
         self.tester.wait_for_user_roles_update(are_roles_expected=True, username=new_test_user)
