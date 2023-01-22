@@ -96,7 +96,7 @@ from sdcm.utils.k8s import (
     convert_cpu_value_from_k8s_to_units, convert_memory_value_from_k8s_to_units,
 )
 from sdcm.utils.k8s.chaos_mesh import MemoryStressExperiment
-from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LDAP_USERS, LDAP_PASSWORD
+from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LDAP_USERS, LDAP_PASSWORD, LdapServerType
 from sdcm.utils.replication_strategy_utils import temporary_replication_strategy_setter, \
     NetworkTopologyReplicationStrategy, ReplicationStrategy, SimpleReplicationStrategy
 from sdcm.utils.sstable.load_utils import SstableLoadUtils
@@ -1123,10 +1123,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         9. Do clean-up: delete Ldap Role, Scylla roles and keyspace/tables.
 
         """
-        if not self.cluster.params.get('use_ldap_authorization'):
-            raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
         if not self.target_node.is_enterprise:
             raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
+        if not self.cluster.params.get('use_ldap_authorization'):
+            raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
+        if not self.cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
+            raise UnsupportedNemesis('Cluster is not configured to run with open LDAP authorization, hence skipping')
         node = self.cluster.nodes[0]
         superuser_role = 'superuser_role'
         new_test_user = 'new_test_user'
