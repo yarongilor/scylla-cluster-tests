@@ -519,7 +519,9 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         create_role_cmd = f'CREATE ROLE IF NOT EXISTS \'{role_name}\''
         superuser_argument = ' WITH SUPERUSER=true' if is_superuser else ' WITH SUPERUSER=false'
         login_argument = ' AND login=true' if is_login else ' AND login=false'
-        create_role_cmd += superuser_argument + login_argument + f' AND password=\'{LDAP_PASSWORD}\''
+        create_role_cmd += superuser_argument + login_argument
+        if not self.params.get('prepare_saslauthd'):
+            create_role_cmd += f' AND password=\'{LDAP_PASSWORD}\''
         node.run_cqlsh(create_role_cmd)
 
     def _setup_ldap_roles(self, db_cluster: BaseScyllaCluster):
