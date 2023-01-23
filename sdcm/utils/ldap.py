@@ -10,7 +10,7 @@
 # See LICENSE for more details.
 #
 # Copyright (c) 2020 ScyllaDB
-
+import logging
 from time import sleep
 from enum import Enum
 
@@ -33,6 +33,7 @@ LDAP_ROLE = 'scylla_ldap'
 LDAP_USERS = ['scylla-qa', 'dummy-user']
 LDAP_BASE_OBJECT = (lambda l: ','.join([f'dc={part}' for part in l.split('.')]))(LDAP_DOMAIN)
 SASLAUTHD_AUTHENTICATOR = 'com.scylladb.auth.SaslauthdAuthenticator'
+TEST_LOG = logging.getLogger(__name__)
 
 
 class LdapServerNotReady(Exception):
@@ -80,7 +81,8 @@ class LdapContainerMixin:  # pylint: disable=too-few-public-methods
     def add_ldap_entry(ip, ldap_port, user, password, ldap_entry):
         if not LdapContainerMixin.is_ldap_connection_bound():
             LdapContainerMixin.create_ldap_connection(ip, ldap_port, user, password)
-        LdapContainerMixin.ldap_conn.add(*ldap_entry)
+        res = LdapContainerMixin.ldap_conn.add(*ldap_entry)
+        TEST_LOG.debug("add_ldap_entry result: %s", res)
 
     @staticmethod
     def search_ldap_entry(search_base, search_filter):

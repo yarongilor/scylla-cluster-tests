@@ -552,7 +552,9 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
 
     def _add_ldap_entry(self, ldap_entry: list):
         self.log.debug("Adding an Ldap entry of: %s", ldap_entry)
+        self.log.debug("Using Ldap server address: %s with port: %s", self.ldap_server_ip, self.ldap_port)
         username = f'cn=admin,{LDAP_BASE_OBJECT}'
+        self.log.debug("Using username: %s with password: %s", username, LDAP_PASSWORD)
         self.localhost.add_ldap_entry(ip=self.ldap_server_ip, ldap_port=self.ldap_port,
                                       user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
 
