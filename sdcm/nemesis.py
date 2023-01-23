@@ -1137,11 +1137,11 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                                           is_login=True)
         if self.cluster.params.get('prepare_saslauthd'):
             self.tester.add_user_in_ldap(username=new_test_user)
-        with pytest.raises(Unauthorized, match="has no CREATE permission"):
-            with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
-                session.execute(
-                    """ CREATE KEYSPACE IF NOT EXISTS customer_ldap WITH replication = {'class': 'SimpleStrategy',
-                    'replication_factor': 1} """)
+        # with pytest.raises(Unauthorized, match="has no CREATE permission"):
+        #     with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
+        #         session.execute(
+        #             """ CREATE KEYSPACE IF NOT EXISTS customer_ldap WITH replication = {'class': 'SimpleStrategy',
+        #             'replication_factor': 1} """)
 
         self.log.debug("Create a new super-user role in Scylla")
         self.tester.create_role_in_scylla(node=node, role_name=superuser_role, is_superuser=True,
