@@ -1127,8 +1127,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
         if not self.cluster.params.get('use_ldap_authorization'):
             raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
-        if not self.cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
-            raise UnsupportedNemesis('Cluster is not configured to run with open LDAP authorization, hence skipping')
+        # if self.cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
+        #     raise UnsupportedNemesis('Cluster is not configured to run with open LDAP authorization, hence skipping')
         node = self.cluster.nodes[0]
         superuser_role = 'superuser_role'
         new_test_user = 'new_test_user'

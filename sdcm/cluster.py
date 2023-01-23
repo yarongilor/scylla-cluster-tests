@@ -112,7 +112,7 @@ from sdcm.monitorstack.ui import AlternatorDashboard
 from sdcm.logcollector import GrafanaSnapshot, GrafanaScreenShot, PrometheusSnapshots, upload_archive_to_s3, \
     save_kallsyms_map
 from sdcm.utils.ldap import LDAP_SSH_TUNNEL_LOCAL_PORT, LDAP_BASE_OBJECT, LDAP_PASSWORD, LDAP_USERS, \
-    LDAP_PORT, DEFAULT_PWD_SUFFIX
+    LDAP_PORT, DEFAULT_PWD_SUFFIX, LdapServerType
 from sdcm.utils.remote_logger import get_system_logging_thread
 from sdcm.utils.scylla_args import ScyllaArgParser
 from sdcm.utils.file import File
@@ -1560,6 +1560,23 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
     def remote_manager_agent_yaml(self):
         return self._remote_yaml(path=SCYLLA_MANAGER_AGENT_YAML_PATH)
 
+    # @property
+    # def ldap_server_ip(self):
+    #     if self.parent_cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
+    #         ldap_ms_ad_credentials = KeyStore().get_ldap_ms_ad_credentials()
+    #         return ldap_ms_ad_credentials["server_address"]
+    #     ldap_server_ip = '127.0.0.1' if self.test_config.IP_SSH_CONNECTIONS == 'public' \
+    #         else self.test_config.LDAP_ADDRESS[0]
+    #     return ldap_server_ip
+    #
+    # @property
+    # def ldap_server_port(self):
+    #     if self.parent_cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
+    #         return LDAP_PORT
+    #     ldap_port = LDAP_SSH_TUNNEL_LOCAL_PORT if self.test_config.IP_SSH_CONNECTIONS == 'public' \
+    #         else self.test_config.LDAP_ADDRESS[1]
+    #     return ldap_port
+
     def get_saslauthd_config(self):
         if self.test_config.LDAP_ADDRESS is None:
             return {}
@@ -1571,6 +1588,8 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
                 'ldap_search_base': f'ou=Person,{LDAP_BASE_OBJECT}',
                 'ldap_bind_dn': f'cn=admin,{LDAP_BASE_OBJECT}',
                 'ldap_bind_pw': LDAP_PASSWORD}
+
+
 
     @staticmethod
     def get_saslauthd_ms_ad_config():

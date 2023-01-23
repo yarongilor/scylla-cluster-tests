@@ -72,7 +72,7 @@ from sdcm.utils.common import format_timestamp, wait_ami_available, tag_ami, upd
 from sdcm.utils.get_username import get_username
 from sdcm.utils.decorators import log_run_info, retrying
 from sdcm.utils.ldap import LDAP_USERS, LDAP_PASSWORD, LDAP_ROLE, LDAP_BASE_OBJECT, \
-    LdapConfigurationError, LdapServerType
+    LdapConfigurationError, LdapServerType, LDAP_PORT, LDAP_SSH_TUNNEL_LOCAL_PORT
 from sdcm.utils.log import configure_logging, handle_exception
 from sdcm.db_stats import PrometheusDBStats
 from sdcm.results_analyze import PerformanceResultsAnalyzer, SpecifiedStatsPerformanceAnalyzer, \
@@ -534,19 +534,26 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.params['are_ldap_users_on_scylla'] = True
 
     @property
-    def ldap_ip(self) -> str:
-        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
-        return ldap_address[0]
+    def ldap_server_ip(self) -> str:
+        if self.params.get('ldap_server_type') == LdapServerType.MS_AD:
+            ldap_ms_ad_credentials = KeyStore().get_ldap_ms_ad_credentials()
+            return ldap_ms_ad_credentials["server_address"]
+        ldap_server_ip = '127.0.0.1' if self.test_config.IP_SSH_CONNECTIONS == 'public' \
+            else self.test_config.LDAP_ADDRESS[0]
+        return ldap_server_ip
 
     @property
     def ldap_port(self) -> str:
-        ldap_address = list(self.test_config.LDAP_ADDRESS).copy()
-        return ldap_address[1]
+        if self.params.get('ldap_server_type') == LdapServerType.MS_AD:
+            return LDAP_PORT
+        ldap_port = LDAP_SSH_TUNNEL_LOCAL_PORT if self.test_config.IP_SSH_CONNECTIONS == 'public' \
+            else self.test_config.LDAP_ADDRESS[1]
+        return ldap_port
 
     def _add_ldap_entry(self, ldap_entry: list):
         self.log.debug("Adding an Ldap entry of: %s", ldap_entry)
         username = f'cn=admin,{LDAP_BASE_OBJECT}'
-        self.localhost.add_ldap_entry(ip=self.ldap_ip, ldap_port=self.ldap_port,
+        self.localhost.add_ldap_entry(ip=self.ldap_server_ip, ldap_port=self.ldap_port,
                                       user=username, password=LDAP_PASSWORD, ldap_entry=ldap_entry)
 
     def create_role_in_ldap(self, ldap_role_name: str, unique_members: list):
