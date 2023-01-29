@@ -1,6 +1,5 @@
 import datetime
 import logging
-import random
 import threading
 import time
 
@@ -45,8 +44,15 @@ class TombstoneGcVerificationThread:
         if not table_repair_date:
             return
         table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
-        delta_repair_date_minutes = int(
-            (datetime.datetime.now() - table_repair_date).seconds / 60) - self._sstable_utils.propagation_delay_in_seconds
+        delta_repair_date_minutes = (int((
+            datetime.datetime.now() - table_repair_date).total_seconds()) - self._sstable_utils.propagation_delay_in_seconds) // 60
+        self.log.debug(
+            "Calculated delta_repair_date_minutes: %d, table_repair_date: %s, propagation_delay: %d",
+            delta_repair_date_minutes,
+            table_repair_date,
+            self._sstable_utils.propagation_delay_in_seconds,
+        )
+
         if delta_repair_date_minutes <= 0:
             self.log.debug('Table %s repair date is smaller than propagation delay, aborting.',
                            self._sstable_utils.ks_cf)
@@ -87,7 +93,7 @@ class TombstoneGcVerificationThread:
     def run(self):
         end_time = time.time() + self.duration
         while time.time() < end_time and not self.termination_event.is_set():
-            self._sstable_utils.db_node = random.choice(self.db_cluster.data_nodes)
+            self._sstable_utils.verify_a_live_normal_node_is_used()
             self._run_tombstone_gc_verification()
             self.log.debug('Executed %s', TombstoneGcVerificationEvent.__name__)
             time.sleep(self.interval)
