@@ -580,6 +580,23 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         distinguished_name = str(res).split()[1]
         return distinguished_name
 
+    def search_ldap_user(self, ldap_user_name: str, raise_error: bool = True) -> str:
+        ldap_entry = f'(uid={ldap_user_name})'
+        self.log.debug("Searching for Ldap user: %s, %s", LDAP_BASE_OBJECT, ldap_entry)
+        res = self.localhost.search_ldap_entry(search_base=LDAP_BASE_OBJECT, search_filter=ldap_entry)
+        self.log.debug("Ldap user search result: %s", res)
+        # TODO: DBG REMOVE
+        self.log.debug('search_ldap_user res: %s', res)
+        self.log.debug('search_ldap_user type(res): %s', type(res))
+        self.log.debug('search_ldap_user res[0]: %s', res[0])
+        self.log.debug('search_ldap_user type(res[0]): %s', (res[0]))
+        self.log.debug('search_ldap_user response: %s', self.localhost.ldap_conn.response)
+        # -----------------
+        if not res and raise_error:
+            raise Exception(f'Failed to find {ldap_user_name} in Ldap.')
+        distinguished_name = str(res).split()[1]
+        return distinguished_name
+
     def modify_ldap_role_delete_member(self, ldap_role_name: str, member_name: str, raise_error: bool = True):
         distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
         self.log.debug("Deleting member %s from Ldap entry: %s", member_name, distinguished_name)
@@ -592,6 +609,13 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
     def delete_ldap_role(self, ldap_role_name: str, raise_error: bool = True):
         distinguished_name = self.search_ldap_role(ldap_role_name=ldap_role_name, raise_error=raise_error)
         self.log.debug("Deleting Ldap entry: %s", distinguished_name)
+        res = self.localhost.delete_ldap_entry(distinguished_name)
+        if not res and raise_error:
+            raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')
+
+    def delete_ldap_user(self, ldap_user_name: str, raise_error: bool = True):
+        distinguished_name = self.search_ldap_user(ldap_user_name=ldap_user_name, raise_error=raise_error)
+        self.log.debug("Deleting Ldap user entry: %s", distinguished_name)
         res = self.localhost.delete_ldap_entry(distinguished_name)
         if not res and raise_error:
             raise Exception(f'Failed to delete entry {distinguished_name} from Ldap.')

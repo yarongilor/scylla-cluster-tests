@@ -96,7 +96,7 @@ from sdcm.utils.k8s import (
     convert_cpu_value_from_k8s_to_units, convert_memory_value_from_k8s_to_units,
 )
 from sdcm.utils.k8s.chaos_mesh import MemoryStressExperiment
-from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LDAP_USERS, LDAP_PASSWORD, LdapServerType
+from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LDAP_USERS, LDAP_PASSWORD, LdapServerType, LDAP_BASE_OBJECT
 from sdcm.utils.replication_strategy_utils import temporary_replication_strategy_setter, \
     NetworkTopologyReplicationStrategy, ReplicationStrategy, SimpleReplicationStrategy
 from sdcm.utils.sstable.load_utils import SstableLoadUtils
@@ -1137,6 +1137,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                                           is_login=True)
         if self.cluster.params.get('prepare_saslauthd'):
             self.tester.add_user_in_ldap(username=new_test_user)
+            try:
+                res = self.tester.localhost.delete_ldap_entry(f'uid=new_test_user,ou=Person,{LDAP_BASE_OBJECT}')
+                self.log.info("delete_ldap_entry uid=new_test_user: %s", res)
+                self.tester.add_user_in_ldap(username=new_test_user)
+            except Exception as error:
+                self.log.error("delete/re-add new_test_user to Ldap saslauth failed: %s", error)
         # with pytest.raises(Unauthorized, match="has no CREATE permission"):
         #     with self.cluster.cql_connection_patient(node=node, user=new_test_user, password=LDAP_PASSWORD) as session:
         #         session.execute(
@@ -1168,8 +1174,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             session.execute(""" DROP KEYSPACE IF EXISTS customer_ldap """)
             session.execute(""" DROP KEYSPACE IF EXISTS test_no_permission """)
             session.execute(""" DROP KEYSPACE IF EXISTS test_permission_ks """)
-            session.execute(f"DROP ROLE IF EXISTS {new_test_user}")
+            if self.cluster.params.get('prepare_saslauthd'):
+                self.tester.delete_ldap_user(ldap_user_name=new_test_user)
+                session.execute(f"ALTER ROLE {new_test_user} WITH login=false")
+                session.execute(f"ALTER ROLE {superuser_role} WITH SUPERUSER=false")
             session.execute(f"DROP ROLE IF EXISTS {superuser_role}")
+            session.execute(f"DROP ROLE IF EXISTS {new_test_user}")
 
     def disrupt_disable_enable_ldap_authorization(self):
         if not self.cluster.params.get('use_ldap_authorization'):
