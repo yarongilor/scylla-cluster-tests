@@ -1127,8 +1127,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             raise UnsupportedNemesis('Cluster is not enterprise. LDAP is supported only for enterprise. Skipping')
         if not self.cluster.params.get('use_ldap_authorization'):
             raise UnsupportedNemesis('Cluster is not configured to run with LDAP authorization, hence skipping')
-        # if self.cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
-        #     raise UnsupportedNemesis('Cluster is not configured to run with open LDAP authorization, hence skipping')
+        if self.cluster.params.get('ldap_server_type') == LdapServerType.MS_AD:
+            raise UnsupportedNemesis('This nemesis only supports oppn-Ldap, not MS-AD, hence skipping')
         node = self.cluster.nodes[0]
         superuser_role = 'superuser_role'
         new_test_user = 'new_test_user'
@@ -1161,8 +1161,6 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
         # Clean-up resources
         self.tester.delete_ldap_role(ldap_role_name=superuser_role)
-        if self.cluster.params.get('prepare_saslauthd'):
-            self.tester.delete_ldap_role(ldap_role_name=new_test_user)
 
         with self.cluster.cql_connection_patient(node=node, user=LDAP_USERS[0], password=LDAP_PASSWORD) as session:
 
