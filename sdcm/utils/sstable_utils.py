@@ -16,9 +16,6 @@ class NonDeletedTombstonesFound(Exception):
     pass
 
 
-LOGGER = logging.getLogger(__name__)
-
-
 class SstableUtils:
 
     # pylint: disable=too-many-instance-attributes
@@ -97,7 +94,7 @@ class SstableUtils:
         self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
         tombstones_deletion_info = self.db_node.remoter.run(
             'sudo grep marked_deleted /tmp/sstabledump.json').stdout.splitlines()
-        LOGGER.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
+        self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
         return tombstones_deletion_info
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime.datetime, sstable: str):
