@@ -2,14 +2,14 @@ import datetime
 import time
 
 from longevity_twcs_test import TWCSLongevityTest
-from sdcm.utils.sstable_utils import wait_until_user_table_exists, SstableUtils
+from sdcm.utils.sstable_utils import SstableUtils
 
 
 class TombstoneGcLongevityTest(TWCSLongevityTest):
     keyspace = 'scylla_bench'
     table = 'test'
     ks_cf = f'{keyspace}.{table}'
-    propagation_delay = 60 * 5  # setting a value shorter than the default, of 5 minutes
+    propagation_delay = 60 * 1  # setting a value shorter than the default, of 5 minutes
     repair_date = None
     db_node = None
 
@@ -47,8 +47,6 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
 
         self.create_tables_for_scylla_bench()
         self.db_node = self.db_cluster.nodes[0]
-
-        wait_until_user_table_exists(db_node=self.db_node, table_name=self.ks_cf)
         self.run_post_prepare_cql_cmds()
         stress_queue = []
 
@@ -57,7 +55,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self._run_all_stress_cmds(stress_queue, params)
 
         self.log.info('Wait a duration of TTL * 2 + propagation_delay_in_seconds')
-        wait_for_tombstones = 5 * 60 * 4
+        wait_for_tombstones = 3 * 60
         time.sleep(wait_for_tombstones)
 
         sstable_utils = SstableUtils(db_cluster=self.db_cluster, propagation_delay_in_seconds=self.propagation_delay,

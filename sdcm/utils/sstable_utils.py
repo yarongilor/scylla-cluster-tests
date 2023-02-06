@@ -126,14 +126,3 @@ class SstableUtils:
         full_deletion_date = f'{deletion_date} {deletion_hour}:{deletion_minutes}:{deletion_seconds}'
         full_deletion_date_datetime = datetime.datetime.strptime(full_deletion_date, '%Y-%m-%d %H:%M:%S')
         return full_deletion_date_datetime
-
-
-def wait_until_user_table_exists(db_node, table_name: str = 'random', timeout_min: int = 20):
-    text = f'Waiting until {table_name} user table exists'
-    db_cluster = db_node.parent_cluster
-    if table_name.lower() == 'random':
-        wait.wait_for(func=lambda: len(db_cluster.get_non_system_ks_cf_list(db_node)) > 0, step=60,
-                      text=text, timeout=60 * timeout_min, throw_exc=True)
-    else:
-        wait.wait_for(func=lambda: table_name in (db_cluster.get_non_system_ks_cf_list(db_node)), step=60,
-                      text=text, timeout=60 * timeout_min, throw_exc=True)
