@@ -58,7 +58,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         wait_for_tombstones = 3 * 60
         time.sleep(wait_for_tombstones)
 
-        sstable_utils = SstableUtils(db_cluster=self.db_cluster, propagation_delay_in_seconds=self.propagation_delay,
+        sstable_utils = SstableUtils(db_node=self.db_node, propagation_delay_in_seconds=self.propagation_delay,
                                      ks_cf=self.ks_cf)
         self.log.info('Count the initial number of tombstones')
         tombstone_num_pre_repair = sstable_utils.count_tombstones()

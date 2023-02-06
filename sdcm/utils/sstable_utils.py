@@ -3,8 +3,7 @@ import json
 import logging
 import random
 
-from sdcm import wait
-from sdcm.cluster import BaseScyllaCluster, BaseCluster
+from sdcm.cluster import BaseScyllaCluster, BaseCluster, BaseNode
 from sdcm.utils.decorators import retrying
 
 
@@ -19,14 +18,14 @@ class NonDeletedTombstonesFound(Exception):
 class SstableUtils:
 
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], propagation_delay_in_seconds: int,
+    def __init__(self, db_node: BaseNode, propagation_delay_in_seconds: int,
                  ks_cf: str = None, **kwargs):
 
-        self.db_cluster: [BaseScyllaCluster, BaseCluster] = db_cluster
+        self.db_node = db_node
+        self.db_cluster: [BaseScyllaCluster, BaseCluster] = self.db_node.parent_cluster
         self.ks_cf = ks_cf or random.choice(self.db_cluster.get_non_system_ks_cf_list(self.db_cluster.nodes[0]))
         self.keyspace, self.table = self.ks_cf.split('.')
         self.propagation_delay_in_seconds = propagation_delay_in_seconds
-        self.db_node = None
         self.log = logging.getLogger(self.__class__.__name__)
         self.user = kwargs.get("user", None)
         self.password = kwargs.get("password", None)
