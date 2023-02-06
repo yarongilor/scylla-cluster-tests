@@ -53,11 +53,16 @@ class SstableUtils:
                        from_minutes_ago)
         return selected_sstables
 
-    def count_sstable_tombstones(self, sstable: str):
-        self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
-        tombstones_deletion_info = self.db_node.remoter.run(
-            'sudo grep marked_deleted /tmp/sstabledump.json').stdout.splitlines()
-        return len(tombstones_deletion_info)
+    def count_sstable_tombstones(self, sstable: str) -> int:
+        try:
+            self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
+            tombstones_deletion_info = self.db_node.remoter.run('sudo grep marked_deleted /tmp/sstabledump.json')
+            if not tombstones_deletion_info:
+                return 0
+
+            return len(tombstones_deletion_info.stdout.splitlines())
+        except Exception as error:
+            self.log.error('count_sstable_tombstones failed with: %s', error)
 
     def get_table_repair_date(self) -> str | None:
         """

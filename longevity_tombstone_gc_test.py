@@ -55,7 +55,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self._run_all_stress_cmds(stress_queue, params)
 
         self.log.info('Wait a duration of TTL * 2 + propagation_delay_in_seconds')
-        wait_for_tombstones = 3 * 60
+        wait_for_tombstones = 6 * 60
         time.sleep(wait_for_tombstones)
 
         sstable_utils = SstableUtils(db_node=self.db_node, propagation_delay_in_seconds=self.propagation_delay,
