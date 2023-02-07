@@ -56,7 +56,7 @@ class SstableUtils:
     def count_sstable_tombstones(self, sstable: str) -> int:
         try:
             self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
-            tombstones_deletion_info = self.db_node.remoter.run('sudo grep marked_deleted /tmp/sstabledump.json')
+            tombstones_deletion_info = self.db_node.remoter.run('sudo egrep \'"expired" : true|marked_deleted\' /tmp/sstabledump.json')
             if not tombstones_deletion_info:
                 return 0
 

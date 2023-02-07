@@ -14,6 +14,9 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
     db_node = None
 
     def _run_repair_and_major_compaction(self, wait_propagation_delay: bool = False):
+        self.log.info('Run a flush for user-table on node')
+        self.db_node.run_nodetool(f"flush -- {self.keyspace}")
+
         self.log.info('Run a repair for user-table on node')
         self.db_node.run_nodetool(sub_cmd="repair", args=f"-- {self.keyspace}")
 
@@ -94,6 +97,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
             self.verify_stress_thread(cs_thread_pool=stress)
         self.log.info('Wait a duration of TTL * 2 + propagation_delay_in_seconds')
         time.sleep(wait_for_tombstones)
+        self.db_node.run_nodetool(f"flush -- {self.keyspace}")
         self.log.info('Run a major compaction for user-table on node')
         self.db_node.run_nodetool("compact", args=f"{self.keyspace} {self.table}")
         self.wait_no_compactions_running()
