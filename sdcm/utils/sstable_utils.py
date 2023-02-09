@@ -49,8 +49,8 @@ class SstableUtils:
                 'Failed to get sstables for {}. Error: {}'.format(ks_cf_path, sstables_res.stderr))
 
         selected_sstables = sstables_res.stdout.split()
-        self.log.debug('Got %s sstables filtered by last %s minutes', len(selected_sstables),
-                       from_minutes_ago)
+        message = f'filtered by last {from_minutes_ago} minutes' if from_minutes_ago else '(not filtered by time)'
+        self.log.debug('Got %s sstables %s', len(selected_sstables), message)
         return selected_sstables
 
     def count_sstable_tombstones(self, sstable: str) -> int:
