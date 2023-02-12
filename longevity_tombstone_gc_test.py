@@ -94,17 +94,23 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
             query = "ALTER TABLE scylla_bench.test with tombstone_gc = {'mode': 'immediate', 'propagation_delay_in_seconds':'300'};"
             session.execute(query)
 
+        self.log.info('Wait a duration of schema-agreement and propagation_delay_in_seconds')
+        self.db_cluster.wait_for_schema_agreement()
+        time.sleep(self.propagation_delay)
+        alter_gc_mode_immediate_time = datetime.datetime.now()  # from this point on, all compacted tombstones are GCed.
         self.log.info('Wait for s-b load to finish')
         for stress in stress_queue:
             self.verify_stress_thread(cs_thread_pool=stress)
-        self.log.info('Wait a duration of TTL * 2 + propagation_delay_in_seconds')
-        time.sleep(wait_for_tombstones)
+        self.log.info('Wait a duration of propagation_delay_in_seconds')
+        time.sleep(self.propagation_delay)
         self.db_node.run_nodetool(f"flush -- {self.keyspace}")
         self.log.info('Run a major compaction for user-table on node')
         self.db_node.run_nodetool("compact", args=f"{self.keyspace} {self.table}")
         self.wait_no_compactions_running()
-        self.log.info('Verify no tombstones')
-        sstables = sstable_utils.get_sstables()
+        self.log.info('Verify no compacted tombstones in sstables')
+        #  compaction_gc_delta_minutes = the time range where any compacted tombstone is GCed.
+        compaction_gc_delta_minutes = (datetime.datetime.now() - alter_gc_mode_immediate_time).seconds // 60
+        sstables = sstable_utils.get_sstables(from_minutes_ago=compaction_gc_delta_minutes)
         self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
                        len(sstables))
         for sstable in sstables:
