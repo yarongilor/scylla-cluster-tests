@@ -114,5 +114,5 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
                        len(sstables))
         for sstable in sstables:
-            tombstone_deletion_info = sstable_utils.get_tombstone_deletion_info(sstable=sstable)
+            tombstone_deletion_info = sstable_utils.get_compacted_tombstone_deletion_info(sstable=sstable)
             assert not tombstone_deletion_info, f"Found unexpected existing tombstones: {tombstone_deletion_info} for sstable: {sstable}"

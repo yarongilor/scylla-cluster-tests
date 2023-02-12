@@ -35,6 +35,7 @@ class SstableUtils:
         tombstones_num = 0
         for sstable in sstables:
             tombstones_num += self.count_sstable_tombstones(sstable=sstable)
+        self.log.debug('Got %s tombstones for %s', tombstones_num, self.ks_cf)
         return tombstones_num
 
     @retrying(n=10, allowed_exceptions=NoSstableFound)
@@ -98,7 +99,7 @@ class SstableUtils:
                        delta_repair_date_minutes, now)
         return table_repair_date, delta_repair_date_minutes
 
-    def get_tombstone_deletion_info(self, sstable: str):
+    def get_compacted_tombstone_deletion_info(self, sstable: str):
         self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
         tombstones_deletion_info = self.db_node.remoter.run(
             'sudo grep marked_deleted /tmp/sstabledump.json').stdout.splitlines()
@@ -107,7 +108,7 @@ class SstableUtils:
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime.datetime, sstable: str):
         non_deleted_tombstones = []
-        tombstones_deletion_info = self.get_tombstone_deletion_info(sstable=sstable)
+        tombstones_deletion_info = self.get_compacted_tombstone_deletion_info(sstable=sstable)
         for tombstone_deletion_info in tombstones_deletion_info:
             tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
             if tombstone_delete_date < table_repair_date:
