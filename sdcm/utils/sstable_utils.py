@@ -92,8 +92,10 @@ class SstableUtils:
 
         table_repair_date = self.get_table_repair_date()
         table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
-        delta_repair_date_minutes = int(
-            (datetime.datetime.now() - table_repair_date).seconds / 60) - self.propagation_delay_in_seconds
+        now = datetime.datetime.now()
+        delta_repair_date_minutes = ((now - table_repair_date).seconds - self.propagation_delay_in_seconds) // 60
+        self.log.debug('Found table-repair-date: %s, Ended %s minutes ago (%s)', table_repair_date,
+                       delta_repair_date_minutes, now)
         return table_repair_date, delta_repair_date_minutes
 
     def get_tombstone_deletion_info(self, sstable: str):
