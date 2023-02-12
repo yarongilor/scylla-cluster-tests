@@ -14,11 +14,13 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
     db_node = None
 
     def _run_repair_and_major_compaction(self, wait_propagation_delay: bool = False):
-        self.log.info('Run a flush for user-table on node')
-        self.db_node.run_nodetool(f"flush -- {self.keyspace}")
+        self.log.info('Run a flush for user-table on nodes')
+        for node in self.db_cluster.nodes:
+            node.run_nodetool(f"flush -- {self.keyspace}")
 
-        self.log.info('Run a repair for user-table on node')
-        self.db_node.run_nodetool(sub_cmd="repair", args=f"-- {self.keyspace}")
+        self.log.info('Run a repair for user-table on nodes')
+        for node in self.db_cluster.nodes:
+            node.run_nodetool(sub_cmd="repair", args=f"-pr {self.keyspace} {self.table}")
 
         if wait_propagation_delay:
             time.sleep(self.propagation_delay)
