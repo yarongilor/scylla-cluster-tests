@@ -81,7 +81,7 @@ class SstableUtils:
                 if len(output) == 0:
                     self.log.debug('No repair history found for %s.%s', self.keyspace, self.table)
                     return None
-                return str(results[-1].repair_time)
+                return str(output[-1].repair_time)
             except Exception as exc:  # pylint: disable=broad-except
                 self.log.warning('Failed to get repair date of %s.%s. Error: %s', self.keyspace, self.table, exc)
                 raise
