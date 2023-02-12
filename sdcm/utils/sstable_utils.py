@@ -58,9 +58,11 @@ class SstableUtils:
             self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True)
             tombstones_deletion_info = self.db_node.remoter.run('sudo egrep \'"expired" : true|marked_deleted\' /tmp/sstabledump.json')
             if not tombstones_deletion_info:
+                self.log.debug('Got no tombstones for sstable: %s', sstable)
                 return 0
-
-            return len(tombstones_deletion_info.stdout.splitlines())
+            num_tombstones = len(tombstones_deletion_info.stdout.splitlines())
+            self.log.debug('Got %s tombstones for sstable: %s', num_tombstones, sstable)
+            return num_tombstones
         except Exception as error:
             self.log.error('count_sstable_tombstones failed with: %s', error)
 
