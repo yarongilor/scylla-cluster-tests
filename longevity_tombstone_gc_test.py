@@ -75,7 +75,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self.log.info("change gc-grace-seconds back to default of 10 days and tombstone-gc mode to 'repair'")
         with self.db_cluster.cql_connection_patient(node=self.db_node) as session:
             query = "ALTER TABLE scylla_bench.test with gc_grace_seconds = 36240 " \
-                    "and tombstone_gc = {'mode': 'repair', 'propagation_delay_in_seconds':'300'};"
+                    f"and tombstone_gc = {{'mode': 'repair', 'propagation_delay_in_seconds':'{self.propagation_delay}'}};"
             session.execute(query)
 
         self._run_repair_and_major_compaction(wait_propagation_delay=True)
