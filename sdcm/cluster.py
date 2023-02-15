@@ -3497,7 +3497,7 @@ class BaseCluster:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
                     has_data = False
                     try:
-                        stmt = SimpleStatement(f"SELECT * FROM {table_name}", fetch_size=10)
+                        stmt = f"SELECT * FROM {table_name} LIMIT 1"
                         has_data = bool(cql_session.execute(stmt).one())
                     except Exception as exc:  # pylint: disable=broad-except
                         self.log.warning(f'Failed to get rows from {table_name} table. Error: {exc}')
