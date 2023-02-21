@@ -8,8 +8,8 @@ from sdcm.utils.sstable_utils import SstableUtils
 
 
 class TombstoneGcLongevityTest(TWCSLongevityTest):
-    keyspace = 'scylla_bench'
-    table = 'test'
+    keyspace = 'keyspace1'
+    table = 'standard1'
     ks_cf = f'{keyspace}.{table}'
     propagation_delay = 60 * 4  # Setting a value shorter than Scylla's default (1 hour) - to 4 minutes.
     ttl = 60 * 4  # TTL is 4 minutes, corresponding with the yaml's post_prepare_cql_cmds
