@@ -53,7 +53,8 @@ class SstableUtils:
 
     def count_sstable_tombstones(self, sstable: str) -> int:
         try:
-            self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=False)
+            self.db_node.remoter.run(
+                f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
             tombstones_deletion_info = self.db_node.remoter.run(
                 'sudo egrep \'"expired" : true|marked_deleted\' /tmp/sstabledump.json', verbose=False, ignore_status=True)
             if not tombstones_deletion_info:
@@ -101,7 +102,8 @@ class SstableUtils:
     def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
         tombstones_deletion_info = []
         try:
-            self.db_node.remoter.run(f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=False)
+            self.db_node.remoter.run(
+                f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
             result = self.db_node.remoter.run('sudo grep marked_deleted /tmp/sstabledump.json', verbose=False,
                                               ignore_status=True)
             if result.ok:
@@ -110,7 +112,7 @@ class SstableUtils:
                 self.log.warning('Failed to find compacted tombstones in %s: (%s, %s)',
                                  sstable, result.stdout, result.stderr)
         except Exception as error:  # pylint: disable=broad-except
-            self.log.debug('Failed to find compacted tombstones in %s: (%s)', sstable, error)
+            self.log.error('Failed to find compacted tombstones in %s: (%s)', sstable, error)
         self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
         return tombstones_deletion_info
 

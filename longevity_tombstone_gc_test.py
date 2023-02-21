@@ -12,6 +12,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
     table = 'test'
     ks_cf = f'{keyspace}.{table}'
     propagation_delay = 60 * 4  # Setting a value shorter than Scylla's default (1 hour) - to 4 minutes.
+    ttl = 60 * 4  # TTL is 4 minutes, corresponding with the yaml's post_prepare_cql_cmds
     repair_date = None
     db_node = None
 
@@ -63,8 +64,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self._run_all_stress_cmds(stress_queue, params)
 
         self.log.info('Wait a duration of TTL + propagation_delay_in_seconds')
-        wait_for_tombstones = 4 * 60 * 2
-        time.sleep(wait_for_tombstones)
+        time.sleep(self.propagation_delay + self.ttl)
         self.db_node.run_nodetool(f"flush -- {self.keyspace}")
         sstable_utils = SstableUtils(db_node=self.db_node, propagation_delay_in_seconds=self.propagation_delay,
                                      ks_cf=self.ks_cf)
