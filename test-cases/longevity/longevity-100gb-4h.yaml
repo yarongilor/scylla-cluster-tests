@@ -13,16 +13,18 @@ seeds_num: 3
 
 instance_type_db: 'i3.4xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'AddRemoveMvNemesis'
 nemesis_seed: '032'
 nemesis_interval: 5
 nemesis_filter_seeds: false
 
-user_prefix: 'longevity-100gb-4h'
-space_node_threshold: 64424
+user_prefix: 'add-remove-mv'
+space_node_threshold: 644
 
 server_encrypt: true
 client_encrypt: true
 
 pre_create_schema: True
 sstable_size: 100
+
+nemesis_during_prepare: true
