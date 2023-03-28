@@ -64,7 +64,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         Verify no tombstones.
         """
         # pylint: disable=too-many-locals,too-many-statements
-
+        assert 1 > 2, "assertion error test"
         self.create_tables_for_scylla_bench()
         self.db_node = self.db_cluster.nodes[0]
         self.run_post_prepare_cql_cmds()
