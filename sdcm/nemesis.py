@@ -1175,7 +1175,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             destroy_ldap_container()
 
             self.log.debug('Will wait few minutes with LDAP disabled, before re-enabling it')
-            time.sleep(600)
+            time.sleep(120)
 
             InfoEvent(message='Re-enable LDAP Authorization Configuration').publish()
             create_ldap_container()
@@ -1189,7 +1189,6 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 create_ldap_container()
                 for node in self.cluster.nodes:
                     add_ldap_configuration_to_node(node)
-
 
     @retrying(n=3, sleep_time=60, allowed_exceptions=(NodeSetupFailed, NodeSetupTimeout))
     def _add_and_init_new_cluster_node(self, old_node_ip=None, host_id=None,
