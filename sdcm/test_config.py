@@ -197,7 +197,10 @@ class TestConfig(metaclass=Singleton):  # pylint: disable=too-many-public-method
             port = node.ldap_ports['ldap_port']
         address = get_my_ip()
         cls.LDAP_ADDRESS = (address, port)
-        if ContainerManager.get_container(node, 'ldap').exec_run("timeout 30s container/tool/wait-process")[0] != 0:
+        res = ContainerManager.get_container(node, 'ldap').exec_run("timeout 60s container/tool/wait-process")
+        LOGGER.debug(f"ContainerManager.get_container res: {res}")
+        LOGGER.debug(f"ContainerManager.get_container res[0]: {res[0]}")
+        if  res[0] != 0:
             raise LdapServerNotReady("LDAP server didn't finish its startup yet...")
 
     @classmethod
