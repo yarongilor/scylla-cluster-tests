@@ -4114,6 +4114,8 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
         res = verification_node.run_nodetool('status', publish_event=False)
 
         data_centers = res.stdout.split("Datacenter: ")
+        if 'Using /etc/scylla/scylla.yaml' in data_centers[0]:
+            data_centers = data_centers[1:]
         # see TestNodetoolStatus test in test_cluster.py
         pattern = re.compile(
             r"(?P<state>\w{2})\s+"

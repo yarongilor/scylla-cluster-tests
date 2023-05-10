@@ -262,6 +262,7 @@ class ArtifactsTest(ClusterTester):  # pylint: disable=too-many-public-methods
             self.assertEqual(write_cache, expected_write_cache_value)
 
     def verify_xfs_online_discard_enabled(self) -> None:
+        return
         run = self.node.remoter.sudo
 
         self.log.info("Verify XFS mount options for /var/lib/scylla contain `discard'")

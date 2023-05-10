@@ -20,5 +20,7 @@ user_prefix: 'longevity-10gb-3h'
 space_node_threshold: 64424
 
 gce_n_local_ssd_disk_db: 2
-use_preinstalled_scylla: true
+#use_preinstalled_scylla: true
+gce_image_db: 'https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts'
+# Or alternatively: https://www.googleapis.com/compute/v1/projects/scylla-images/global/images/scylla-enterprise-2022-1-6-x86-64-2023-04-20t00-18-34z
 run_db_node_benchmarks: true
