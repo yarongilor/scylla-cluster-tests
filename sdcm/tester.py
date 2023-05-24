@@ -2625,7 +2625,9 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         # Get and save how many rows in each partition.
         # It may be used for validation data in the end of test
         if not (table_name or primary_key_column):
-            self.log.warning('Can\'t collect partitions data. Missed "table name" or "primary key column" info')
+            TestFrameworkEvent(source=self.__class__.__name__,
+                               message='Can\'t collect partitions data. Missed "table name" or "primary key column" info',
+                               severity=Severity.ERROR).publish()
             return {}
 
         error_message = "Failed to collect partition info. Error details: {}"
@@ -2641,6 +2643,12 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
 
         # Collect data about partitions' rows amount.
         partitions = {}
+        if partition_range_with_data_validation := self.params.get('partition_range_with_data_validation'):
+            partition_range_splitted = partition_range_with_data_validation.split('-')
+            partition_start_range = int(partition_range_splitted[0])
+            partition_end_range = int(partition_range_splitted[1])
+            # Count existing partitions that intersects with partition_range_with_data_validation
+            pk_list = pk_list[partition_start_range:min(len(pk_list), partition_end_range)]
         partitions_stats_file = os.path.join(self.logdir, save_into_file_name)
         with open(partitions_stats_file, 'a', encoding="utf-8") as stats_file:
             for i in pk_list:
