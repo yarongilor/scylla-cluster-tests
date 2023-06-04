@@ -301,21 +301,63 @@ class Setup:
 
         cls.RSYSLOG_ADDRESS = (address, port)
 
+    # @classmethod
+    # def get_startup_script_ubuntu22(cls):
+    #     post_boot_script = '#!/bin/bash'
+    #     # post_boot_script += dedent(r'''
+    #     #        sudo sed -i 's/#MaxSessions \(.*\)$/MaxSessions 1000/' /etc/ssh/sshd_config
+    #     #        sudo sed -i 's/#MaxStartups \(.*\)$/MaxStartups 60/' /etc/ssh/sshd_config
+    #     #        sudo sed -i 's/#LoginGraceTime \(.*\)$/LoginGraceTime 15s/' /etc/ssh/sshd_config
+    #     #        sudo systemctl restart sshd
+    #     #        ''')
+    #     post_boot_script += dedent("""
+    #     if (( $(ssh -V 2>&1 | tr -d "[:alpha:][:blank:][:punct:]" | cut -c-2) >= 88 )); then
+    #         sudo systemctl stop sshd || true
+    #         sudo sed -i "s/#PubkeyAuthentication \(.*\)$/PubkeyAuthentication yes/" /etc/ssh/sshd_config || true
+    #         sudo sed -i -e "\\$aPubkeyAcceptedAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
+    #         sudo sed -i -e "\\$aHostKeyAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
+    #         sudo systemctl restart sshd || true
+    #     fi
+    #     """)
+    #
+    #     if cls.RSYSLOG_ADDRESS:
+    #
+    #         if IP_SSH_CONNECTIONS == 'public' or Setup.MULTI_REGION:
+    #             post_boot_script += dedent('''
+    #                    sudo echo 'action(type="omfwd" Target="{0}" Port="{1}" Protocol="tcp")'>> /etc/rsyslog.conf
+    #                    sudo systemctl restart rsyslog
+    #                    '''.format('127.0.0.1', RSYSLOG_SSH_TUNNEL_LOCAL_PORT))
+    #         else:
+    #             post_boot_script += dedent('''
+    #                    sudo echo 'action(type="omfwd" Target="{0}" Port="{1}" Protocol="tcp")'>> /etc/rsyslog.conf
+    #                    sudo systemctl restart rsyslog
+    #                    '''.format(*cls.RSYSLOG_ADDRESS))  # pylint: disable=not-an-iterable
+    #
+    #     # post_boot_script += dedent(r'''
+    #     #        sed -i -e 's/^\*[[:blank:]]*soft[[:blank:]]*nproc[[:blank:]]*4096/*\t\tsoft\tnproc\t\tunlimited/' \
+    #     #        /etc/security/limits.d/20-nproc.conf
+    #     #        echo -e '*\t\thard\tnproc\t\tunlimited' >> /etc/security/limits.d/20-nproc.conf
+    #     #        ''')
+    #     return post_boot_script
+
     @classmethod
     def get_startup_script(cls):
         post_boot_script = '#!/bin/bash'
-        post_boot_script += dedent(r'''
-               sudo sed -i 's/#MaxSessions \(.*\)$/MaxSessions 1000/' /etc/ssh/sshd_config
-               sudo sed -i 's/#MaxStartups \(.*\)$/MaxStartups 60/' /etc/ssh/sshd_config
-               sudo sed -i 's/#LoginGraceTime \(.*\)$/LoginGraceTime 15s/' /etc/ssh/sshd_config
-               sudo systemctl restart sshd
-               ''')
+        # post_boot_script += dedent(r'''
+        #        is_ubuntu_22=$(grep 'UBUNTU_CODENAME=jammy' /etc/os-release)
+        #        if ! [ $is_ubuntu_22 ]; then
+        #            sudo sed -i 's/#MaxSessions \(.*\)$/MaxSessions 1000/' /etc/ssh/sshd_config
+        #            sudo sed -i 's/#MaxStartups \(.*\)$/MaxStartups 60/' /etc/ssh/sshd_config
+        #            sudo sed -i 's/#LoginGraceTime \(.*\)$/LoginGraceTime 15s/' /etc/ssh/sshd_config
+        #            sudo systemctl restart sshd
+        #        fi
+        #        ''')
         post_boot_script += dedent("""
         if (( $(ssh -V 2>&1 | tr -d "[:alpha:][:blank:][:punct:]" | cut -c-2) >= 88 )); then
             sudo systemctl stop sshd || true
             sudo sed -i "s/#PubkeyAuthentication \(.*\)$/PubkeyAuthentication yes/" /etc/ssh/sshd_config || true
-            sudo sed -i -e "\\$aPubkeyAcceptedAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
-            sudo sed -i -e "\\$aHostKeyAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
+            sudo sed -i -e "$aPubkeyAcceptedAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
+            sudo sed -i -e "$aHostKeyAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
             sudo systemctl restart sshd || true
         fi
         """)
@@ -333,11 +375,13 @@ class Setup:
                        sudo systemctl restart rsyslog
                        '''.format(*cls.RSYSLOG_ADDRESS))  # pylint: disable=not-an-iterable
 
-        post_boot_script += dedent(r'''
-               sed -i -e 's/^\*[[:blank:]]*soft[[:blank:]]*nproc[[:blank:]]*4096/*\t\tsoft\tnproc\t\tunlimited/' \
-               /etc/security/limits.d/20-nproc.conf
-               echo -e '*\t\thard\tnproc\t\tunlimited' >> /etc/security/limits.d/20-nproc.conf
-               ''')
+        # post_boot_script += dedent(r'''
+        #        if ! [ $is_ubuntu_22 ]; then
+        #            sed -i -e 's/^\*[[:blank:]]*soft[[:blank:]]*nproc[[:blank:]]*4096/*\t\tsoft\tnproc\t\tunlimited/' \
+        #            /etc/security/limits.d/20-nproc.conf
+        #            echo -e '*\t\thard\tnproc\t\tunlimited' >> /etc/security/limits.d/20-nproc.conf
+        #        fi
+        #        ''')
         return post_boot_script
 
 
@@ -2957,6 +3001,10 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
         startup_script_remote_path = '/tmp/sct-startup.sh'
 
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8') as tmp_file:
+            # if self.distro.is_ubuntu22:
+            #     self.log.info("Setting up ubuntu22")  # TODO: DBG
+            #     tmp_file.write(Setup.get_startup_script_ubuntu22())
+            # else:
             tmp_file.write(Setup.get_startup_script())
             tmp_file.flush()
             self.remoter.send_files(src=tmp_file.name, dst=startup_script_remote_path)  # pylint: disable=not-callable
