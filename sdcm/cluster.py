@@ -343,23 +343,23 @@ class Setup:
     @classmethod
     def get_startup_script(cls):
         post_boot_script = '#!/bin/bash'
-        # post_boot_script += dedent(r'''
-        #        is_ubuntu_22=$(grep 'UBUNTU_CODENAME=jammy' /etc/os-release)
-        #        if ! [ $is_ubuntu_22 ]; then
-        #            sudo sed -i 's/#MaxSessions \(.*\)$/MaxSessions 1000/' /etc/ssh/sshd_config
-        #            sudo sed -i 's/#MaxStartups \(.*\)$/MaxStartups 60/' /etc/ssh/sshd_config
-        #            sudo sed -i 's/#LoginGraceTime \(.*\)$/LoginGraceTime 15s/' /etc/ssh/sshd_config
-        #            sudo systemctl restart sshd
-        #        fi
-        #        ''')
+        post_boot_script += dedent(r'''
+               is_ubuntu_22=$(grep 'UBUNTU_CODENAME=jammy' /etc/os-release)
+               if ! [ $is_ubuntu_22 ]; then
+                   sudo sed -i 's/#MaxSessions \(.*\)$/MaxSessions 1000/' /etc/ssh/sshd_config
+                   sudo sed -i 's/#MaxStartups \(.*\)$/MaxStartups 60/' /etc/ssh/sshd_config
+                   sudo sed -i 's/#LoginGraceTime \(.*\)$/LoginGraceTime 15s/' /etc/ssh/sshd_config
+                   sudo systemctl restart sshd
+               fi
+               ''')
         post_boot_script += dedent("""
+        systemctl stop sshd || true
         if (( $(ssh -V 2>&1 | tr -d "[:alpha:][:blank:][:punct:]" | cut -c-2) >= 88 )); then
-            sudo systemctl stop sshd || true
-            sudo sed -i "s/#PubkeyAuthentication \(.*\)$/PubkeyAuthentication yes/" /etc/ssh/sshd_config || true
-            sudo sed -i -e "$aPubkeyAcceptedAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
-            sudo sed -i -e "$aHostKeyAlgorithms +ssh-rsa" /etc/ssh/sshd_config || true
-            sudo systemctl restart sshd || true
+            sed -i 's/#PubkeyAuthentication \(.*\)$/PubkeyAuthentication yes/' /etc/ssh/sshd_config || true
+            sed -i -e '$aPubkeyAcceptedAlgorithms +ssh-rsa' /etc/ssh/sshd_config || true
+            sed -i -e '$aHostKeyAlgorithms +ssh-rsa' /etc/ssh/sshd_config || true
         fi
+        systemctl restart sshd || true    
         """)
 
         if cls.RSYSLOG_ADDRESS:
@@ -375,13 +375,13 @@ class Setup:
                        sudo systemctl restart rsyslog
                        '''.format(*cls.RSYSLOG_ADDRESS))  # pylint: disable=not-an-iterable
 
-        # post_boot_script += dedent(r'''
-        #        if ! [ $is_ubuntu_22 ]; then
-        #            sed -i -e 's/^\*[[:blank:]]*soft[[:blank:]]*nproc[[:blank:]]*4096/*\t\tsoft\tnproc\t\tunlimited/' \
-        #            /etc/security/limits.d/20-nproc.conf
-        #            echo -e '*\t\thard\tnproc\t\tunlimited' >> /etc/security/limits.d/20-nproc.conf
-        #        fi
-        #        ''')
+        post_boot_script += dedent(r'''
+               if ! [ $is_ubuntu_22 ]; then
+                   sed -i -e 's/^\*[[:blank:]]*soft[[:blank:]]*nproc[[:blank:]]*4096/*\t\tsoft\tnproc\t\tunlimited/' \
+                   /etc/security/limits.d/20-nproc.conf
+                   echo -e '*\t\thard\tnproc\t\tunlimited' >> /etc/security/limits.d/20-nproc.conf
+               fi
+               ''')
         return post_boot_script
 
 
