@@ -72,3 +72,9 @@ stop_test_on_stress_failure: false
 
 
 run_fullscan: ['{"mode": "partition", "ks_cf": "scylla_bench.test", "interval": 300, "pk_name":"pk", "rows_count": 100000, "validate_data": true}']
+
+# To validate rows in partitions: collect data about partitions and their rows amount
+# before and after running nemesis and compare it
+validate_partitions: true
+table_name: "scylla_bench.test"
+primary_key_column: "pk"
