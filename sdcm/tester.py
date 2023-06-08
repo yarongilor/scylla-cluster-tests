@@ -74,7 +74,7 @@ from sdcm.utils.common import format_timestamp, wait_ami_available, update_certi
     download_dir_from_cloud, get_post_behavior_actions, get_testrun_status, download_encrypt_keys, PageFetcher, \
     rows_to_list, make_threads_be_daemonic_by_default, ParallelObject, clear_out_all_exit_hooks, \
     change_default_password
-from sdcm.utils.table_data import PartitionsValidationAttributes, get_partition_keys, LIMIT_TOTAL_ROWS_NUMBER
+from sdcm.utils.table_data import PartitionsValidationAttributes, get_partition_keys, TOTAL_ROWS_NUMBER_LIMIT
 from sdcm.utils.get_username import get_username
 from sdcm.utils.decorators import log_run_info, retrying
 from sdcm.utils.git import get_git_commit_id
@@ -2624,20 +2624,28 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.debug('All rows have been copied from %s to %s', src_table, dest_table)
         return True
 
-    def validate_partitions(self, limit_total_rows_number: bool = True):
+    def validate_partitions(self, skip_on_rows_number_limit: bool = True):
+        """
+        Validating partition rows-number is the same before and after running a nemesis/stress.
+        The purpose of "skip_on_rows_number_limit" is to avoid a "too heavy" scan in a too often occurrence,
+        e.g. every health check.
+        For example, if rows-per-partition is 10M and there are 50 partitions for validation,
+        It would be too much of an overhead to read 500M rows every time a nemesis is completed and health-check
+        is running. so, by default, it is limited to LIMIT_TOTAL_ROWS_NUMBER.
+        """
         if not (self.params.get('validate_partitions') or self.partitions_attributes or self.partitions_dict_before):
             self.log.debug('Skipping validate partitions info')
             return
 
-        if limit_total_rows_number:
+        if skip_on_rows_number_limit:
             # estimated_total_rows_number represents number-of-partitions * number-of-rows-per-partition
             # Meaning the total number of estimated rows to be read.
             estimated_total_rows_number = len(self.partitions_dict_before) * \
                 int(list(self.partitions_dict_before.values())[0])
-            if estimated_total_rows_number > LIMIT_TOTAL_ROWS_NUMBER:
+            if estimated_total_rows_number > TOTAL_ROWS_NUMBER_LIMIT:
                 self.log.debug(
                     'The estimated total number of rows (%s) exceeds allowed limit (%s). Skipping validation.',
-                    estimated_total_rows_number, LIMIT_TOTAL_ROWS_NUMBER)
+                    estimated_total_rows_number, TOTAL_ROWS_NUMBER_LIMIT)
                 return
         self.log.debug('Validate partitions info')
         partitions_dict_after = self.collect_partitions_info(partitions_attributes=self.partitions_attributes)
