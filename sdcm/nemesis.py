@@ -176,6 +176,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     schema_changes: bool = False
     config_changes: bool = False
     free_tier_set: bool = False     # nemesis should be run in FreeTierNemesisSet
+    delete_rows: bool = False  # A flag denotes a nemesis deletes partitions/rows, generating tombstones.
 
     def __init__(self, tester_obj, termination_event, *args, nemesis_selector=None, **kwargs):  # pylint: disable=unused-argument
         for name, member in inspect.getmembers(self, lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
@@ -5247,6 +5248,7 @@ class DeleteByPartitionsMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     free_tier_set = True
+    delete_rows = True
 
     def disrupt(self):
         self.disrupt_delete_10_full_partitions()
@@ -5256,6 +5258,7 @@ class DeleteByRowsRangeMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     free_tier_set = True
+    delete_rows = True
 
     def disrupt(self):
         self.disrupt_delete_by_rows_range()
@@ -5265,6 +5268,7 @@ class DeleteOverlappingRowRangesMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     free_tier_set = True
+    delete_rows = True
 
     def disrupt(self):
         self.disrupt_delete_overlapping_row_ranges()
