@@ -113,7 +113,7 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                                                                         primary_key_column=self.params.get(
                                                                             'primary_key_column'),
                                                                         partition_range_with_data_validation=self.params.get(
-                'partition_range_with_data_validation'))
+                                                                            'partition_range_with_data_validation'))
             self.partitions_dict_before = self.collect_partitions_info(partitions_attributes=self.partitions_attributes)
 
         stress_cmd = self.params.get('stress_cmd')
@@ -150,7 +150,7 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
         for stress in stress_queue:
             self.verify_stress_thread(cs_thread_pool=stress)
 
-        self.validate_partitions(limit_total_rows_number=False)
+        self.validate_partitions(skip_on_rows_number_limit=False)
 
     def test_batch_custom_time(self):
         """

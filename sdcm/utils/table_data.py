@@ -22,7 +22,7 @@ LOGGER = logging.getLogger(__name__)
 # LIMIT_TOTAL_ROWS_NUMBER is a limit for maximum allowed number of total queried rows.
 # When running a health-check and calling "validate_partitions",
 # it would be skipped, if there is a too-high number of rows to be read.
-LIMIT_TOTAL_ROWS_NUMBER = 300_000
+TOTAL_ROWS_NUMBER_LIMIT = 600_000
 
 
 class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods
@@ -51,7 +51,7 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods
 
 def get_table_clustering_order(ks_cf: str, ck_name: str, session) -> str:
     """
-    Return list of partitions from a requested table
+    Returns a clustering order of a table column.
     :param ck_name:
     :param session:
     :param ks_cf:
@@ -76,7 +76,7 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = No
     :param ks_cf:
     :param limit:
     :param pk_name:
-    :return:
+    :return: A list of partition-keys from a requested table.
     """
     cmd = f'select distinct {pk_name} from {ks_cf}'
     if limit:
