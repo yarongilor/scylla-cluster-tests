@@ -13,6 +13,8 @@
 
 import logging
 import os
+import re
+import tempfile
 import uuid
 import random
 import json
@@ -77,16 +79,23 @@ class GeminiStressThread(DockerBasedStressThread):  # pylint: disable=too-many-i
             self._gemini_result_file = os.path.join("/", "gemini_result_{}.log".format(uuid.uuid4()))
         return self._gemini_result_file
 
-    def _generate_gemini_command(self):
+    def _generate_gemini_command(self, docker):
         seed = self.params.get('gemini_seed')
         table_options = self.params.get('gemini_table_options')
         if not seed:
             seed = random.randint(1, 100)
         test_nodes = ",".join(self.test_cluster.get_node_cql_ips())
         oracle_nodes = ",".join(self.oracle_cluster.get_node_cql_ips()) if self.oracle_cluster else None
-
+        stress_cmd = self.stress_cmd.strip()
+        if gemini_schema := re.search(r'--schema (.*\.json)', stress_cmd):
+            gemini_schema_file_path = gemini_schema.group(1)
+            gemini_schema_file_name = "TODO"
+            with tempfile.NamedTemporaryFile(mode='w+', encoding='utf-8') as tmp_file:
+                tmp_file.write("get json content")
+                tmp_file.flush()
+                docker.send_files(tmp_file.name, os.path.join('/tmp', gemini_schema_file_name))
         cmd = "./{} --test-cluster={} --outfile {} --seed {} --request-timeout {}s --connect-timeout {}s ".format(
-            self.stress_cmd.strip(),
+            stress_cmd,
             test_nodes,
             self.gemini_result_file,
             seed,
@@ -115,7 +124,9 @@ class GeminiStressThread(DockerBasedStressThread):  # pylint: disable=too-many-i
                                      (loader_idx, cpu_idx, uuid.uuid4()))
         LOGGER.debug('gemini local log: %s', log_file_name)
 
-        gemini_cmd = self._generate_gemini_command()
+        gemini_cmd = self._generate_gemini_command(docker=docker)
+
+
         with cleanup_context, \
                 GeminiEventsPublisher(node=loader, gemini_log_filename=log_file_name) as publisher, \
                 GeminiStressEvent(node=loader, cmd=gemini_cmd, log_file_name=log_file_name) as gemini_stress_event:
