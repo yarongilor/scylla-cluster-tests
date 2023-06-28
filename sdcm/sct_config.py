@@ -1007,12 +1007,9 @@ class SCTConfiguration(dict):
         dict(name="cluster_health_check", env="SCT_CLUSTER_HEALTH_CHECK", type=boolean,
              help="When true, start cluster health checker for all nodes"),
 
-        dict(name="validate_partitions", env="SCT_VALIDATE_PARTITIONS", type=boolean,
-             help="when true, log of the partitions before and after the nemesis run is compacted"),
-        dict(name="table_name", env="SCT_TABLE_NAME", type=str,
-             help="table name to check for the validate_partitions check"),
-        dict(name="primary_key_column", env="SCT_PRIMARY_KEY_COLUMN", type=str,
-             help="primary key of the table to check for the validate_partitions check"),
+        dict(name="data_validation", env="SCT_DATA_VALIDATION", type=str,
+             help="A group of sub-parameters: validate_partitions, table_name, primary_key_column,"
+                  " partition_range_with_data_validation, max_partitions_in_test_table"),
 
         dict(name="stress_read_cmd", env="SCT_STRESS_READ_CMD",
              type=str_or_list, k8s_multitenancy_supported=True,
@@ -1036,15 +1033,6 @@ class SCTConfiguration(dict):
              help="Url to the repo of scylla manager version to upgrade to for management tests"),
 
         # PerformanceRegressionTest
-        dict(name="partition_range_with_data_validation", env="SCT_PARTITION_RANGE_WITH_DATA_VALIDATION", type=str,
-             help="""Relevant for scylla-bench. Hold range (min - max) of PKs values for partitions that data was
-                     written with validate data and will be validate during the read.
-                     Example: 0-250.
-                     Optional parameter for DeleteByPartitionsMonkey and DeleteByRowsRangeMonkey"""),
-
-        dict(name="max_partitions_in_test_table", env="SCT_MAX_PARTITIONS_IN_TEST_TABLE", type=int,
-             help="""Relevant for scylla-bench. MAX partition keys (partition-count) in the scylla_bench.test table.
-                    Mandatory parameter for DeleteByPartitionsMonkey and DeleteByRowsRangeMonkey"""),
 
         dict(name="stress_cmd_w", env="SCT_STRESS_CMD_W",
              type=str_or_list, k8s_multitenancy_supported=True,
