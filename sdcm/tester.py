@@ -369,8 +369,9 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if self.params.get("use_ldap"):
             self._init_ldap()
 
-        if self.params.get('validate_partitions'):
-            self.partitions_dict_before = self.partitions_attributes = None
+        self._init_data_validation()
+        self.partitions_dict_before = None
+        self.partitions_attributes = None
         # Cover multi-tenant configuration. Prevent event device double initiate
         start_events_device(log_dir=self.logdir,
                             _registry=getattr(self, "_registry", None) or self.events_processes_registry)
@@ -549,6 +550,17 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             self.test_config.argus_client().submit_sct_logs(logs_to_save)
         except Exception:  # pylint: disable=broad-except
             self.log.error("Error saving logs to Argus", exc_info=True)
+
+    def _init_data_validation(self):
+        if data_validation := self.params.get('data_validation'):
+            data_validation_params = yaml.safe_load(data_validation)
+            self.validate_partitions = data_validation_params.get('validate_partitions')
+            self.table_name = data_validation_params.get('table_name')
+            self.primary_key_column = data_validation_params.get('primary_key_column')
+            self.table_name = data_validation_params.get('table_name')
+            self.partition_range_with_data_validation = data_validation_params.get(
+                'partition_range_with_data_validation')
+            self.max_partitions_in_test_table = data_validation_params.get('max_partitions_in_test_table')
 
     def _init_ldap(self):
         self.params['are_ldap_users_on_scylla'] = False
@@ -2624,7 +2636,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.debug('All rows have been copied from %s to %s', src_table, dest_table)
         return True
 
-    def validate_partitions(self, skip_on_rows_number_limit: bool = True):
+    def validate_rows_per_partitions(self, skip_on_rows_number_limit: bool = True):
         """
         Validating partition rows-number is the same before and after running a nemesis/stress.
         The purpose of "skip_on_rows_number_limit" is to avoid a "too heavy" scan in a too often occurrence,
@@ -2633,7 +2645,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         It would be too much of an overhead to read 500M rows every time a nemesis is completed and health-check
         is running. so, by default, it is limited to LIMIT_TOTAL_ROWS_NUMBER.
         """
-        if not (self.params.get('validate_partitions') or self.partitions_attributes or self.partitions_dict_before):
+        if not (self.validate_partitions and self.partitions_attributes and self.partitions_dict_before):
             self.log.debug('Skipping validate partitions info')
             return
 
