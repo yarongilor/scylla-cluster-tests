@@ -21,3 +21,5 @@ nemesis_filter_seeds: false
 seeds_num: 1
 
 user_prefix: 'longevity-schemachanges-3h'
+hinted_handoff: 'disabled'  # A workaround for issues like: https://github.com/scylladb/scylla-enterprise/issues/3102
+
