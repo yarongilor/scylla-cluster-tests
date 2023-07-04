@@ -4414,6 +4414,30 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     result = node.remoter.sudo(cmd="scylla_io_setup")
                     if result.ok:
                         self.log.info("Scylla_io_setup result: %s", result.stdout)
+                # Check if hybrid raid mode is requested and configure it
+                # if self.params.get('setup_hybrid_raid'): TODO: TBD
+                # self._check_hybrid_raid_pre_conditions()
+                gce_n_local_ssd_disk_db = self.params.get('gce_n_local_ssd_disk_db')
+                gce_pd_ssd_disk_size_db = self.params.get('gce_pd_ssd_disk_size_db')
+                if not (gce_n_local_ssd_disk_db > 0 and gce_pd_ssd_disk_size_db > 0):
+                    msg = f"Hybrid RAID cannot be configured without NVMe ({gce_n_local_ssd_disk_db}) " \
+                          f"and PD-SSD ({gce_pd_ssd_disk_size_db})"
+                    raise ValueError(msg)
+                # self._setup_hybrid_raid()
+                result = node.remoter.sudo(cmd="mount")
+                if result.ok:
+                    self.log.info("mount result: %s", result.stdout)
+                hybrid_raid_setup_cmd = dedent("""
+                    umount /var/lib/systemd/coredump /var/lib/scylla
+                    yes | sudo mdadm --create /dev/md1 --level 1 --bitmap=none --raid-devices=2 /dev/md0 --write-mostly /dev/sdb
+                    yes | sudo mkfs.ext4  /dev/md1
+                    mount -t ext4 /dev/md1 /var/lib/systemd/coredump
+                    mount -t ext4 /dev/md1 /var/lib/scylla
+                """)
+                # TODO: add md1 to /etc/fstab
+                result = node.remoter.sudo(cmd=hybrid_raid_setup_cmd)
+                if result.ok:
+                    self.log.info("Hybrid RAID setup result: %s", result.stdout)
 
                 node.start_scylla_server(verify_up=False)
 
@@ -4696,7 +4720,8 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
         :returns: if ebs volumes attached return true
         :rtype: {bool}
         """
-        return self.params.get("data_volume_disk_num") > 0 or self.params.get('gce_pd_standard_disk_size_db') > 0
+        return self.params.get("data_volume_disk_num") > 0 or self.params.get(
+            'gce_pd_standard_disk_size_db') > 0 or self.params.get('gce_pd_ssd_disk_size_db') > 0
 
     def fstrim_scylla_disks_on_nodes(self):
         # if used ebs volumes with aws backend fstrim is not supported
