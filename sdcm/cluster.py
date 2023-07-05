@@ -4429,13 +4429,15 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     self.log.info("mount result: %s", result.stdout)
                 hybrid_raid_setup_cmd = dedent("""
                     umount /var/lib/systemd/coredump /var/lib/scylla
-                    yes | sudo mdadm --create /dev/md1 --level 1 --bitmap=none --raid-devices=2 /dev/md0 --write-mostly /dev/sdb
-                    yes | sudo mkfs.ext4  /dev/md1
-                    mount -t ext4 /dev/md1 /var/lib/systemd/coredump
-                    mount -t ext4 /dev/md1 /var/lib/scylla
+                    # remove from /etc/fstab
+                    /opt/scylladb/scripts/scylla_raid_setup --raiddev /dev/md1 --disks /dev/md0,/dev/sdb --raiddev 1
+                    # yes | sudo mdadm --create /dev/md1 --level 1 --bitmap=none --raid-devices=2 /dev/md0 --write-mostly /dev/sdb
+                    # yes | mkfs.xfs -f -m crc=1 -r extsize=64k -d su=2048k,sw=4096 -L HybridRAID /dev/md1
+                    # mount -o rw,noatime,attr2,discard,inode64,logbufs=8,logbsize=32k,sunit=2048,swidth=4096,noquota /dev/md1 /var/lib/systemd/coredump
+                    # mount -o rw,noatime,attr2,discard,inode64,logbufs=8,logbsize=32k,sunit=2048,swidth=4096,noquota /dev/md1 /var/lib/scylla
                 """)
                 # TODO: add md1 to /etc/fstab
-                result = node.remoter.sudo(cmd=hybrid_raid_setup_cmd)
+                result = node.remoter.run('sudo bash -cxe "%s"' % hybrid_raid_setup_cmd)
                 if result.ok:
                     self.log.info("Hybrid RAID setup result: %s", result.stdout)
 
