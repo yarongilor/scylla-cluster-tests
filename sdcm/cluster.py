@@ -4561,6 +4561,23 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     if result.ok:
                         self.log.info("Scylla_io_setup result: %s", result.stdout)
 
+                if self.params.get('gce_setup_hybrid_raid'):
+                    gce_n_local_ssd_disk_db = self.params.get('gce_n_local_ssd_disk_db')
+                    gce_pd_ssd_disk_size_db = self.params.get('gce_pd_ssd_disk_size_db')
+                    if not (gce_n_local_ssd_disk_db > 0 and gce_pd_ssd_disk_size_db > 0):
+                        msg = f"Hybrid RAID cannot be configured without NVMe ({gce_n_local_ssd_disk_db}) " \
+                              f"and PD-SSD ({gce_pd_ssd_disk_size_db})"
+                        raise ValueError(msg)
+
+                    hybrid_raid_script = "hybrid_raid.py"
+                    target_path = os.path.join("/tmp", hybrid_raid_script)
+                    node.remoter.send_files(src=f"./data_dir/disk_conf/{hybrid_raid_script}", dst=target_path)
+
+                    hybrid_raid_setup_cmd = f"sudo python3 {target_path} --nvme-raid-level 0 --write-mostly-device /dev/sdb"
+                    result = node.remoter.run('sudo bash -cxe "%s"' % hybrid_raid_setup_cmd)
+                    if result.ok:
+                        self.log.info("Hybrid RAID setup result: %s", result.stdout)
+
                 node.start_scylla_server(verify_up=False)
 
             # code to increase java heap memory to scylla-jmx (because of #7609)
