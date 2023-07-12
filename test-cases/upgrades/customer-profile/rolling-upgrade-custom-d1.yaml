@@ -1,7 +1,7 @@
 test_duration: 360
 
 # workloads
-# Customer profiles directory path is: scylla-qa-internal/customer-profile/cust_d
+# Custom profiles directory path is: scylla-qa-internal/custom-profile/cust_d
 
 # To be used in keyspace_entire_test:
 cs_duration: '300m'  # TODO: measure new upgrade test duration and adjust this one.
