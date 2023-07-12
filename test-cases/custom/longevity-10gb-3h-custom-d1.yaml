@@ -11,8 +11,13 @@ gemini_cmd: "gemini -d --duration 3h --warmup 5m --schema scylla-qa-internal/cus
 --replication-strategy \"{'class': 'NetworkTopologyStrategy', 'replication_factor': '3'}\" \
 --oracle-replication-strategy \"{'class': 'NetworkTopologyStrategy', 'replication_factor': '1'}\""
 
-gce_instance_type_db: 'n1-standard-2'
-gce_instance_type_loader: 'e2-standard-2'
+#gce_instance_type_db: 'n1-standard-2'
+#gce_instance_type_loader: 'e2-standard-2'
+
+gce_instance_type_db: 'n1-highmem-2'
+#gce_instance_type_loader: 'e2-standard-2'
+
+
 nemesis_class_name: 'SisyphusMonkey'
 nemesis_seed: '111'
 nemesis_interval: 5
@@ -21,6 +26,8 @@ user_prefix: 'longevity-3h-custom-d1'
 
 gce_n_local_ssd_disk_db: 2
 gce_pd_ssd_disk_size_db: 750
+
+use_preinstalled_scylla: true
 
 stress_image:
   gemini: 'scylladb/hydra-loaders:gemini-v1.8.6'
