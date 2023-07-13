@@ -2,7 +2,7 @@ test_duration: 300
 n_db_nodes: 3
 n_test_oracle_db_nodes: 1
 n_loaders: 1
-n_monitor_nodes: 1
+n_monitor_nodes: 0
 
 gemini_cmd: "gemini -d --duration 3h --warmup 5m --schema scylla-qa-internal/custom_d1/posts_no_map.json \
 -c 50 -m mixed -f --non-interactive --cql-features normal \
