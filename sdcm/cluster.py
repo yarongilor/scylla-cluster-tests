@@ -4411,6 +4411,38 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 node.remoter.sudo(cmd="rm -f /etc/scylla/ami_disabled", ignore_status=True)
 
                 if self.is_additional_data_volume_used():
+                    if self.params.get('gce_setup_hybrid_raid'):
+                        gce_n_local_ssd_disk_db = self.params.get('gce_n_local_ssd_disk_db')
+                        gce_pd_ssd_disk_size_db = self.params.get('gce_pd_ssd_disk_size_db')
+                        if not (gce_n_local_ssd_disk_db > 0 and gce_pd_ssd_disk_size_db > 0):
+                            msg = f"Hybrid RAID cannot be configured without NVMe ({gce_n_local_ssd_disk_db}) " \
+                                  f"and PD-SSD ({gce_pd_ssd_disk_size_db})"
+                            raise ValueError(msg)
+                        # pylint: disable=anomalous-backslash-in-string
+                        hybrid_raid_setup_cmd = dedent("""
+                            mount
+                            blkid
+                            cat /etc/fstab
+                            egrep -v '/var/lib/scylla|/var/lib/systemd/coredump' /etc/fstab | sudo tee -a /etc/fstab_new
+                            mv /etc/fstab_new /etc/fstab
+                            umount /var/lib/systemd/coredump /var/lib/scylla
+                            mdadm --create --verbose --force --run /dev/md10 --level=1 --bitmap=none --raid-devices=2 /dev/sdb /dev/md0
+                            md10_uuid=$(mdadm --detail /dev/md10 | grep UUID | awk '{print $3}')
+                            sudo echo "UUID=$md10_uuid /var/lib/scylla xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
+                            sudo echo "UUID=$md10_uuid /var/lib/systemd/coredump xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
+                            sudo mdadm --assemble scan --uuid=$md10_uuid
+                            sed -i 's/What=\/dev\/disk\/by-uuid\/[^ ]*/What=\/dev\/disk\/by-uuid\/$md10_uuid/' /etc/systemd/system/var-lib-scylla.mount
+                            systemctl restart var-lib-scylla.mount
+                            systemctl restart var-lib-systemd-coredump.mount
+                            # /opt/scylladb/scripts/scylla_raid_setup --raiddev /dev/md1 --disks /dev/md0,/dev/sdb --raiddev 1
+                            # yes | sudo mdadm --create /dev/md1 --level 1 --bitmap=none --raid-devices=2 /dev/md0 --write-mostly /dev/sdb
+                            # yes | mkfs.xfs -f -m crc=1 -r extsize=64k -d su=2048k,sw=4096 -L HybridRAID /dev/md1
+                            # mount -o rw,noatime,attr2,discard,inode64,logbufs=8,logbsize=32k,sunit=2048,swidth=4096,noquota /dev/md1 /var/lib/systemd/coredump
+                            # mount -o rw,noatime,attr2,discard,inode64,logbufs=8,logbsize=32k,sunit=2048,swidth=4096,noquota /dev/md1 /var/lib/scylla
+                        """)
+                        result = node.remoter.run('sudo bash -cxe "%s"' % hybrid_raid_setup_cmd)
+                        if result.ok:
+                            self.log.info("Hybrid RAID setup result: %s", result.stdout)
                     result = node.remoter.sudo(cmd="scylla_io_setup")
                     if result.ok:
                         self.log.info("Scylla_io_setup result: %s", result.stdout)
