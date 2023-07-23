@@ -4426,11 +4426,14 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                             egrep -v '/var/lib/scylla|/var/lib/systemd/coredump' /etc/fstab | sudo tee -a /etc/fstab_new
                             mv /etc/fstab_new /etc/fstab
                             umount /var/lib/systemd/coredump /var/lib/scylla
+                            mdadm --create --verbose --force --run /dev/md0 --level=0 --raid-devices=2 /dev/nvme0n1 /dev/nvme0n2
+                            md0_uuid=$(sudo mdadm --detail /dev/md0 | grep UUID | awk '{print $3}')
+                            mdadm --assemble scan --uuid=$md0_uuid
                             mdadm --create --verbose --force --run /dev/md10 --level=1 --bitmap=none --raid-devices=2 /dev/sdb /dev/md0
-                            md10_uuid=$(mdadm --detail /dev/md10 | grep UUID | awk '{print $3}')
-                            sudo echo "UUID=$md10_uuid /var/lib/scylla xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
-                            sudo echo "UUID=$md10_uuid /var/lib/systemd/coredump xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
-                            sudo mdadm --assemble scan --uuid=$md10_uuid
+                            md10_uuid=$(sudo mdadm --detail /dev/md10 | grep UUID | awk '{print $3}')
+                            echo "UUID=$md10_uuid /var/lib/scylla xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
+                            echo "UUID=$md10_uuid /var/lib/systemd/coredump xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
+                            # mdadm --assemble scan --uuid=$md10_uuid
                             sed -i 's/What=\/dev\/disk\/by-uuid\/[^ ]*/What=\/dev\/disk\/by-uuid\/$md10_uuid/' /etc/systemd/system/var-lib-scylla.mount
                             systemctl restart var-lib-scylla.mount
                             systemctl restart var-lib-systemd-coredump.mount
