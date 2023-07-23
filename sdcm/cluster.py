@@ -4405,6 +4405,15 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
             if self.params.get('prepare_saslauthd'):
                 prepare_and_start_saslauthd_service(node)
 
+            pre_hybrid_raid_setup_cmd = dedent("""
+                mount
+                blkid
+                cat /etc/fstab
+            """)
+            result = node.remoter.run('sudo bash -cxe "%s"' % pre_hybrid_raid_setup_cmd)
+            if result.ok:
+                self.log.info("Pre Hybrid RAID setup result: %s", result.stdout)
+
             if self.node_setup_requires_scylla_restart:
                 node.stop_scylla_server(verify_down=False)
                 node.clean_scylla_data()
@@ -4449,6 +4458,10 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     result = node.remoter.sudo(cmd="scylla_io_setup")
                     if result.ok:
                         self.log.info("Scylla_io_setup result: %s", result.stdout)
+
+                result = node.remoter.run('sudo bash -cxe "%s"' % pre_hybrid_raid_setup_cmd)
+                if result.ok:
+                    self.log.info("Pre Hybrid RAID setup result 2: %s", result.stdout)
 
                 node.start_scylla_server(verify_up=False)
 
