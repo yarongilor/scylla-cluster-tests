@@ -4431,16 +4431,18 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                         msg = f"Hybrid RAID cannot be configured without NVMe ({gce_n_local_ssd_disk_db}) " \
                               f"and PD-SSD ({gce_pd_ssd_disk_size_db})"
                         raise ValueError(msg)
+                    node.stop_scylla_server(verify_down=False)
+
                     # pylint: disable=anomalous-backslash-in-string
                     hybrid_raid_setup_cmd = dedent("""
-                        md0_uuid=$(sudo mdadm --detail /dev/md0 | grep UUID | awk '{print $3}')
-                        mdadm --assemble scan --uuid=$md0_uuid
+                        umount /var/lib/systemd/coredump /var/lib/scylla
                         mdadm --create --verbose --force --run /dev/md10 --level=1 --bitmap=none --raid-devices=2 /dev/sdb /dev/md0
+                        mkfs.xfs -f -m crc=1 -d su=2048k,sw=512 -l version=2 -L HybridRAID /dev/md10
                         md10_uuid=$(sudo blkid /dev/md10 | grep -o 'UUID="[^"]*' | cut -d'"' -f2)
                         echo "UUID=$md10_uuid /var/lib/scylla xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
                         echo "UUID=$md10_uuid /var/lib/systemd/coredump xfs defaults,noatime,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
                         sed -i "s/What=\/dev\/disk\/by-uuid\/[^ ]*/What=\/dev\/disk\/by-uuid\/$md10_uuid/" /etc/systemd/system/var-lib-scylla.mount
-                        mkfs.xfs -f -m crc=1 -d su=2048k,sw=512 -l version=2 -L HybridRAID /dev/md10
+                        systemctl daemon-reload
                         systemctl restart var-lib-scylla.mount
                         systemctl restart var-lib-systemd-coredump.mount
                     """)
