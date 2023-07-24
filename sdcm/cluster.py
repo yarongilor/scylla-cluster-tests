@@ -4399,7 +4399,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 SnitchConfig(node=node, datacenters=self.datacenter).apply()  # pylint: disable=no-member
             node.config_setup(append_scylla_args=self.get_scylla_args())
 
-            self._scylla_post_install(node, install_scylla, nic_devname)
+            # self._scylla_post_install(node, install_scylla, nic_devname)  # TODO: DBG
 
             # prepare and start saslauthd service
             if self.params.get('prepare_saslauthd'):
@@ -4420,11 +4420,13 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 node.remoter.sudo(cmd="rm -f /etc/scylla/ami_disabled", ignore_status=True)
 
                 if self.is_additional_data_volume_used():
+                    return # TODO: DBG
                     result = node.remoter.sudo(cmd="scylla_io_setup")
                     if result.ok:
                         self.log.info("Scylla_io_setup result: %s", result.stdout)
 
                 if self.params.get('gce_setup_hybrid_raid'):
+                    return  # TODO: DBG
                     gce_n_local_ssd_disk_db = self.params.get('gce_n_local_ssd_disk_db')
                     gce_pd_ssd_disk_size_db = self.params.get('gce_pd_ssd_disk_size_db')
                     if not (gce_n_local_ssd_disk_db > 0 and gce_pd_ssd_disk_size_db > 0):
@@ -4454,7 +4456,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                 if result.ok:
                     self.log.info("Pre Hybrid RAID setup result 2: %s", result.stdout)
 
-                node.start_scylla_server(verify_up=False)
+                # node.start_scylla_server(verify_up=False)   # TODO: DBG
 
             # code to increase java heap memory to scylla-jmx (because of #7609)
             if jmx_memory := self.params.get("jmx_heap_memory"):
