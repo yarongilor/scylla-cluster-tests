@@ -24,4 +24,4 @@ gce_setup_hybrid_raid: true
 #stress_image:
 #  gemini: 'scylladb/hydra-loaders:gemini-v1.8.6'
 
-use_preinstalled_scylla: true
+use_preinstalled_scylla: false
