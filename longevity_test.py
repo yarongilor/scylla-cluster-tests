@@ -24,7 +24,6 @@ from cassandra import AlreadyExists, InvalidRequest
 
 from sdcm.tester import ClusterTester
 from sdcm.utils import loader_utils
-from sdcm.utils.table_data import PartitionsValidationAttributes
 from sdcm.utils.operations_thread import ThreadParams
 
 
@@ -107,15 +106,8 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
         self.run_prepare_write_cmd()
 
         # Collect data about partitions and their rows amount
-        if self.validate_partitions:
-            self.log.debug('Save partitions info before reads')
-            self.partitions_attributes = \
-                PartitionsValidationAttributes(table_name=self.table_name,
-                                               primary_key_column=self.primary_key_column,
-                                               partition_range_with_data_validation=self.partition_range_with_data_validation)
-
-            self.partitions_dict_before = self.collect_partitions_info(
-                partitions_attributes=self.partitions_attributes)
+        if self.partitions_attrs and self.partitions_attrs.validate_partitions:
+            self.partitions_attrs.collect_initial_partitions_info()
 
         stress_cmd = self.params.get('stress_cmd')
         self.assemble_and_run_all_stress_cmd(stress_queue, stress_cmd, keyspace_num)
@@ -151,7 +143,8 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
         for stress in stress_queue:
             self.verify_stress_thread(cs_thread_pool=stress)
 
-        self.validate_rows_per_partitions(skip_on_rows_number_limit=False)
+        if self.partitions_attrs and self.partitions_attrs.validate_partitions:
+            self.partitions_attrs.validate_rows_per_partitions(ignore_limit_rows_number=True)
 
     def test_batch_custom_time(self):
         """
