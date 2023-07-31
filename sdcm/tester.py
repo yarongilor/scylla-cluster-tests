@@ -73,7 +73,7 @@ from sdcm.utils.common import format_timestamp, wait_ami_available, update_certi
     download_dir_from_cloud, get_post_behavior_actions, get_testrun_status, download_encrypt_keys, PageFetcher, \
     rows_to_list, make_threads_be_daemonic_by_default, ParallelObject, clear_out_all_exit_hooks, \
     change_default_password
-from sdcm.utils.table_data import PartitionsValidationAttributes, get_partition_keys, TOTAL_ROWS_NUMBER_LIMIT
+from sdcm.utils.table_metadata import PartitionsValidationAttributes, get_partition_keys
 from sdcm.utils.get_username import get_username
 from sdcm.utils.decorators import log_run_info, retrying
 from sdcm.utils.git import get_git_commit_id
@@ -368,9 +368,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if self.params.get("use_ldap"):
             self._init_ldap()
 
-        self._init_data_validation()
-        self.partitions_dict_before = None
-        self.partitions_attributes = None
+        self.partitions_attrs: PartitionsValidationAttributes | None = self._init_data_validation()
         # Cover multi-tenant configuration. Prevent event device double initiate
         start_events_device(log_dir=self.logdir,
                             _registry=getattr(self, "_registry", None) or self.events_processes_registry)
@@ -553,13 +551,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
     def _init_data_validation(self):
         if data_validation := self.params.get('data_validation'):
             data_validation_params = yaml.safe_load(data_validation)
-            self.validate_partitions = data_validation_params.get('validate_partitions')
-            self.table_name = data_validation_params.get('table_name')
-            self.primary_key_column = data_validation_params.get('primary_key_column')
-            self.table_name = data_validation_params.get('table_name')
-            self.partition_range_with_data_validation = data_validation_params.get(
-                'partition_range_with_data_validation')
-            self.max_partitions_in_test_table = data_validation_params.get('max_partitions_in_test_table')
+            return PartitionsValidationAttributes(**data_validation_params)
+        return None
 
     def _init_ldap(self):
         self.params['are_ldap_users_on_scylla'] = False
@@ -2599,42 +2592,40 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         self.log.debug('All rows have been copied from %s to %s', src_table, dest_table)
         return True
 
-    def validate_rows_per_partitions(self, skip_on_rows_number_limit: bool = True):
+    def validate_rows_per_partitions(self, ignore_limit_rows_number: bool = False):
         """
         Validating partition rows-number is the same before and after running a nemesis/stress.
-        The purpose of "skip_on_rows_number_limit" is to avoid a "too heavy" scan in a too often occurrence,
-        e.g. every health check.
-        For example, if rows-per-partition is 10M and there are 50 partitions for validation,
-        It would be too much of an overhead to read 500M rows every time a nemesis is completed and health-check
-        is running. so, by default, it is limited to LIMIT_TOTAL_ROWS_NUMBER.
+        The purpose of "ignore_limit_rows_number" is to avoid a "too heavy" scan in a too often occurrence,
+        e.g. every health check. So a "too heavy" scan will only run twice in a test - after prepare,
+        and at the end of test.
+        For example, if self.limit_rows_number is 600,000 and there are 10M rows-per-partition,
+        only the first 600,000 rows of each partition will be validation during health-checks.
+        By default, there is no limit, only when it is specified in yaml by: data_validation - limit_rows_number.
         """
-        if not (self.validate_partitions and self.partitions_attributes and self.partitions_dict_before):
-            self.log.debug('Skipping validate partitions info')
-            return
+        if attrs := self.partitions_attrs:
+            if attrs.validate_partitions and attrs.partitions_dict_before:
+                self.log.debug('Validate partitions info')
+                partitions_dict_after = self.collect_partitions_info(ignore_limit_rows_number=ignore_limit_rows_number)
+                if partitions_dict_after is not None:
+                    if not ignore_limit_rows_number and attrs.limit_rows_number:
+                        missing_rows = {key: val for key, val in partitions_dict_after.items() if
+                                        val < attrs.limit_rows_number}
+                        assert not missing_rows, f"Found missing rows for partitions: {missing_rows}"
+                    else:
+                        self.assertEqual(attrs.partitions_dict_before,
+                                         partitions_dict_after,
+                                         msg='Row amount in partitions is not same before and after running of nemesis: '
+                                             f' {partitions_dict_after}')
 
-        if skip_on_rows_number_limit:
-            # estimated_total_rows_number represents number-of-partitions * number-of-rows-per-partition
-            # Meaning the total number of estimated rows to be read.
-            estimated_total_rows_number = len(self.partitions_dict_before) * \
-                int(list(self.partitions_dict_before.values())[0])
-            if estimated_total_rows_number > TOTAL_ROWS_NUMBER_LIMIT:
-                self.log.debug(
-                    'The estimated total number of rows (%s) exceeds allowed limit (%s). Skipping validation.',
-                    estimated_total_rows_number, TOTAL_ROWS_NUMBER_LIMIT)
-                return
-        self.log.debug('Validate partitions info')
-        partitions_dict_after = self.collect_partitions_info(partitions_attributes=self.partitions_attributes)
-        if partitions_dict_after is not None:
-            self.assertEqual(self.partitions_dict_before,
-                             partitions_dict_after,
-                             msg='Row amount in partitions is not same before and after running of nemesis')
-
-    def collect_partitions_info(self, partitions_attributes: PartitionsValidationAttributes) -> dict | None:
+    def collect_partitions_info(self, ignore_limit_rows_number: bool = False) -> dict | None:
         # Get and save how many rows in each partition.
-        # It may be used for validation data in the end of test
-        if not (partitions_attributes.table_name or partitions_attributes.primary_key_column):
+        # It may be used for validation data in the end of test.
+        # By default, the count is limited to partitions_attributes.limit_rows_number (if exist),
+        # Unless ignore_limit_rows_number is True.
+        partitions_attrs = self.partitions_attrs
+        if not partitions_attrs:
             TestFrameworkEvent(source=self.__class__.__name__,
-                               message='Can\'t collect partitions data. Missed "table name" or "primary key column" info',
+                               message='Can\'t collect partitions meta-data. Partitions attribues are missing',
                                severity=Severity.ERROR).publish()
             return {}
 
@@ -2643,8 +2634,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0],
                                                         connect_timeout=600) as session:
                 session.default_consistency_level = ConsistencyLevel.QUORUM
-                pk_list = sorted(get_partition_keys(ks_cf=partitions_attributes.table_name, session=session,
-                                                    pk_name=partitions_attributes.primary_key_column))
+                pk_list = sorted(get_partition_keys(ks_cf=partitions_attrs.table_name, session=session,
+                                                    pk_name=partitions_attrs.primary_key_column))
         except Exception as exc:  # pylint: disable=broad-except
             TestFrameworkEvent(source=self.__class__.__name__, message=error_message.format(exc),
                                severity=Severity.ERROR).publish()
@@ -2652,20 +2643,19 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
 
         # Collect data about partitions' rows amount.
         partitions = {}
-        if partitions_attributes.partition_range_with_data_validation:
+        if partitions_attrs.partition_range_with_data_validation:
             # Count existing partitions that intersects with partition_range_with_data_validation
             pk_list = [partition for partition in pk_list if
-                       int(partition) in range(partitions_attributes.partition_start_range,
-                                               partitions_attributes.partition_end_range)]
-        save_into_file_name = partitions_attributes.PARTITIONS_ROWS_BEFORE \
-            if not partitions_attributes.partitions_rows_collected else partitions_attributes.PARTITIONS_ROWS_AFTER
+                       int(partition) in range(partitions_attrs.partition_start_range,
+                                               partitions_attrs.partition_end_range)]
+        save_into_file_name = partitions_attrs.PARTITIONS_ROWS_BEFORE \
+            if not partitions_attrs.partitions_rows_collected else partitions_attrs.PARTITIONS_ROWS_AFTER
         partitions_stats_file = os.path.join(self.logdir, save_into_file_name)
         self.log.debug("%s partition-keys to query are in range: %s - %s", len(pk_list), pk_list[0], pk_list[-1])
         with open(partitions_stats_file, 'a', encoding="utf-8") as stats_file:
             for i in pk_list:
-                count_pk_rows_cmd = f'select count(*) from {partitions_attributes.table_name} where ' \
-                                    f'{partitions_attributes.primary_key_column} = {i}' \
-                                    ' using timeout 5m'
+                count_pk_rows_cmd = self.partitions_attrs.get_count_pk_rows_query(key=i,
+                                                                                  ignore_limit_rows_number=ignore_limit_rows_number)
                 try:
                     with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0],
                                                                 connect_timeout=600) as session:
@@ -2682,8 +2672,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                 partitions[i] = pk_rows_num_result
                 stats_file.write('{i}:{rows}, '.format(i=i, rows=partitions[i]))
         self.log.info('File with partitions row data: {}'.format(partitions_stats_file))
-        if save_into_file_name == partitions_attributes.PARTITIONS_ROWS_BEFORE:
-            partitions_attributes.partitions_rows_collected = True
+        if save_into_file_name == partitions_attrs.PARTITIONS_ROWS_BEFORE:
+            partitions_attrs.partitions_rows_collected = True
         return partitions
 
     def get_tables_id_of_keyspace(self, session, keyspace_name):

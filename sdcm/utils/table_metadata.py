@@ -9,7 +9,7 @@
 #
 # See LICENSE for more details.
 #
-# Copyright (c) 2017 ScyllaDB
+# Copyright (c) 2023 ScyllaDB
 
 # pylint: disable=too-many-lines
 
@@ -19,13 +19,9 @@ import logging
 from typing import List
 
 LOGGER = logging.getLogger(__name__)
-# LIMIT_TOTAL_ROWS_NUMBER is a limit for maximum allowed number of total queried rows.
-# When running a health-check and calling "validate_partitions",
-# it would be skipped, if there is a too-high number of rows to be read.
-TOTAL_ROWS_NUMBER_LIMIT = 600_000
 
 
-class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods
+class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
     """
     A class that gathers all data related to partitions-validation.
     It helps Longevity tests that uses "validate_partitions" to
@@ -34,19 +30,38 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods
     PARTITIONS_ROWS_BEFORE = "partitions_rows_before"
     PARTITIONS_ROWS_AFTER = "partitions_rows_after"
 
-    def __init__(self, table_name, primary_key_column, partition_range_with_data_validation=None):
+    def __init__(self, table_name: str, primary_key_column: str, limit_rows_number: int = 0,  # pylint: disable=too-many-arguments
+                 max_partitions_in_test_table: str | None = None,
+                 partition_range_with_data_validation: str | None = None, validate_partitions: bool = False):
+        """
+        limit_rows_number is a limit for querying rows per partition.
+        When running a health-check and calling "validate_partitions",
+        it would nor read more than this number of rows-per-partition.
+        The default is NO limit_rows_number, marked by '0'.
+        """
         self.table_name = table_name
         self.primary_key_column = primary_key_column
         self.partition_range_with_data_validation = partition_range_with_data_validation
-        self.table_name = table_name
+        self.max_partitions_in_test_table = max_partitions_in_test_table
         self.partitions_rows_collected = False
         self._init_partition_range()
+        self.limit_rows_number = limit_rows_number
+        self.partitions_dict_before = None
+        self.validate_partitions = validate_partitions
 
     def _init_partition_range(self):
         if self.partition_range_with_data_validation:
             partition_range_splitted = self.partition_range_with_data_validation.split('-')
             self.partition_start_range = int(partition_range_splitted[0])
             self.partition_end_range = int(partition_range_splitted[1])
+
+    def get_count_pk_rows_query(self, key: str, ignore_limit_rows_number: bool = False) -> str:
+        limit_query = f' LIMIT {self.limit_rows_number}' if not ignore_limit_rows_number and self.limit_rows_number else ''
+        count_pk_rows_cmd = f'select count(*) from {self.table_name} where ' \
+                            f'{self.primary_key_column} = {key}' \
+                            f'{limit_query}' \
+                            ' using timeout 5m'
+        return count_pk_rows_cmd
 
 
 def get_table_clustering_order(ks_cf: str, ck_name: str, session) -> str:
