@@ -2060,11 +2060,9 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         if 'scylla_bench' not in test_keyspaces:
             raise UnsupportedNemesis("This nemesis can run on scylla_bench test only")
 
-        max_partitions_in_test_table = self.cluster.params.get('max_partitions_in_test_table')
-
-        if not max_partitions_in_test_table:
+        if not self.tester.partitions_attrs.max_partitions_in_test_table:
             raise UnsupportedNemesis(
-                'This nemesis expects mandatory "max_partitions_in_test_table" parameter to be set')
+                'This nemesis expects "max_partitions_in_test_table" sub-parameter of data_validation to be set')
 
     # pylint: disable=too-many-locals
     def choose_partitions_for_delete(self, partitions_amount, ks_cf, with_clustering_key_data=False,
@@ -2079,20 +2077,16 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         if not exclude_partitions:
             exclude_partitions = []
 
-        max_partitions_in_test_table = self.cluster.params.get('max_partitions_in_test_table')
-        partition_range_with_data_validation = self.cluster.params.get('partition_range_with_data_validation')
-
-        if partition_range_with_data_validation and '-' in partition_range_with_data_validation:
-            partition_range_splitted = partition_range_with_data_validation.split('-')
-            start_range = int(partition_range_splitted[0])
-            end_range = int(partition_range_splitted[1])
-            exclude_partitions.extend(i for i in range(start_range, end_range))
+        if partitions_attrs := self.tester.partitions_attrs:
+            if partitions_attrs.partition_range_with_data_validation:
+                exclude_partitions.extend(
+                    i for i in range(partitions_attrs.partition_start_range, partitions_attrs.partition_end_range))
 
         partitions_for_delete = defaultdict(list)
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
             session.default_consistency_level = ConsistencyLevel.ONE
 
-            for partition_key in [i * 2 + 50 for i in range(max_partitions_in_test_table)]:
+            for partition_key in [i * 2 + 50 for i in range(self.tester.partitions_attrs.max_partitions_in_test_table)]:
                 if len(partitions_for_delete) == partitions_amount:
                     break
 
