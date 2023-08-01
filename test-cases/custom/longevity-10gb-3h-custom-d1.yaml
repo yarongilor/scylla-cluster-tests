@@ -22,6 +22,6 @@ gce_n_local_ssd_disk_db: 2
 gce_pd_ssd_disk_size_db: 750
 
 stress_image:
-  gemini: 'scylladb/hydra-loaders:gemini-v1.8.6'
+  gemini: 'scylladb/hydra-loaders:gemini-v1.8.7'
 
 use_preinstalled_scylla: true
