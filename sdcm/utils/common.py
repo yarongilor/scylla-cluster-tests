@@ -54,7 +54,11 @@ from pathlib import Path
 from collections import OrderedDict
 import requests
 import boto3
+<<<<<<< HEAD
 from invoke import UnexpectedExit
+=======
+from cassandra.query import SimpleStatement  # pylint: disable=no-name-in-module
+>>>>>>> 27a7c71bd (fix(get_partition_keys): Switch to a paged query)
 from mypy_boto3_s3 import S3Client, S3ServiceResource
 from mypy_boto3_ec2 import EC2Client, EC2ServiceResource
 from mypy_boto3_ec2.service_resource import Image as EC2Image
