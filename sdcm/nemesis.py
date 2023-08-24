@@ -29,7 +29,7 @@ import traceback
 import json
 import itertools
 from contextlib import ExitStack
-from typing import Any, List, Optional, Tuple, Callable, Dict, Set, Union, Iterable
+from typing import Any, List, Optional, Tuple, Callable, Dict, Set, Union, Iterable, Type
 from functools import wraps, partial, cached_property
 from collections import defaultdict, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor
@@ -107,6 +107,7 @@ from sdcm.utils.common import (get_db_tables, generate_random_string,
                                parse_nodetool_listsnapshots,
                                update_authenticator, ParallelObject,
                                ParallelObjectResult, sleep_for_percent_of_duration, get_views_of_base_table)
+from sdcm.utils.database_query_utils import get_partition_keys
 from sdcm.utils.features import is_tablets_feature_enabled
 from sdcm.utils.quota import configure_quota_on_node_for_scylla_user_context, is_quota_enabled_on_node, enable_quota_on_node, \
     write_data_to_reach_end_of_quota
@@ -227,6 +228,7 @@ class Nemesis(NemesisFlags):
 
     additional_configs: list[str] = None  # Configs required for running nemesis, used in job generation
     additional_params: dict[str, str] = None  # Parameters required for jenkins pipelines, used in job generation
+    stop_start_or_repair: bool = False  # For MV sync testing scenario: either stop-start scylla, or run a repair.
 
     def __init__(self, tester_obj, termination_event, *args, nemesis_selector=None, nemesis_seed=None, **kwargs):
         # *args -  compatible with CategoricalMonkey
@@ -443,6 +445,150 @@ class Nemesis(NemesisFlags):
 
     def _is_it_on_kubernetes(self) -> bool:
         return isinstance(getattr(self.tester, "db_cluster", None), PodCluster)
+
+    # pylint: disable=too-many-arguments,unused-argument
+    def get_list_of_methods_compatible_with_backend(
+            self,
+            disruptive: Optional[bool] = None,
+            run_with_gemini: Optional[bool] = None,
+            networking: Optional[bool] = None,
+            limited: Optional[bool] = None,
+            topology_changes: Optional[bool] = None,
+            schema_changes: Optional[bool] = None,
+            config_changes: Optional[bool] = None,
+            free_tier_set: Optional[bool] = None,
+            manager_operation: Optional[bool] = None,
+            zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
+    ) -> List[str]:
+        return self.get_list_of_methods_by_flags(
+            disruptive=disruptive,
+            run_with_gemini=run_with_gemini,
+            networking=networking,
+            kubernetes=self._is_it_on_kubernetes() or None,
+            limited=limited,
+            topology_changes=topology_changes,
+            schema_changes=schema_changes,
+            config_changes=config_changes,
+            free_tier_set=free_tier_set,
+            manager_operation=manager_operation,
+            zero_node_changes=zero_node_changes,
+            stop_start_or_repair=stop_start_or_repair
+        )
+
+    # pylint: disable=too-many-arguments,unused-argument
+    def get_list_of_methods_by_flags(  # pylint: disable=too-many-locals  # noqa: PLR0913
+            self,
+            disruptive: Optional[bool] = None,
+            run_with_gemini: Optional[bool] = None,
+            networking: Optional[bool] = None,
+            kubernetes: Optional[bool] = None,
+            limited: Optional[bool] = None,
+            topology_changes: Optional[bool] = None,
+            schema_changes: Optional[bool] = None,
+            config_changes: Optional[bool] = None,
+            free_tier_set: Optional[bool] = None,
+            sla: Optional[bool] = None,
+            manager_operation: Optional[bool] = None,
+            zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
+    ) -> List[str]:
+        subclasses_list = self._get_subclasses(
+            disruptive=disruptive,
+            run_with_gemini=run_with_gemini,
+            networking=networking,
+            kubernetes=kubernetes,
+            limited=limited,
+            topology_changes=topology_changes,
+            schema_changes=schema_changes,
+            config_changes=config_changes,
+            free_tier_set=free_tier_set,
+            sla=sla,
+            manager_operation=manager_operation,
+            stop_start_or_repair=stop_start_or_repair,
+        )
+        disrupt_methods_list = []
+        for subclass in subclasses_list:
+            method_name = re.search(
+                r'self\.(?P<method_name>disrupt_[A-Za-z_]+?)\(.*\)', inspect.getsource(subclass), flags=re.MULTILINE)
+            if method_name:
+                disrupt_methods_list.append(method_name.group('method_name'))
+        self.log.debug("Gathered subclass methods: {}".format(disrupt_methods_list))
+        return disrupt_methods_list
+
+    def get_list_of_subclasses_by_property_name(self, list_of_properties_to_include):
+        flags = {flag_name.strip('!'): not flag_name.startswith(
+            '!') for flag_name in list_of_properties_to_include}
+        subclasses_list = self._get_subclasses(**flags)
+        return subclasses_list
+
+    def get_list_of_disrupt_methods(self, subclasses_list, export_properties=False):
+        disrupt_methods_objects_list = []
+        disrupt_methods_names_list = []
+        nemesis_classes = []
+        all_methods_with_properties = []
+        for subclass in subclasses_list:
+            properties_list = []
+            per_method_properties = {}
+            method_name = re.search(
+                r'self\.(?P<method_name>disrupt_[0-9A-Za-z_]+?)\(.*\)', inspect.getsource(subclass), flags=re.MULTILINE)
+            for attribute in subclass.__dict__.keys():
+                if attribute[:2] != '__':
+                    value = getattr(subclass, attribute)
+                    if not callable(value):
+                        properties_list.append(f"{attribute} = {value}")
+            if method_name:
+                method_name_str = method_name.group('method_name')
+                disrupt_methods_names_list.append(method_name_str)
+                nemesis_classes.append(subclass.__name__)
+                if export_properties:
+                    per_method_properties[method_name_str] = properties_list
+                    all_methods_with_properties.append(per_method_properties)
+                    all_methods_with_properties = sorted(all_methods_with_properties, key=lambda d: list(d.keys()))
+        nemesis_classes.sort()
+        self.log.debug("list of matching disrupions: {}".format(disrupt_methods_names_list))
+        for _ in disrupt_methods_names_list:
+            disrupt_methods_objects_list = [attr[1] for attr in inspect.getmembers(self) if
+                                            attr[0] in disrupt_methods_names_list and callable(attr[1])]
+        return disrupt_methods_objects_list, all_methods_with_properties, nemesis_classes
+
+    @classmethod
+    def _get_subclasses(cls, **flags) -> List[Type['Nemesis']]:
+        tmp = Nemesis.__subclasses__()
+        subclasses = []
+        while tmp:
+            for nemesis in tmp.copy():
+                subclasses.append(nemesis)
+                tmp.remove(nemesis)
+                tmp.extend(nemesis.__subclasses__())
+        return cls._get_subclasses_from_list(subclasses, **flags)
+
+    @staticmethod
+    def _get_subclasses_from_list(
+            list_of_nemesis: List[Type['Nemesis']],
+            **flags) -> List[Type['Nemesis']]:
+        """
+        It apply 'and' logic to filter,
+            if any value in the filter does not match what nemeses have,
+            nemeses will be filtered out.
+        """
+        nemesis_subclasses = []
+        nemesis_to_exclude = COMPLEX_NEMESIS
+        for nemesis in list_of_nemesis:
+            if nemesis in nemesis_to_exclude:
+                continue
+            matches = True
+            for filter_name, filter_value in flags.items():
+                if filter_value is None:
+                    continue
+                attr = getattr(nemesis, filter_name, False)
+                if attr != filter_value:
+                    matches = False
+                    break
+            if not matches:
+                continue
+            nemesis_subclasses.append(nemesis)
+        return nemesis_subclasses
 
     def __str__(self):
         try:
@@ -2365,7 +2511,7 @@ class Nemesis(NemesisFlags):
             base_table_name = result.one().base_table_name
             base_ks_cf = '.'.join([keyspace, base_table_name])
             partition_key_name = \
-            get_column_names(session=session, ks=keyspace, cf=base_table_name, is_primary_key=True)[0]
+                get_column_names(session=session, ks=keyspace, cf=base_table_name, is_primary_key=True)[0]
             pk_list = get_partition_keys(ks_cf=base_ks_cf, session=session, pk_name=partition_key_name,
                                          limit=random.randint(100, 5000))
         num_of_partitions = len(pk_list)
@@ -2375,23 +2521,45 @@ class Nemesis(NemesisFlags):
         if not num_of_partitions:
             raise UnsupportedNemesis('Not found partitions for delete. Nemesis can not run')
 
-        delete_queries = select_queries = []
-        for partition_key in pk_list:
-            delete_queries.append(f"delete from {base_ks_cf} where pk = {partition_key}")
-            select_queries.append(f"select * from {mv_ks_cf} where pk = {partition_key} ALLOW FILTERING")
+        free_nodes = [node for node in self.cluster.nodes if not node.running_nemesis]
+        if not free_nodes:
+            raise UnsupportedNemesis("Not enough free nodes for nemesis. Skipping.")
+        cql_query_executor_node = random.choice(free_nodes)
+        self.set_current_running_nemesis(cql_query_executor_node)
+        try:
+            self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
 
-        with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-            for cmd in delete_queries:
-                session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM), timeout=300)
+            with self.cluster.cql_connection_patient(cql_query_executor_node, connect_timeout=300) as session:
+                session.default_consistency_level = ConsistencyLevel.QUORUM
+                delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
+                for partition_key in pk_list:
+                    session.execute(delete_query, [partition_key])
 
-        random_sleep = random.randint(5,200)
-        self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
-        time.sleep(random_sleep)
+            random_sleep = random.randint(5, 1700)
+            self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
+            time.sleep(random_sleep)
+            self.target_node.start_scylla_server(verify_up=True, verify_down=False)
+            self.log.debug("Execute a complete repair for target node")
+            self.repair_nodetool_repair()
 
-        with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-            for cmd in select_queries:
-                res = session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM))
-                assert not res, f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({cmd}): {res.all()}"
+            with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+                session.default_consistency_level = ConsistencyLevel.QUORUM
+                mv_query = session.prepare(
+                    f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
+                base_table_query = session.prepare(
+                    f"select * from {base_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
+                for partition_key in pk_list:
+                    mv_res = session.execute(mv_query, [partition_key], timeout=300)
+                    base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
+                    if (mv_res and not base_table_res) or (not mv_res and base_table_res):
+                        msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({mv_query} - {mv_res} ), " \
+                              f"and ({base_table_query} - {base_table_res} ): "
+                        self.log.error(msg)
+                        res_all = mv_res.all() if mv_res else base_table_res.all()
+                        details = f" {partition_key}): {res_all}"
+                        self.log.error(details)
+        finally:
+            self.unset_current_running_nemesis(cql_query_executor_node)
 
     def disrupt_mv_sync_tombstones(self):
         """
@@ -2419,7 +2587,7 @@ class Nemesis(NemesisFlags):
             for cmd in delete_queries:
                 session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM), timeout=3600)
 
-        random_sleep = random.randint(5,200)
+        random_sleep = random.randint(5, 200)
         self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
         time.sleep(random_sleep)
 
@@ -2427,7 +2595,6 @@ class Nemesis(NemesisFlags):
             for cmd in select_queries:
                 res = session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM))
                 assert not res, f"[{ks_cf_mv}] Unexpected partition data that wasn't deleted for ({cmd}): {res}"
-
 
     def disrupt_delete_10_full_partitions(self):
         """
@@ -5805,6 +5972,7 @@ class StopWaitStartMonkey(Nemesis):
     kubernetes = True
     limited = True
     zero_node_changes = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -6042,6 +6210,7 @@ class DeleteByPartitionsMonkey(Nemesis):
     def disrupt(self):
         self.disrupt_delete_10_full_partitions()
 
+
 class MvSyncTombstonesMonkey(Nemesis):
     disruptive = False
     kubernetes = True
@@ -6278,6 +6447,8 @@ class MgmtRepair(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    supports_high_disk_utilization = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.log.info('disrupt_mgmt_repair_cli Nemesis begin')
