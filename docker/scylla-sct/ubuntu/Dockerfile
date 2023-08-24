@@ -12,7 +12,7 @@ SHELL ["/bin/bash", "-c"]
 #    00hzYw5m.HyAY
 #
 # For more details see man page for useradd(8)
-RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https gnupg2 software-properties-common curl ssh
+RUN apt-get update && apt-get -o Acquire::BrokenProxy="true" -o Acquire::http::No-Cache="true" -o Acquire::http::Pipeline-Depth="0" install -y --no-install-recommends apt-transport-https gnupg2 software-properties-common curl ssh
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
 RUN add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 
