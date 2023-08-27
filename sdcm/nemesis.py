@@ -30,7 +30,7 @@ import json
 import itertools
 import enum
 from contextlib import ExitStack, contextmanager
-from typing import Any, List, Optional, Tuple, Callable, Dict, Set, Union, Iterable
+from typing import Any, List, Optional, Tuple, Callable, Dict, Set, Union, Iterable, Type
 from functools import wraps, partial, cached_property
 from collections import defaultdict, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor
@@ -105,6 +105,7 @@ from sdcm.utils.common import (get_db_tables, generate_random_string,
                                parse_nodetool_listsnapshots,
                                update_authenticator, ParallelObject,
                                ParallelObjectResult, sleep_for_percent_of_duration, get_views_of_base_table)
+from sdcm.utils.database_query_utils import get_partition_keys
 from sdcm.utils.features import is_tablets_feature_enabled
 from sdcm.utils.quota import configure_quota_on_node_for_scylla_user_context, is_quota_enabled_on_node, enable_quota_on_node, \
     write_data_to_reach_end_of_quota
@@ -230,6 +231,7 @@ class Nemesis:
     manager_operation: bool = False  # flag that signals that the nemesis uses scylla manager
     delete_rows: bool = False  # A flag denotes a nemesis deletes partitions/rows, generating tombstones.
     zero_node_changes: bool = False
+    stop_start_or_repair: bool = False  # For MV sync testing scenario: either stop-start scylla, or run a repair.
 
     def __init__(self, tester_obj, termination_event, *args, nemesis_selector=None, nemesis_seed=None, **kwargs):
         # *args -  compatible with CategoricalMonkey
@@ -503,6 +505,150 @@ class Nemesis:
 
     def _is_it_on_kubernetes(self) -> bool:
         return isinstance(getattr(self.tester, "db_cluster", None), PodCluster)
+
+    # pylint: disable=too-many-arguments,unused-argument
+    def get_list_of_methods_compatible_with_backend(
+            self,
+            disruptive: Optional[bool] = None,
+            run_with_gemini: Optional[bool] = None,
+            networking: Optional[bool] = None,
+            limited: Optional[bool] = None,
+            topology_changes: Optional[bool] = None,
+            schema_changes: Optional[bool] = None,
+            config_changes: Optional[bool] = None,
+            free_tier_set: Optional[bool] = None,
+            manager_operation: Optional[bool] = None,
+            zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
+    ) -> List[str]:
+        return self.get_list_of_methods_by_flags(
+            disruptive=disruptive,
+            run_with_gemini=run_with_gemini,
+            networking=networking,
+            kubernetes=self._is_it_on_kubernetes() or None,
+            limited=limited,
+            topology_changes=topology_changes,
+            schema_changes=schema_changes,
+            config_changes=config_changes,
+            free_tier_set=free_tier_set,
+            manager_operation=manager_operation,
+            zero_node_changes=zero_node_changes,
+            stop_start_or_repair=stop_start_or_repair
+        )
+
+    # pylint: disable=too-many-arguments,unused-argument
+    def get_list_of_methods_by_flags(  # pylint: disable=too-many-locals  # noqa: PLR0913
+            self,
+            disruptive: Optional[bool] = None,
+            run_with_gemini: Optional[bool] = None,
+            networking: Optional[bool] = None,
+            kubernetes: Optional[bool] = None,
+            limited: Optional[bool] = None,
+            topology_changes: Optional[bool] = None,
+            schema_changes: Optional[bool] = None,
+            config_changes: Optional[bool] = None,
+            free_tier_set: Optional[bool] = None,
+            sla: Optional[bool] = None,
+            manager_operation: Optional[bool] = None,
+            zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
+    ) -> List[str]:
+        subclasses_list = self._get_subclasses(
+            disruptive=disruptive,
+            run_with_gemini=run_with_gemini,
+            networking=networking,
+            kubernetes=kubernetes,
+            limited=limited,
+            topology_changes=topology_changes,
+            schema_changes=schema_changes,
+            config_changes=config_changes,
+            free_tier_set=free_tier_set,
+            sla=sla,
+            manager_operation=manager_operation,
+            stop_start_or_repair=stop_start_or_repair,
+        )
+        disrupt_methods_list = []
+        for subclass in subclasses_list:
+            method_name = re.search(
+                r'self\.(?P<method_name>disrupt_[A-Za-z_]+?)\(.*\)', inspect.getsource(subclass), flags=re.MULTILINE)
+            if method_name:
+                disrupt_methods_list.append(method_name.group('method_name'))
+        self.log.debug("Gathered subclass methods: {}".format(disrupt_methods_list))
+        return disrupt_methods_list
+
+    def get_list_of_subclasses_by_property_name(self, list_of_properties_to_include):
+        flags = {flag_name.strip('!'): not flag_name.startswith(
+            '!') for flag_name in list_of_properties_to_include}
+        subclasses_list = self._get_subclasses(**flags)
+        return subclasses_list
+
+    def get_list_of_disrupt_methods(self, subclasses_list, export_properties=False):
+        disrupt_methods_objects_list = []
+        disrupt_methods_names_list = []
+        nemesis_classes = []
+        all_methods_with_properties = []
+        for subclass in subclasses_list:
+            properties_list = []
+            per_method_properties = {}
+            method_name = re.search(
+                r'self\.(?P<method_name>disrupt_[0-9A-Za-z_]+?)\(.*\)', inspect.getsource(subclass), flags=re.MULTILINE)
+            for attribute in subclass.__dict__.keys():
+                if attribute[:2] != '__':
+                    value = getattr(subclass, attribute)
+                    if not callable(value):
+                        properties_list.append(f"{attribute} = {value}")
+            if method_name:
+                method_name_str = method_name.group('method_name')
+                disrupt_methods_names_list.append(method_name_str)
+                nemesis_classes.append(subclass.__name__)
+                if export_properties:
+                    per_method_properties[method_name_str] = properties_list
+                    all_methods_with_properties.append(per_method_properties)
+                    all_methods_with_properties = sorted(all_methods_with_properties, key=lambda d: list(d.keys()))
+        nemesis_classes.sort()
+        self.log.debug("list of matching disrupions: {}".format(disrupt_methods_names_list))
+        for _ in disrupt_methods_names_list:
+            disrupt_methods_objects_list = [attr[1] for attr in inspect.getmembers(self) if
+                                            attr[0] in disrupt_methods_names_list and callable(attr[1])]
+        return disrupt_methods_objects_list, all_methods_with_properties, nemesis_classes
+
+    @classmethod
+    def _get_subclasses(cls, **flags) -> List[Type['Nemesis']]:
+        tmp = Nemesis.__subclasses__()
+        subclasses = []
+        while tmp:
+            for nemesis in tmp.copy():
+                subclasses.append(nemesis)
+                tmp.remove(nemesis)
+                tmp.extend(nemesis.__subclasses__())
+        return cls._get_subclasses_from_list(subclasses, **flags)
+
+    @staticmethod
+    def _get_subclasses_from_list(
+            list_of_nemesis: List[Type['Nemesis']],
+            **flags) -> List[Type['Nemesis']]:
+        """
+        It apply 'and' logic to filter,
+            if any value in the filter does not match what nemeses have,
+            nemeses will be filtered out.
+        """
+        nemesis_subclasses = []
+        nemesis_to_exclude = COMPLEX_NEMESIS
+        for nemesis in list_of_nemesis:
+            if nemesis in nemesis_to_exclude:
+                continue
+            matches = True
+            for filter_name, filter_value in flags.items():
+                if filter_value is None:
+                    continue
+                attr = getattr(nemesis, filter_name, False)
+                if attr != filter_value:
+                    matches = False
+                    break
+            if not matches:
+                continue
+            nemesis_subclasses.append(nemesis)
+        return nemesis_subclasses
 
     def __str__(self):
         try:
@@ -5767,6 +5913,7 @@ class StopWaitStartMonkey(Nemesis):
     kubernetes = True
     limited = True
     zero_node_changes = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -5904,6 +6051,7 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
