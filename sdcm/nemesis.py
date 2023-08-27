@@ -224,6 +224,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     manager_operation: bool = False  # flag that signals that the nemesis uses scylla manager
     delete_rows: bool = False  # A flag denotes a nemesis deletes partitions/rows, generating tombstones.
     zero_node_changes: bool = False
+    stop_start_or_repair: bool = False  # For MV sync testing scenario: either stop-start scylla, or run a repair.
 
     def __init__(self, tester_obj, termination_event, *args, nemesis_selector=None, **kwargs):  # pylint: disable=unused-argument
         for name, member in inspect.getmembers(self, lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
@@ -512,6 +513,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             free_tier_set: Optional[bool] = None,
             manager_operation: Optional[bool] = None,
             zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
     ) -> List[str]:
         return self.get_list_of_methods_by_flags(
             disruptive=disruptive,
@@ -524,7 +526,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             config_changes=config_changes,
             free_tier_set=free_tier_set,
             manager_operation=manager_operation,
-            zero_node_changes=zero_node_changes
+            zero_node_changes=zero_node_changes,
+            stop_start_or_repair=stop_start_or_repair
         )
 
     def _is_it_on_kubernetes(self) -> bool:
@@ -545,6 +548,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             sla: Optional[bool] = None,
             manager_operation: Optional[bool] = None,
             zero_node_changes: Optional[bool] = None,
+            stop_start_or_repair: Optional[bool] = None,
     ) -> List[str]:
         subclasses_list = self._get_subclasses(
             disruptive=disruptive,
@@ -558,6 +562,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             free_tier_set=free_tier_set,
             sla=sla,
             manager_operation=manager_operation,
+            stop_start_or_repair=stop_start_or_repair,
         )
         disrupt_methods_list = []
         for subclass in subclasses_list:
@@ -5697,6 +5702,7 @@ class StopWaitStartMonkey(Nemesis):
     kubernetes = True
     limited = True
     zero_node_changes = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
@@ -5826,6 +5832,7 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
