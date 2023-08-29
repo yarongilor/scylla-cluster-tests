@@ -2295,6 +2295,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         #     select_queries.append(f"select * from {mv_ks_cf} where {partition_key_name} = '{partition_key}' ALLOW FILTERING")
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+            session.default_consistency_level = ConsistencyLevel.QUORUM
             delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
             for partition_key in pk_list:
                 session.execute(delete_query, [partition_key])
@@ -2305,6 +2306,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         time.sleep(random_sleep)
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+            session.default_consistency_level = ConsistencyLevel.QUORUM
             mv_query = session.prepare(
                 f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
             base_table_query = session.prepare(
