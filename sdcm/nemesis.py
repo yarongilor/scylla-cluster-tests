@@ -5289,7 +5289,6 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
-    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
@@ -5772,6 +5771,7 @@ class MgmtRepair(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.log.info('disrupt_mgmt_repair_cli Nemesis begin')
