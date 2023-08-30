@@ -2295,6 +2295,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         #     select_queries.append(f"select * from {mv_ks_cf} where {partition_key_name} = '{partition_key}' ALLOW FILTERING")
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+            session.default_consistency_level = ConsistencyLevel.QUORUM
             delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
             for partition_key in pk_list:
                 session.execute(delete_query, [partition_key])
@@ -2305,6 +2306,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         time.sleep(random_sleep)
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+            session.default_consistency_level = ConsistencyLevel.QUORUM
             mv_query = session.prepare(
                 f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
             base_table_query = session.prepare(
@@ -2312,10 +2314,25 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             for partition_key in pk_list:
                 mv_res = session.execute(mv_query, [partition_key], timeout=300)
                 base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
-                if mv_res:  # Either deletion is not updated in MV or it was rewritten by background load to base table.
-                    assert base_table_res, (
-                        f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({query},"
-                        f" {partition_key}): {mv_res.all()}")
+                if (mv_res and not base_table_res) or (not mv_res and base_table_res):
+                    msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({query},"
+                    f" {partition_key}): {mv_res.all()}"
+                    self.log.error(msg)
+
+                    for node in self.tester.db_cluster.nodes:
+                        self.log.debug("Stopping node: %s", node.name)
+                        node.stop_scylla_server(verify_up=False, verify_down=True)
+
+                    for node in self.tester.db_cluster.nodes:
+                        self.log.debug("Starting node: %s", node.name)
+                        node.start_scylla_server(verify_up=True, verify_down=True)
+                        with self.cluster.cql_connection_patient(node, connect_timeout=300) as session:
+                            mv_res = session.execute(mv_query, [partition_key], timeout=300)
+                            base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
+                            self.log.debug("Results from node %s:", node.name)
+                            self.log.debug("MV result: %s", mv_res)
+                            self.log.debug("Base table result: %s", base_table_res)
+                        node.stop_scylla_server(verify_up=True, verify_down=True)
 
     def disrupt_mv_sync_tombstones(self):
         """
@@ -5287,7 +5304,6 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
-    stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
@@ -5770,6 +5786,7 @@ class MgmtRepair(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    stop_start_or_repair = True
 
     def disrupt(self):
         self.log.info('disrupt_mgmt_repair_cli Nemesis begin')
