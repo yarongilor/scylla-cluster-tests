@@ -17,12 +17,15 @@ from __future__ import absolute_import, annotations
 
 import logging
 import os
+import sys
 from typing import List
 
 from cassandra import ConsistencyLevel
 
 from sdcm.sct_events import Severity
 from sdcm.sct_events.system import TestFrameworkEvent
+from sdcm.utils.common import PageFetcher
+from sdcm.utils.decorators import retrying
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,11 +113,9 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods,
                 try:
                     with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0],
                                                                 connect_timeout=600) as session:
-                        pk_rows_num_query_result = self.tester.fetch_all_rows(session=session, default_fetch_size=3000,
-                                                                              statement=count_pk_rows_cmd, retries=1,
-                                                                              timeout=600,
-                                                                              raise_on_exceeded=True,
-                                                                              verbose=False)
+                        pk_rows_num_query_result = fetch_all_rows(session=session, default_fetch_size=3000,
+                                                                  statement=count_pk_rows_cmd, retries=1, timeout=600,
+                                                                  raise_on_exceeded=True, verbose=False)
                         pk_rows_num_result = pk_rows_num_query_result[0].count
                 except Exception as exc:  # pylint: disable=broad-except
                     TestFrameworkEvent(source=self.__class__.__name__, message=error_message.format(exc),
@@ -189,6 +190,32 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = No
     cmd = f'select distinct {pk_name} from {ks_cf}'
     if limit:
         cmd += f' limit {limit}'
-    cql_result = session.execute(cmd)
-    pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
+    rows_result = fetch_all_rows(session=session, default_fetch_size=1000, statement=cmd)
+    pks_list = [getattr(row, pk_name) for row in rows_result]
     return pks_list
+
+
+def fetch_all_rows(session, default_fetch_size, statement, retries: int = 4, timeout: int = None,  # pylint: disable=too-many-arguments
+                   raise_on_exceeded: bool = False, verbose=True):
+    """
+    ******* Caution *******
+    All data from table will be read to the memory
+    BE SURE that the builder has enough memory and your dataset will be less then 2Gb.
+    """
+    if verbose:
+        LOGGER.debug("Fetch all rows by statement: %s", statement)
+    session.default_fetch_size = default_fetch_size
+    session.default_consistency_level = ConsistencyLevel.QUORUM
+
+    @retrying(n=retries, sleep_time=5, message='Fetch all rows', raise_on_exceeded=raise_on_exceeded)
+    def _fetch_rows() -> list:
+        result = session.execute_async(statement)
+        fetcher = PageFetcher(result).request_all() if not timeout else \
+            PageFetcher(result).request_all(timeout=timeout)
+        return fetcher.all_data()
+
+    current_rows = _fetch_rows()
+    if verbose and current_rows:
+        dataset_size = sum(sys.getsizeof(e) for e in current_rows[0]) * len(current_rows)
+        LOGGER.debug("Size of fetched rows: %s bytes", dataset_size)
+    return current_rows

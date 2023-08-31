@@ -28,7 +28,6 @@ from uuid import uuid4
 from functools import wraps, cached_property, cache
 import threading
 import signal
-import sys
 import json
 
 import botocore
@@ -71,10 +70,9 @@ from sdcm.utils.aws_utils import init_monitoring_info_from_params, get_ec2_netwo
     get_common_params, init_db_info_from_params, ec2_ami_get_root_device_name
 from sdcm.utils.ci_tools import get_job_name, get_job_url
 from sdcm.utils.common import format_timestamp, wait_ami_available, update_certificates, \
-    download_dir_from_cloud, get_post_behavior_actions, get_testrun_status, download_encrypt_keys, PageFetcher, \
-    rows_to_list, make_threads_be_daemonic_by_default, ParallelObject, clear_out_all_exit_hooks, \
-    change_default_password
-from sdcm.utils.table_metadata import PartitionsValidationAttributes
+    download_dir_from_cloud, get_post_behavior_actions, get_testrun_status, download_encrypt_keys, rows_to_list, \
+    make_threads_be_daemonic_by_default, ParallelObject, clear_out_all_exit_hooks, change_default_password
+from sdcm.utils.database_query_utils import PartitionsValidationAttributes, fetch_all_rows
 from sdcm.utils.get_username import get_username
 from sdcm.utils.decorators import log_run_info, retrying
 from sdcm.utils.git import get_git_commit_id
@@ -2533,31 +2531,6 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
                 return True
             return False
 
-    def fetch_all_rows(self, session, default_fetch_size, statement, retries: int = 4, timeout: int = None,
-                       raise_on_exceeded: bool = False, verbose=True):
-        """
-        ******* Caution *******
-        All data from table will be read to the memory
-        BE SURE that the builder has enough memory and your dataset will be less then 2Gb.
-        """
-        if verbose:
-            self.log.debug("Fetch all rows by statement: %s", statement)
-        session.default_fetch_size = default_fetch_size
-        session.default_consistency_level = ConsistencyLevel.QUORUM
-
-        @retrying(n=retries, sleep_time=5, message='Fetch all rows', raise_on_exceeded=raise_on_exceeded)
-        def _fetch_rows() -> list:
-            result = session.execute_async(statement)
-            fetcher = PageFetcher(result).request_all() if not timeout else \
-                PageFetcher(result).request_all(timeout=timeout)
-            return fetcher.all_data()
-
-        current_rows = _fetch_rows()
-        if verbose and current_rows:
-            dataset_size = sum(sys.getsizeof(e) for e in current_rows[0]) * len(current_rows)
-            self.log.debug("Size of fetched rows: %s bytes", dataset_size)
-        return current_rows
-
     def copy_data_between_tables(self, node, src_keyspace, src_table, dest_keyspace,
                                  # pylint: disable=too-many-arguments,too-many-locals
                                  dest_table, columns_list=None):
@@ -2576,7 +2549,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
             columns = result.column_names
 
             # Fetch all rows from view / table
-            source_table_rows = self.fetch_all_rows(session=session, default_fetch_size=5000, statement=statement)
+            source_table_rows = fetch_all_rows(session=session, default_fetch_size=5000, statement=statement)
             if not source_table_rows:
                 self.log.error("Can't copy data from %s. Fetch all rows failed, see error above", src_table)
                 return False
