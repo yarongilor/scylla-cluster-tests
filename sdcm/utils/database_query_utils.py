@@ -52,7 +52,7 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods,
         self.table_name = table_name
         self.primary_key_column = primary_key_column
         self.partition_range_with_data_validation = partition_range_with_data_validation
-        self.max_partitions_in_test_table = max_partitions_in_test_table
+        self.max_partitions_in_test_table = int(max_partitions_in_test_table) if max_partitions_in_test_table else None
         self.partitions_rows_collected = False
         self._init_partition_range()
         self.limit_rows_number = limit_rows_number
