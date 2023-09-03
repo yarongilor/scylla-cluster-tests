@@ -1,4 +1,4 @@
-test_duration: 6480
+test_duration: 1580
 
 max_partitions_in_test_table: 1000
 partition_range_with_data_validation: 0-250
@@ -71,11 +71,11 @@ gce_instance_type_loader: 'e2-standard-4'
 gce_n_local_ssd_disk_db: 24
 instance_type_loader: 'c5n.4xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'DecommissionStreamingErrMonkey'
 nemesis_seed: '016'
-nemesis_interval: 30
+nemesis_interval: 5
 
-user_prefix: 'longevity-large-partitions-200k-pks-4d'
+user_prefix: 'decommission-timeout-200k-pks-4d'
 
 space_node_threshold: 644245094
 
