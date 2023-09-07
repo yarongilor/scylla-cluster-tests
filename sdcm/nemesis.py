@@ -2563,7 +2563,7 @@ class Nemesis:
                 session.execute(delete_query, [partition_key])
                 # session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM), timeout=300)
 
-        random_sleep = random.randint(200, 1200)
+        random_sleep = random.randint(5, 1400)
         self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
         time.sleep(random_sleep)
         self.target_node.start_scylla_server(verify_up=True, verify_down=False)
