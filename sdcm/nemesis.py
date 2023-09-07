@@ -2287,12 +2287,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         if not num_of_partitions:
             raise UnsupportedNemesis('Not found partitions for delete. Nemesis can not run')
 
-        # delete_queries = select_queries = []
-        # delete_query = f"delete from {base_ks_cf} where {partition_key_name} = ?"
-        # select_query = f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m"
-        # for partition_key in pk_list:
-        #     delete_queries.append(f"delete from {base_ks_cf} where {partition_key_name} = '{partition_key}'")
-        #     select_queries.append(f"select * from {mv_ks_cf} where {partition_key_name} = '{partition_key}' ALLOW FILTERING")
+        self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
             session.default_consistency_level = ConsistencyLevel.QUORUM
@@ -2301,9 +2296,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 session.execute(delete_query, [partition_key])
                 # session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM), timeout=300)
 
-        random_sleep = random.randint(5, 200)
+        random_sleep = random.randint(200, 1200)
         self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
         time.sleep(random_sleep)
+        self.target_node.start_scylla_server(verify_up=True, verify_down=False)
+        self.log.debug("Execute a complete repair for target node")
+        self.repair_nodetool_repair()
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
             session.default_consistency_level = ConsistencyLevel.QUORUM
