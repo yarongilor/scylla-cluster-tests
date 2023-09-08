@@ -2294,9 +2294,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
             for partition_key in pk_list:
                 session.execute(delete_query, [partition_key])
-                # session.execute(SimpleStatement(cmd, consistency_level=ConsistencyLevel.QUORUM), timeout=300)
 
-        random_sleep = random.randint(5, 1400)
+        random_sleep = random.randint(5, 1700)
         self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
         time.sleep(random_sleep)
         self.target_node.start_scylla_server(verify_up=True, verify_down=False)
@@ -2313,24 +2312,12 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 mv_res = session.execute(mv_query, [partition_key], timeout=300)
                 base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
                 if (mv_res and not base_table_res) or (not mv_res and base_table_res):
-                    msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({query},"
-                    f" {partition_key}): {mv_res.all()}"
+                    msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({mv_query} - {mv_res} ), " \
+                          f"and ({base_table_query} - {base_table_res} ): "
                     self.log.error(msg)
-
-                    for node in self.tester.db_cluster.nodes:
-                        self.log.debug("Stopping node: %s", node.name)
-                        node.stop_scylla_server(verify_up=False, verify_down=True)
-
-                    for node in self.tester.db_cluster.nodes:
-                        self.log.debug("Starting node: %s", node.name)
-                        node.start_scylla_server(verify_up=True, verify_down=True)
-                        with self.cluster.cql_connection_patient(node, connect_timeout=300) as session:
-                            mv_res = session.execute(mv_query, [partition_key], timeout=300)
-                            base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
-                            self.log.debug("Results from node %s:", node.name)
-                            self.log.debug("MV result: %s", mv_res)
-                            self.log.debug("Base table result: %s", base_table_res)
-                        node.stop_scylla_server(verify_up=True, verify_down=True)
+                    res_all = mv_res.all() if mv_res else base_table_res.all()
+                    details = f" {partition_key}): {res_all}"
+                    self.log.error(details)
 
     def disrupt_mv_sync_tombstones(self):
         """

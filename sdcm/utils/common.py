@@ -3029,7 +3029,7 @@ def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = No
     cmd = f'select distinct {pk_name} from {ks_cf}'
     if limit:
         cmd += f' limit {limit}'
-    cql_result = session.execute(SimpleStatement(cmd, fetch_size=200))
+    cql_result = session.execute(SimpleStatement(cmd, fetch_size=5000))
     pks_list = [getattr(row, pk_name) for row in cql_result.current_rows]
     return pks_list
 
