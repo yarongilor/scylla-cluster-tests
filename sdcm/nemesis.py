@@ -2287,37 +2287,45 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         if not num_of_partitions:
             raise UnsupportedNemesis('Not found partitions for delete. Nemesis can not run')
 
-        self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
+        free_nodes = [node for node in self.cluster.nodes if not node.running_nemesis]
+        if not free_nodes:
+            raise UnsupportedNemesis("Not enough free nodes for nemesis. Skipping.")
+        cql_query_executor_node = random.choice(free_nodes)
+        self.set_current_running_nemesis(cql_query_executor_node)
+        try:
+            self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
 
-        with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-            session.default_consistency_level = ConsistencyLevel.QUORUM
-            delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
-            for partition_key in pk_list:
-                session.execute(delete_query, [partition_key])
+            with self.cluster.cql_connection_patient(cql_query_executor_node, connect_timeout=300) as session:
+                session.default_consistency_level = ConsistencyLevel.QUORUM
+                delete_query = session.prepare(f"delete from {base_ks_cf} where {partition_key_name} = ?")
+                for partition_key in pk_list:
+                    session.execute(delete_query, [partition_key])
 
-        random_sleep = random.randint(5, 1700)
-        self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
-        time.sleep(random_sleep)
-        self.target_node.start_scylla_server(verify_up=True, verify_down=False)
-        self.log.debug("Execute a complete repair for target node")
-        self.repair_nodetool_repair()
+            random_sleep = random.randint(5, 1700)
+            self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
+            time.sleep(random_sleep)
+            self.target_node.start_scylla_server(verify_up=True, verify_down=False)
+            self.log.debug("Execute a complete repair for target node")
+            self.repair_nodetool_repair()
 
-        with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-            session.default_consistency_level = ConsistencyLevel.QUORUM
-            mv_query = session.prepare(
-                f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
-            base_table_query = session.prepare(
-                f"select * from {base_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
-            for partition_key in pk_list:
-                mv_res = session.execute(mv_query, [partition_key], timeout=300)
-                base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
-                if (mv_res and not base_table_res) or (not mv_res and base_table_res):
-                    msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({mv_query} - {mv_res} ), " \
-                          f"and ({base_table_query} - {base_table_res} ): "
-                    self.log.error(msg)
-                    res_all = mv_res.all() if mv_res else base_table_res.all()
-                    details = f" {partition_key}): {res_all}"
-                    self.log.error(details)
+            with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
+                session.default_consistency_level = ConsistencyLevel.QUORUM
+                mv_query = session.prepare(
+                    f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
+                base_table_query = session.prepare(
+                    f"select * from {base_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
+                for partition_key in pk_list:
+                    mv_res = session.execute(mv_query, [partition_key], timeout=300)
+                    base_table_res = session.execute(base_table_query, [partition_key], timeout=300)
+                    if (mv_res and not base_table_res) or (not mv_res and base_table_res):
+                        msg = f"[{mv_ks_cf}] Unexpected partition data that wasn't deleted for ({mv_query} - {mv_res} ), " \
+                              f"and ({base_table_query} - {base_table_res} ): "
+                        self.log.error(msg)
+                        res_all = mv_res.all() if mv_res else base_table_res.all()
+                        details = f" {partition_key}): {res_all}"
+                        self.log.error(details)
+        finally:
+            self.unset_current_running_nemesis(cql_query_executor_node)
 
     def disrupt_mv_sync_tombstones(self):
         """
