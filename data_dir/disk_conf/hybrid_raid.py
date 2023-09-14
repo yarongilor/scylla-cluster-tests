@@ -15,6 +15,7 @@ import re
 import subprocess
 import time
 from typing import List, NamedTuple, Optional
+# pylint: disable=all
 
 CIRCUIT_BREAK_FILE = '/scylla_circuit_break'
 
@@ -96,15 +97,15 @@ def get_ioperf(nvme_dev: Optional[str], ssd_dev: Optional[str]) -> IOPerf:
 
 
 def update_io_properties(ioperf: IOPerf, duplex: bool) -> None:
-    logging.info(f'Updating io_properties.yaml ({ioperf})')
-    with open('/etc/scylla.d/io_properties.yaml', 'w') as handle:
+    logging.info('Updating io_properties.yaml (%s)', ioperf)
+    with open('/etc/scylla.d/io_properties.yaml', 'w', encoding="utf-8") as handle:
         handle.write('disks:\n  - mountpoint: /var/lib/scylla\n')
         handle.write(f'    read_iops: {ioperf.read_iops}\n')
         handle.write(f'    read_bandwidth: {ioperf.read_bandwidth}\n')
         handle.write(f'    write_iops: {ioperf.write_iops}\n')
         handle.write(f'    write_bandwidth: {ioperf.write_bandwidth}\n')
         if duplex:
-            handle.write(f'    duplex: true\n')
+            handle.write('    duplex: true\n')
 
 
 def run(command: List[str]) -> str:
@@ -132,7 +133,7 @@ def replace_line(filename: str, regex: str, replacement: Optional[str]) -> None:
 
 def md_device(level: Optional[str] = None, device_member: Optional[str] = None) -> Optional[List[str]]:
     """Get the md device with the given raid level (or an inactive device if level is None)"""
-    with open('/proc/mdstat', 'r') as handle:
+    with open('/proc/mdstat', 'r', encoding="utf-8") as handle:
         data = handle.read()
     if device_member is not None:
         device_member_component = device_member.split('/')[-1]
@@ -157,7 +158,7 @@ def md_device_info(element: str) -> dict:
 
 def md_device_details(level: Optional[str] = None, device: Optional[str] = None) -> Optional[dict]:
     """Get the md device with the given raid level (or an inactive device if level is None)"""
-    with open('/proc/mdstat', 'r') as handle:
+    with open('/proc/mdstat', 'r', encoding="utf-8") as handle:
         data = handle.read()
 
     personalities = None
@@ -272,9 +273,9 @@ def ensure_device_striped(nvmes: List[str], raid_level: str) -> str:
     if mdev is None:
         logging.info(f'Creating md device in raid{level} using {nvmes}')
         command = (
-                ['mdadm', '--create', '/dev/md0', f'--level={level}', '-c1024', f'--raid-devices={len(nvmes)}']
-                + flags
-                + nvmes
+            ['mdadm', '--create', '/dev/md0', f'--level={level}', '-c1024', f'--raid-devices={len(nvmes)}']
+            + flags
+            + nvmes
         )
         run(command)
         mdev = md_device(level)
@@ -730,7 +731,7 @@ def main() -> None:
     if nvmes:
         # get the max speed as currently set
         # it's going to be artifically raised so it'll need to be restored
-        with open('/proc/sys/dev/raid/speed_limit_max', 'r') as handle:
+        with open('/proc/sys/dev/raid/speed_limit_max', 'r', encoding="utf-8") as handle:
             speed_limit_max = handle.readline().rstrip()
 
         device_striped = ensure_device_striped(nvmes, args.nvme_raid_level)
@@ -757,7 +758,7 @@ def main() -> None:
         apply_striped_speed_limit(device_filesystem, args.nvme_raid_level)
 
         # restore the max speed #
-        with open('/proc/sys/dev/raid/speed_limit_max', 'w') as handle:
+        with open('/proc/sys/dev/raid/speed_limit_max', 'w', encoding="utf-8") as handle:
             handle.write(speed_limit_max)
     else:
         device_filesystem = pdssd_device
