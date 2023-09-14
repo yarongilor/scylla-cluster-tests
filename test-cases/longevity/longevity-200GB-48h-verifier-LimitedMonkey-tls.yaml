@@ -12,13 +12,11 @@ n_monitor_nodes: 1
 instance_type_db: 'i3.4xlarge'
 azure_instance_type_db: 'Standard_L16s_v3'
 
-nemesis_class_name: 'SisyphusMonkey'
-nemesis_selector: ['limited']
-nemesis_seed: '003'
-nemesis_interval: 30
+nemesis_class_name: 'NodeToolCleanupMonkey'
+nemesis_interval: 5
 nemesis_during_prepare: false
 
-user_prefix: 'longevity-200gb-48h-verify-limited-tls'
+user_prefix: 'nodetool-cleanup-5-2'
 
 space_node_threshold: 644245094
 

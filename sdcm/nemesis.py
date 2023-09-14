@@ -4795,6 +4795,7 @@ class NodeToolCleanupMonkey(Nemesis):
     limited = True
 
     def disrupt(self):
+        self.disrupt_nodetool_decommission()
         self.disrupt_nodetool_cleanup()
 
 
