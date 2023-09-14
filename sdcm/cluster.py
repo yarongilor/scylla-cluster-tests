@@ -4574,9 +4574,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     node.remoter.send_files(src=f"./data_dir/disk_conf/{hybrid_raid_script}", dst=target_path)
 
                     hybrid_raid_setup_cmd = f"sudo python3 {target_path} --nvme-raid-level 0 --write-mostly-device /dev/sdb"
-                    result = node.remoter.run('sudo bash -cxe "%s"' % hybrid_raid_setup_cmd)
-                    if result.ok:
-                        self.log.info("Hybrid RAID setup result: %s", result.stdout)
+                    node.remoter.run('sudo bash -cxe "%s"' % hybrid_raid_setup_cmd, timeout=7200)
 
                 node.start_scylla_server(verify_up=False)
 
