@@ -2309,7 +2309,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             self.repair_nodetool_repair()
 
             with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-                session.default_consistency_level = ConsistencyLevel.QUORUM
+                session.default_consistency_level = ConsistencyLevel.ONE
                 mv_query = session.prepare(
                     f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
                 base_table_query = session.prepare(
@@ -2322,7 +2322,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                               f"and ({base_table_query} - {base_table_res} ): "
                         self.log.error(msg)
                         res_all = mv_res.all() if mv_res else base_table_res.all()
-                        details = f" {partition_key}): {res_all}"
+                        details = f"Partition Key ({partition_key_name}): {partition_key} : {res_all}"
                         self.log.error(details)
         finally:
             self.unset_current_running_nemesis(cql_query_executor_node)
