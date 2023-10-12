@@ -108,7 +108,9 @@ def update_io_properties(ioperf: IOPerf, duplex: bool) -> None:
             handle.write('    duplex: true\n')
 
 
-def run(command: List[str]) -> str:
+def run(command: List[str], as_sudo: bool = True) -> str:
+    if as_sudo:
+        command.insert(0, "sudo")
     proc = subprocess.run(command, stdout=subprocess.PIPE, check=True)
     return proc.stdout.decode('utf-8')
 
@@ -401,6 +403,9 @@ def ensure_device_mirrored(nvme: str, ssd: str, ignore_array_state: bool = False
                 )
     else:
         # RAID1 does not exist, create it with PD as first device
+        logging.info(f'Un-mounting Scylla mount points')
+        umount_cmd = "sudo umount /var/lib/scylla /var/lib/systemd/coredump"
+        run_shell(umount_cmd)
         logging.info(f'Creating md device mirroring {nvme} and {ssd}')
         command = [
             'mdadm',
