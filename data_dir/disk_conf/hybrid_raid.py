@@ -403,9 +403,6 @@ def ensure_device_mirrored(nvme: str, ssd: str, ignore_array_state: bool = False
                 )
     else:
         # RAID1 does not exist, create it with PD as first device
-        logging.info(f'Un-mounting Scylla mount points')
-        umount_cmd = "sudo umount /var/lib/scylla /var/lib/systemd/coredump"
-        run_shell(umount_cmd)
         logging.info(f'Creating md device mirroring {nvme} and {ssd}')
         command = [
             'mdadm',
@@ -578,12 +575,7 @@ def ensure_mount(uuid: str) -> None:
             or scylla_fstab['options'] != ['defaults', 'noatime', 'nofail']
     ):
         # unmount scylla mount points first
-        scylla_mount = _mount_info('/proc/self/mounts', '/var/lib/scylla')
-        if scylla_mount is not None:
-            run(['systemctl', 'stop', 'var-lib-scylla.mount'])
-            coredump_mount = _mount_info('/proc/self/mounts', '/var/lib/systemd/coredump')
-            if coredump_mount is not None and coredump_mount['device'] == scylla_mount['device']:
-                run(['umount', '/var/lib/systemd/coredump'])
+        unmount_scylla()
 
         # insert/update fstab with changes
         fstab = f'UUID={uuid} /var/lib/scylla xfs defaults,noatime,nofail 0 0'
@@ -705,6 +697,15 @@ def disable_nic_and_disks_configuration():
         logging.error(f"Error updating configuration: {e}")
 
 
+def unmount_scylla():
+    scylla_mount = _mount_info('/proc/self/mounts', '/var/lib/scylla')
+    if scylla_mount is not None:
+        run(['systemctl', 'stop', 'var-lib-scylla.mount'])
+        coredump_mount = _mount_info('/proc/self/mounts', '/var/lib/systemd/coredump')
+        if coredump_mount is not None and coredump_mount['device'] == scylla_mount['device']:
+            run(['umount', '/var/lib/systemd/coredump'])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--nvme-raid-level', default='0', choices=['0', '5'], help='NVMe raid level')
@@ -742,6 +743,7 @@ def main() -> None:
         device_striped = ensure_device_striped(nvmes, args.nvme_raid_level)
         ioperf = get_ioperf(device_striped, None)
 
+        unmount_scylla()
         device_filesystem = None
         if args.write_mostly_device is not None:
             # if specified on the command line options, this will override the environment variable: PREFLIGHT_DEVICE_PDSSD
