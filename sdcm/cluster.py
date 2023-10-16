@@ -4423,6 +4423,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                               f"and PD-SSD ({gce_pd_ssd_disk_size_db})"
                         raise ValueError(msg)
 
+                    raise Exception('Aborting before hybrid_raid.py')
                     hybrid_raid_script = "hybrid_raid.py"
                     target_path = os.path.join("/tmp", hybrid_raid_script)
                     node.remoter.send_files(src=f"./data_dir/disk_conf/{hybrid_raid_script}", dst=target_path)
