@@ -4572,7 +4572,7 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
                     # The script to configure a hybrid RAID is named "hybrid_raid.py" and located on the private repository.
                     hybrid_raid_script = "hybrid_raid.py"
                     target_path = os.path.join("/tmp", hybrid_raid_script)
-                    node.remoter.send_files(src=f"./scylla-qa-internal/custom_d1/{hybrid_raid_script}", dst=target_path)
+                    node.remoter.send_files(src=f"scylla-qa-internal/custom_d1/{hybrid_raid_script}", dst=target_path)
 
                     # /dev/sdb is the additional SSD that is used for creting RAID-1 along with the other NVMEs (RAID-0)
                     hybrid_raid_setup_cmd = f"sudo python3 {target_path} --nvme-raid-level 0 --write-mostly-device /dev/sdb"
