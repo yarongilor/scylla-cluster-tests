@@ -1,10 +1,10 @@
-test_duration: 5000
+test_duration: 720
 prepare_write_cmd: ["cassandra-stress write cl=QUORUM n=100000000 -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=100 -pop seq=1..100000000"]
 
-stress_cmd: ["cassandra-stress mixed cl=QUORUM duration=4320m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native  -rate threads=100 -pop seq=1..100000000 -log interval=5",
+stress_cmd: ["cassandra-stress mixed cl=QUORUM duration=600m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native  -rate threads=100 -pop seq=1..100000000 -log interval=5",
              "cassandra-stress user profile=/tmp/cs_mv_profile.yaml ops'(insert=3,read1=1,read2=1,read3=1)' cl=QUORUM duration=4320m -mode cql3 native -rate threads=20"]
 
-stress_read_cmd: ["cassandra-stress read cl=QUORUM duration=4320m -mode cql3 native  -rate threads=50 -pop seq=1..100000000 -log interval=5"]
+stress_read_cmd: ["cassandra-stress read cl=QUORUM duration=600m -mode cql3 native  -rate threads=50 -pop seq=1..100000000 -log interval=5"]
 
 run_fullscan: ['{"mode": "table_and_aggregate", "ks_cf": "keyspace1.standard1", "interval": 60}']
 availability_zone: 'a,b,c'
@@ -16,7 +16,7 @@ instance_type_db: 'i4i.4xlarge'
 # Seems the c5.xlarge type is small for this load - I receive OOM on 2 loaders
 instance_type_loader: 'c5.2xlarge'
 
-nemesis_class_name: 'SisyphusMonkey'
+nemesis_class_name: 'RestartThenRepairNodeMonkey'
 nemesis_seed: '027'
 nemesis_interval: 5
 nemesis_add_node_cnt: 3
