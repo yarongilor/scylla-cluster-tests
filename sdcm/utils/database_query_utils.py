@@ -195,15 +195,22 @@ def is_system_keyspace(keyspace: str) -> bool:
     return keyspace.startswith(system_keyspace_prefixes)
 
 
-def get_max_replication_factor(session) -> (int, str):
+def get_keyspaces_by_rf(session, replication_factor: int) -> dict:
     """
-     returns the user keyspace with the highest replication-factor value.
+    Returns a dictionary where the keys are keyspaces and the values are lists of data centers
+    that have the specified replication factor.
+
+    Example:
+        For a replication_factor of 3, the output might be:
+        {
+            "keyspace1": ["dc1", "dc3"],
+            "scylla_bench": ["dc1"]
+        }
     """
     query = "SELECT keyspace_name, replication FROM system_schema.keyspaces"
     cql_result = session.execute(query)
 
-    max_replication_factor = 0
-    keyspace_with_max_rf = "no-keyspace-found"
+    matching_keyspaces = {}
 
     for row in cql_result.current_rows:
         keyspace_name = row.keyspace_name
@@ -214,21 +221,21 @@ def get_max_replication_factor(session) -> (int, str):
         replication = row.replication
 
         if 'SimpleStrategy' in replication['class']:
-            replication_factor = int(replication['replication_factor'])
-            if replication_factor > max_replication_factor:
-                max_replication_factor = replication_factor
-                keyspace_with_max_rf = keyspace_name
-        elif 'NetworkTopologyStrategy' in replication['class']:
+            continue  # Skip keyspace using SimpleStrategy
+
+        if 'NetworkTopologyStrategy' in replication['class']:
+            datacenters = []
             for datacenter, factor in replication.items():
                 if datacenter != 'class':
-                    replication_factor = int(factor)
-                    if replication_factor > max_replication_factor:
-                        max_replication_factor = replication_factor
-                        keyspace_with_max_rf = keyspace_name
+                    rf = int(factor)
+                    if rf == replication_factor:
+                        datacenters.append(datacenter)
+            if datacenters:
+                matching_keyspaces[keyspace_name] = datacenters
         else:
             LOGGER.warning("Unexpected replication strategy found: %s", replication['class'])
 
-    return max_replication_factor, keyspace_with_max_rf
+    return matching_keyspaces
 
 
 def get_partition_keys(ks_cf: str, session, pk_name: str = 'pk', limit: int = None) -> List[str]:

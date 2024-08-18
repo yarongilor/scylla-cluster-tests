@@ -102,7 +102,7 @@ from sdcm.utils.common import (get_db_tables, generate_random_string,
                                parse_nodetool_listsnapshots,
                                update_authenticator, ParallelObject,
                                ParallelObjectResult, sleep_for_percent_of_duration, get_views_of_base_table)
-from sdcm.utils.database_query_utils import get_max_replication_factor
+from sdcm.utils.database_query_utils import get_keyspaces_by_rf
 from sdcm.utils.features import is_tablets_feature_enabled
 from sdcm.utils.quota import configure_quota_on_node_for_scylla_user_context, is_quota_enabled_on_node, enable_quota_on_node, \
     write_data_to_reach_end_of_quota
@@ -1301,17 +1301,43 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         self.cluster.terminate_node(node)
         self.monitoring_set.reconfigure_scylla_monitoring()
 
+    def _alter_keyspace_rf(self, keyspace: str, dcs: list, replication_factor: int, session):
+        # Alter the replication factor for keyspace list of data-centers.
+        # Example usage: self._alter_keyspace_rf("keyspace1", ["dc1", "dc3"], 2, session)
+
+        dcs_altered_rf = ", ".join([f"'{dc}':{replication_factor}" for dc in dcs])
+        alter_ks_cmd = f"ALTER KEYSPACE {keyspace} WITH REPLICATION = {{ 'class' : 'NetworkTopologyStrategy', {dcs_altered_rf} }}"
+        try:
+            message = f"Altering {keyspace} RF with: {alter_ks_cmd}"
+            self.log.debug(message)
+            session.execute(alter_ks_cmd)
+        except Exception as error:
+            self.log.error(f"{message} Failed with: {error}")
+            raise error
+
     def _nodetool_decommission(self, add_node=True):
         if self._is_it_on_kubernetes():
             self.set_target_node(allow_only_last_node_in_rack=True)
         # If any keyspace RF equals to number-of-cluster-nodes, where tablets are in use,
-        # then a decommission is not supported and has to be skipped.
+        # then a decommission is not supported.
+        # In this case, the user has to decrease the replication-factor of any such keyspace first.
         with self.cluster.cql_connection_patient(self.target_node) as session:
-            if is_tablets_feature_enabled(session):
-                max_rf, keyspace = get_max_replication_factor(session)
-                if max_rf == len(self.cluster.nodes):
-                    raise UnsupportedNemesis(
-                        f"A decommission is not supported with tablets where a keyspace RF equals number-of-nodes: {keyspace}, {max_rf}")
+            if tablets_enabled := is_tablets_feature_enabled(session):
+                nodes_num = len(self.cluster.nodes)
+                # Ensure that nodes_num is 2 or greater
+                if nodes_num > 1:
+                    if keyspaces_to_alter := get_keyspaces_by_rf(session=session, replication_factor=nodes_num):
+                        self.log.debug(
+                            f"Found the following keyspaces with replication factor to decrease: {keyspaces_to_alter}")
+                        try:
+                            for keyspace, dcs in keyspaces_to_alter.items():
+                                self._alter_keyspace_rf(keyspace, dcs, nodes_num-1, session)
+                        except Exception as error:
+                            self.log.debug(f"Reverting keyspaces replication factor to original value..")
+                            for keyspace, dcs in keyspaces_to_alter.items():
+                                self._alter_keyspace_rf(keyspace, dcs, nodes_num, session)
+                            self.log.error(f"Decommission cannot run due to an error ({error}), aborting nemesis")
+                            raise error
 
         target_is_seed = self.target_node.is_seed
         self.cluster.decommission(self.target_node)
@@ -1326,6 +1352,11 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             if new_node.is_seed != target_is_seed:
                 new_node.set_seed_flag(target_is_seed)
                 self.cluster.update_seed_provider()
+            if tablets_enabled and keyspaces_to_alter:
+                self.log.debug(f"Reverting keyspaces replication factor to original value..")
+                with self.cluster.cql_connection_patient(self.cluster.nodes[0]) as session:
+                    for keyspace, dcs in keyspaces_to_alter.items():
+                        self._alter_keyspace_rf(keyspace, dcs, nodes_num, session)
             try:
                 self.nodetool_cleanup_on_all_nodes_parallel()
             finally:
