@@ -32,6 +32,7 @@
 - disrupt_decommission_streaming_err:
   - disruptive = True
   - topology_changes = True
+  - tablets_decommission = True
 - disrupt_delete_10_full_partitions:
   - disruptive = False
   - kubernetes = True
@@ -103,6 +104,7 @@
 - disrupt_load_and_stream:
   - disruptive = False
   - run_with_gemini = False
+  - tablets_decommission = True
   - kubernetes = True
   - limited = True
 - disrupt_major_compaction:
@@ -186,6 +188,7 @@
   - disruptive = True
   - limited = True
   - topology_changes = True
+  - tablets_decommission = True
 - disrupt_nodetool_drain:
   - disruptive = True
   - kubernetes = True
@@ -213,12 +216,14 @@
 - disrupt_nodetool_seed_decommission:
   - disruptive = True
   - topology_changes = True
+  - tablets_decommission = True
 - disrupt_rebuild_streaming_err:
   - disruptive = True
 - disrupt_remove_node_then_add_node:
   - disruptive = True
   - kubernetes = False
   - topology_changes = True
+  - tablets_decommission = True
 - disrupt_remove_service_level_while_load:
   - disruptive = True
   - sla = True

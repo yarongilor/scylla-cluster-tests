@@ -5491,6 +5491,7 @@ class DecommissionMonkey(Nemesis):
     disruptive = True
     limited = True
     topology_changes = True
+    tablets_decommission = True
 
     def disrupt(self):
         self.disrupt_nodetool_decommission()
@@ -5499,6 +5500,7 @@ class DecommissionMonkey(Nemesis):
 class DecommissionSeedNode(Nemesis):
     disruptive = True
     topology_changes = True
+    tablets_decommission = True
 
     def disrupt(self):
         self.disrupt_nodetool_seed_decommission()
@@ -5537,6 +5539,7 @@ class LoadAndStreamMonkey(Nemesis):
     run_with_gemini = False
     kubernetes = True
     limited = True
+    tablets_decommission = True
 
     def disrupt(self):
         self.disrupt_load_and_stream()
@@ -6376,6 +6379,7 @@ class TerminateAndRemoveNodeMonkey(Nemesis):
     # While on kubernetes we put it all on scylla-operator
     kubernetes = False
     topology_changes = True
+    tablets_decommission = True
 
     def disrupt(self):
         self.disrupt_remove_node_then_add_node()
@@ -6422,6 +6426,7 @@ class DecommissionStreamingErrMonkey(Nemesis):
 class RebuildStreamingErrMonkey(Nemesis):
 
     disruptive = True
+    tablets_decommission = True
 
     def disrupt(self):
         self.disrupt_rebuild_streaming_err()
