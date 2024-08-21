@@ -7,6 +7,8 @@ from typing import Callable, Dict, TYPE_CHECKING
 
 from sdcm.utils.cql_utils import cql_quote_if_needed
 from sdcm.utils.database_query_utils import is_system_keyspace, LOGGER
+from sdcm.utils.tablets.common import wait_for_tablets_balanced
+
 if TYPE_CHECKING:
     from sdcm.cluster import BaseNode
 
@@ -188,12 +190,15 @@ class DataCenterTopologyRfChange:
             LOGGER.error(f"{message} Failed with: {error}")
             raise error
 
-    def revert_to_original_keyspaces_rf(self):
-        LOGGER.debug(f"Reverting keyspaces replication factor to original value of {self.datacenter}..")
-        with self.cluster.cql_connection_patient(self.cluster.nodes[0]) as session:
-            for keyspace in self.decreased_rf_keyspaces:
-                self._alter_keyspace_rf(keyspace=keyspace, replication_factor=self.original_nodes_number,
-                                        session=session)
+    def revert_to_original_keyspaces_rf(self, wait_node_balance: 'BaseNode' = None):
+        if self.decreased_rf_keyspaces:
+            LOGGER.debug(f"Reverting keyspaces replication factor to original value of {self.datacenter}..")
+            with self.cluster.cql_connection_patient(self.cluster.nodes[0]) as session:
+                for keyspace in self.decreased_rf_keyspaces:
+                    self._alter_keyspace_rf(keyspace=keyspace, replication_factor=self.original_nodes_number,
+                                            session=session)
+        if wait_node_balance:
+            wait_for_tablets_balanced(wait_node_balance)
 
     def decrease_keyspaces_rf(self):
         node = self.target_node
