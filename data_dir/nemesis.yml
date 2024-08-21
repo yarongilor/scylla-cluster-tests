@@ -223,7 +223,6 @@
   - disruptive = True
   - kubernetes = False
   - topology_changes = True
-  - tablets_decommission = True
 - disrupt_remove_service_level_while_load:
   - disruptive = True
   - sla = True
