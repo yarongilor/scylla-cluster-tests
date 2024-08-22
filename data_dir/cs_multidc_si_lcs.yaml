@@ -18,9 +18,9 @@ table_definition: |
       PRIMARY KEY (key)
     )  WITH compaction = {'class': 'LeveledCompactionStrategy'};
 
-extra_definitions:
-  - CREATE INDEX IF NOT EXISTS sec_ind_c2 ON keyspace1.standard2 (c2)
-  - CREATE INDEX IF NOT EXISTS sec_ind_c3 ON keyspace1.standard2 (c3)
+#extra_definitions:
+#  - CREATE INDEX IF NOT EXISTS sec_ind_c2 ON keyspace1.standard2 (c2)
+#  - CREATE INDEX IF NOT EXISTS sec_ind_c3 ON keyspace1.standard2 (c3)
 
 ### Column Distribution Specifications ###
 columnspec:
@@ -55,9 +55,9 @@ queries:
   read:
     cql: select * from keyspace1.standard2 where key=?
     fields: samerow
-  si_read1:
-    cql: select * from keyspace1.standard2 where c2 = ? LIMIT 1
-    fields: samerow
-  si_read2:
-    cql: select * from keyspace1.standard2 where c3 = ? LIMIT 1
-    fields: samerow
+#  si_read1:
+#    cql: select * from keyspace1.standard2 where c2 = ? LIMIT 1
+#    fields: samerow
+#  si_read2:
+#    cql: select * from keyspace1.standard2 where c3 = ? LIMIT 1
+#    fields: samerow
