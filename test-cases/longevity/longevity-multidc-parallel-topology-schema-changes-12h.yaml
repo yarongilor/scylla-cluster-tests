@@ -3,7 +3,7 @@ test_duration: 120
 prepare_write_cmd:  ["cassandra-stress write cl=LOCAL_QUORUM n=1097152 -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=8 -pop seq=1..1097152 -col 'n=FIXED(5) size=FIXED(16)' -log interval=5",
                      "cassandra-stress user profile=/tmp/cs_multidc_si_lcs.yaml ops'(insert=1)' cl=LOCAL_QUORUM n=150000 -mode cql3 native -rate threads=4 -log interval=5"
                     ]
-
+# No user profile
 stress_cmd: ["cassandra-stress read  cl=LOCAL_QUORUM duration=70m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3) compaction(strategy=SizeTieredCompactionStrategy)' -mode cql3 native -rate threads=4 -pop 'dist=uniform(1..1097152)' -col 'n=FIXED(5) size=FIXED(16)' -log interval=5",
              "cassandra-stress user profile=/tmp/cs_multidc_si_lcs.yaml ops'(insert=1,read=1)' cl=LOCAL_QUORUM duration=70m -mode cql3 native -rate threads=4 -log interval=5",
 #             "cassandra-stress user profile=/tmp/cs_multidc_si_lcs.yaml ops'(insert=1,read=1,si_read1=1,si_read2=1)' cl=LOCAL_QUORUM duration=70m -mode cql3 native -rate threads=4 -log interval=5",
