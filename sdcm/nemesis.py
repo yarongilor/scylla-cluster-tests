@@ -1318,7 +1318,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                 new_node.set_seed_flag(target_is_seed)
                 self.cluster.update_seed_provider()
             if dc_topology_rf_change:
-                dc_topology_rf_change.revert_to_original_keyspaces_rf(wait_for_tablets_balanced=new_node)
+                dc_topology_rf_change.revert_to_original_keyspaces_rf(wait_node_balance=new_node)
             try:
                 self.nodetool_cleanup_on_all_nodes_parallel()
             finally:
@@ -1528,8 +1528,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
         new_node = self.add_new_nodes(count=1, rack=node.rack)[0]
         if dc_topology_rf_change:
-            dc_topology_rf_change.revert_to_original_keyspaces_rf()
-            wait_for_tablets_balanced(new_node)
+            dc_topology_rf_change.revert_to_original_keyspaces_rf(wait_node_balance=new_node)
         self.unset_current_running_nemesis(new_node)
 
         # NOTE: wait for all other neighbour pods become ready
