@@ -10,8 +10,8 @@ stress_cmd: ["cassandra-stress read  cl=LOCAL_QUORUM duration=70m -schema 'repli
              ]
 
 availability_zone: 'a'
-n_db_nodes: '3 3'
-n_loaders: '1 1'
+n_db_nodes: 3
+n_loaders: 2
 region_aware_loader: true
 n_monitor_nodes: 1
 
@@ -27,4 +27,4 @@ nemesis_during_prepare: false
 
 round_robin: true
 
-user_prefix: 'parallel-topology-schema-changes-multidc-12h'
+user_prefix: 'tablets-decommission-12h'
