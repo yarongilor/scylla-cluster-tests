@@ -187,10 +187,11 @@ class FullscanOperationBase:
     def fetch_result_pages(self, result, read_pages):
         self.log.debug('Will fetch up to %s result pages..', read_pages)
         pages = 0
-        while result.has_more_pages and pages <= read_pages:
+        fetching_all = read_pages == 0
+        while result.has_more_pages and (fetching_all or pages < read_pages):
             result.fetch_next_page()
-            if read_pages > 0:
-                pages += 1
+            pages += 1
+            self.log.debug(f"[page {pages}] Has more pages: {result.has_more_pages}")
 
 
 class FullScanOperation(FullscanOperationBase):
