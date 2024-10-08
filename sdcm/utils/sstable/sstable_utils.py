@@ -41,6 +41,24 @@ class SstableUtils:
         self.log.debug('Got %s tombstones for %s', tombstones_num, self.ks_cf)
         return tombstones_num
 
+    def get_cf_dir_files(self):
+        """
+        Get the list of files in the Scylla column family (CF) directory.
+        """
+        files = []
+        ks_cf_path = self.ks_cf.replace('.', '/')
+        ls_cmd = f"ls -1 /var/lib/scylla/data/{ks_cf_path}-*/* 2>/dev/null"
+
+        files_res = self.db_node.remoter.sudo(ls_cmd, verbose=True, ignore_status=True)
+        if files_res.stderr:
+            self.log.debug('Failed to get files for %s. Error: %s', self.ks_cf, files_res.stderr)
+        else:
+            files = files_res.stdout.splitlines()  # Split output into lines.
+
+        self.log.debug('Got %s files', len(files))
+        self.log.debug(f"The files are: {files}")
+        return files
+
     def get_sstables(self, from_minutes_ago: int = 0):
         selected_sstables = []
         ks_cf_path = self.ks_cf.replace('.', '/')
