@@ -4,7 +4,7 @@ prepare_write_cmd: "scylla-bench -workload=sequential -mode=write -replication-f
 stress_cmd:        "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=1000 -clustering-row-count=5555 -partition-offset=51 -clustering-row-size=1884 -concurrency=20 -connection-count=20 -consistency-level=quorum -rows-per-request=10 -timeout=30s -validate-data"
 stress_read_cmd:   "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -clustering-row-count=5555                        -clustering-row-size=1884 -concurrency=20 -connection-count=20 -consistency-level=quorum -rows-per-request=10 -timeout=30s -retry-number=30 -retry-interval=80ms,1s -iterations 0 -duration=30m -validate-data"
 
-pre_create_keyspace: "CREATE KEYSPACE IF NOT EXISTS scylla_bench WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 3} and tablets={'initial':1};"
+pre_create_keyspace: "CREATE KEYSPACE IF NOT EXISTS scylla_bench WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 3}"
 
 data_validation: |
   validate_partitions: true
