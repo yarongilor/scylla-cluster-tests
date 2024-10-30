@@ -4014,6 +4014,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         )
         ParallelObject(objects=[trigger, watcher], timeout=timeout + 60).call_objects()
         self.target_node.wait_node_fully_start(timeout=300)
+        if partitions_attrs := self.tester.partitions_attrs:
+            partitions_attrs.validate_rows_per_partitions()
         is_rebuild_supported = SkipPerIssues('scylladb/scylladb#17575', params=self.tester.params)
         # If tablets in use and rebuild is not supported, running a DC repair instead.
         with self.cluster.cql_connection_patient(self.target_node) as session:
