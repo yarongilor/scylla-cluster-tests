@@ -88,8 +88,9 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods,
         # Unless ignore_limit_rows_number is True.
 
         error_message = "Failed to collect partition info. Error details: {}"
+        node = next(node for node in self.db_cluster.nodes if node.db_up())
         try:
-            with self.db_cluster.cql_connection_patient(node=self.db_cluster.nodes[0],
+            with self.db_cluster.cql_connection_patient(node=node,
                                                         connect_timeout=600) as session:
                 session.default_consistency_level = ConsistencyLevel.QUORUM
                 pk_list = sorted(get_partition_keys(ks_cf=self.table_name, session=session,
@@ -158,18 +159,18 @@ class PartitionsValidationAttributes:  # pylint: disable=too-few-public-methods,
                     if missing_rows:
                         PartitionRowsValidationEvent(
                             message=f"Found missing rows for partitions: {missing_rows}",
-                            severity=Severity.CRITICAL).publish()
-                        return
+                            severity=Severity.ERROR).publish()
+                        return False
                 elif partitions_dict_after != self.partitions_dict_before:
                     PartitionRowsValidationEvent(
                         message=f"Row amount in partitions is not same before and after running of nemesis: {partitions_dict_after}",
-                        severity=Severity.CRITICAL).publish()
-                    return
+                        severity=Severity.ERROR).publish()
+                    return False
 
                 PartitionRowsValidationEvent(
                     message="Partition rows number is validated.",
                     severity=Severity.NORMAL).publish()
-
+                return True
 
 def get_table_clustering_order(ks_cf: str, ck_name: str, session) -> str:
     """

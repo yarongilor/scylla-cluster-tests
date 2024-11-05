@@ -91,7 +91,7 @@ from sdcm.sct_events.group_common_events import (
     decorate_with_context_if_issues_open,
     ignore_take_snapshot_failing,
 )
-from sdcm.sct_events.health import DataValidatorEvent
+from sdcm.sct_events.health import DataValidatorEvent, PartitionRowsValidationEvent
 from sdcm.sct_events.loaders import CassandraStressLogEvent, ScyllaBenchEvent
 from sdcm.sct_events.nemesis import DisruptionEvent
 from sdcm.sct_events.system import InfoEvent
@@ -4015,7 +4015,15 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         ParallelObject(objects=[trigger, watcher], timeout=timeout + 60).call_objects()
         self.target_node.wait_node_fully_start(timeout=300)
         if partitions_attrs := self.tester.partitions_attrs:
-            partitions_attrs.validate_rows_per_partitions()
+            if not partitions_attrs.validate_rows_per_partitions():
+                self.log.debug("Found missing rows/partitions. stopping target node in order to reteset")
+                self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
+                self.log.debug("retesting partition rows validation where target node is down.")
+                partitions_attrs.validate_rows_per_partitions()
+                PartitionRowsValidationEvent(
+                    message=f"Found missing rows for partitions",
+                    severity=Severity.CRITICAL).publish()
+
         is_rebuild_supported = SkipPerIssues('scylladb/scylladb#17575', params=self.tester.params)
         # If tablets in use and rebuild is not supported, running a DC repair instead.
         with self.cluster.cql_connection_patient(self.target_node) as session:
