@@ -87,16 +87,9 @@ class SstableUtils:
         if not sstables:
             raise SstablesNotFound(f"sstables for '{self.keyspace}.{self.table}' wasn't found")
 
-        if ComparableScyllaVersion(self.db_node.scylla_version) >= '2023.1.3':
-            dump_cmd = (
-                f"SCYLLA_CONF={Path(self.db_node.add_install_prefix(SCYLLA_YAML_PATH)).parent}"
-                f" {self.db_node.add_install_prefix('/usr/bin/scylla')} sstable dump-scylla-metadata"
-                "  --logger-log-level scylla-sstable=debug"
-                f" --keyspace {self.keyspace} --table {self.table} --sstables"
-            )
-        else:
-            dump_cmd = 'sstabledump'
+        dump_cmd = get_sstable_dump_command(self.db_node, self.keyspace, self.table)
         for sstable in sstables:
+
             sstables_res = self.db_node.remoter.sudo(
                 f"{dump_cmd} {sstable}",
                 ignore_status=True, verbose=True)
@@ -156,8 +149,9 @@ class SstableUtils:
             f" Encryption results: {encryption_results}")
 
     def count_sstable_tombstones(self, sstable: str) -> int:
+        dump_cmd = get_sstable_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
         self.db_node.remoter.run(
-            f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
+            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
         tombstones_deletion_info = self.db_node.remoter.run(
             'sudo egrep \'"expired" : true|marked_deleted\' /tmp/sstabledump.json', verbose=False, ignore_status=True)
         if not tombstones_deletion_info:
@@ -301,3 +295,27 @@ class SstableUtils:
         self.log.debug(f"Files: {files}, Sizes: {file_sizes}")
 
         return files, file_sizes
+
+
+def get_sstable_dump_command(node, keyspace: str, table: str) -> str:
+    """
+    Returns the appropriate sstable dump command based on the Scylla version and node type.
+
+    :param node: A DB node object to provide Scylla version.
+    :param keyspace: Keyspace name
+    :param table: Table name
+    :return: The sstable dump command
+    """
+    if node.is_enterprise:
+        should_use_sstabledump = ComparableScyllaVersion(node.scylla_version) < "2023.1.3"
+    else:
+        should_use_sstabledump = ComparableScyllaVersion(node.scylla_version) < "5.4.0~rc0"
+
+    if should_use_sstabledump:
+        return 'sstabledump'
+    else:
+        return (
+            f'SCYLLA_CONF={Path(node.add_install_prefix(SCYLLA_YAML_PATH)).parent} '
+            f'{node.add_install_prefix("/usr/bin/scylla")} sstable dump-data '
+            f'--keyspace {keyspace} --table {table} --sstables'
+        )
