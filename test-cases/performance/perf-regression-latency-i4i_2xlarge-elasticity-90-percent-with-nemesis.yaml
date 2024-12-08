@@ -19,12 +19,11 @@ instance_type_loader: 'c6i.2xlarge'
 instance_type_monitor: 't3.large'
 instance_type_db: 'i4i.2xlarge'
 
-nemesis_class_name: 'NemesisSequence'
-nemesis_interval: 30
-nemesis_sequence_sleep_between_ops: 10
+nemesis_class_name: 'DisruptiveMonkey'
+nemesis_interval: 5
 
 user_prefix: 'elasticity-test-nemesis'
-space_node_threshold: 644245094
+space_node_threshold: 6442450
 ami_id_db_scylla_desc: 'VERSION_DESC'
 
 round_robin: true
@@ -33,10 +32,10 @@ backtrace_decoding: false
 print_kernel_callstack: true
 
 store_perf_results: true
-email_recipients: ["scylla-perf-results@scylladb.com"]
+email_recipients: ["yarongilor@scylladb.com"]
 # use_prepared_loaders: true
 use_hdr_cs_histogram: true
-email_subject_postfix: 'elasticity test'
+email_subject_postfix: 'elasticity test disruptive nemesis'
 nemesis_double_load_during_grow_shrink_duration: 0
 parallel_node_operations: false
 
