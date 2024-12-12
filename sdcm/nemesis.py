@@ -213,6 +213,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     # i.e. adding/removing nodes/data centers
     disruptive: bool = False        # flag that signal that nemesis disrupts node/cluster,
     # i.e reboot,kill, hardreboot, terminate
+    elasticity: bool = False  # a subset of "disruptive"
     run_with_gemini: bool = True    # flag that signal that nemesis runs with gemini tests
     networking: bool = False        # flag that signal that nemesis interact with nemesis,
     # i.e switch off/on network interface, network issues
@@ -504,6 +505,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     def get_list_of_methods_compatible_with_backend(
             self,
             disruptive: Optional[bool] = None,
+            elasticity: Optional[bool] = None,
             run_with_gemini: Optional[bool] = None,
             networking: Optional[bool] = None,
             limited: Optional[bool] = None,
@@ -516,6 +518,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     ) -> List[str]:
         return self.get_list_of_methods_by_flags(
             disruptive=disruptive,
+            elasticity=elasticity,
             run_with_gemini=run_with_gemini,
             networking=networking,
             kubernetes=self._is_it_on_kubernetes() or None,
@@ -535,6 +538,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     def get_list_of_methods_by_flags(  # pylint: disable=too-many-locals  # noqa: PLR0913
             self,
             disruptive: Optional[bool] = None,
+            elasticity: Optional[bool] = None,
             run_with_gemini: Optional[bool] = None,
             networking: Optional[bool] = None,
             kubernetes: Optional[bool] = None,
@@ -549,6 +553,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     ) -> List[str]:
         subclasses_list = self._get_subclasses(
             disruptive=disruptive,
+            elasticity=elasticity,
             run_with_gemini=run_with_gemini,
             networking=networking,
             kubernetes=kubernetes,
@@ -5613,6 +5618,7 @@ class PauseLdapNemesis(Nemesis):
 
 class ToggleLdapConfiguration(Nemesis):
     disruptive = True
+    elasticity = True
     limited = True
 
     def disrupt(self):
@@ -5658,6 +5664,7 @@ class AddRemoveRackNemesis(Nemesis):
 
 class StopWaitStartMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     limited = True
     zero_node_changes = True
@@ -5668,6 +5675,7 @@ class StopWaitStartMonkey(Nemesis):
 
 class StopStartMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     limited = True
 
@@ -5716,6 +5724,7 @@ class RestartThenRepairNodeMonkey(Nemesis):
 
 class MultipleHardRebootNodeMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     free_tier_set = True
 
@@ -5725,6 +5734,7 @@ class MultipleHardRebootNodeMonkey(Nemesis):
 
 class HardRebootNodeMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     limited = True
     free_tier_set = True
@@ -5735,6 +5745,7 @@ class HardRebootNodeMonkey(Nemesis):
 
 class SoftRebootNodeMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     limited = True
     free_tier_set = True
@@ -5835,6 +5846,7 @@ class RefreshBigMonkey(Nemesis):
 
 class RemoveServiceLevelMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     sla = True
 
     def disrupt(self):
@@ -6399,6 +6411,7 @@ class OperatorNodetoolFlushAndReshard(Nemesis):
 
 class ScyllaKillMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     free_tier_set = True
 
@@ -6408,6 +6421,7 @@ class ScyllaKillMonkey(Nemesis):
 
 class ValidateHintedHandoffShortDowntime(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     free_tier_set = True
 
@@ -6436,6 +6450,7 @@ class NodeRestartWithResharding(Nemesis):
 
 class ClusterRollingRestart(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     free_tier_set = True
 
@@ -6445,6 +6460,7 @@ class ClusterRollingRestart(Nemesis):
 
 class RollingRestartConfigChangeInternodeCompression(Nemesis):
     disruptive = True
+    elasticity = True
     full_cluster_restart = True
     config_changes = True
 
@@ -6454,6 +6470,7 @@ class RollingRestartConfigChangeInternodeCompression(Nemesis):
 
 class ClusterRollingRestartRandomOrder(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
     free_tier_set = True
 
@@ -6463,6 +6480,7 @@ class ClusterRollingRestartRandomOrder(Nemesis):
 
 class SwitchBetweenPasswordAuthAndSaslauthdAuth(Nemesis):
     disruptive = True  # the nemesis has rolling restart
+    elasticity = True
     config_changes = True
 
     def disrupt(self):
@@ -6480,6 +6498,7 @@ class TopPartitions(Nemesis):
 
 class RandomInterruptionNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6490,6 +6509,7 @@ class RandomInterruptionNetworkMonkey(Nemesis):
 
 class BlockNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6500,6 +6520,7 @@ class BlockNetworkMonkey(Nemesis):
 
 class RejectInterNodeNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
     free_tier_set = True
@@ -6510,6 +6531,7 @@ class RejectInterNodeNetworkMonkey(Nemesis):
 
 class RejectNodeExporterNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
 
@@ -6519,6 +6541,7 @@ class RejectNodeExporterNetworkMonkey(Nemesis):
 
 class RejectThriftNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
 
@@ -6528,6 +6551,7 @@ class RejectThriftNetworkMonkey(Nemesis):
 
 class StopStartInterfacesNetworkMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     networking = True
     run_with_gemini = False
 
@@ -6739,6 +6763,7 @@ class CorruptThenScrubMonkey(Nemesis):
 
 class MemoryStressMonkey(Nemesis):
     disruptive = True
+    elasticity = True
     free_tier_set = True
 
     def disrupt(self):
@@ -6818,6 +6843,7 @@ class SlaReplaceUsingDetachDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
+    elasticity = True
     sla = True
 
     def disrupt(self):
@@ -6829,6 +6855,7 @@ class SlaReplaceUsingDropDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
+    elasticity = True
     sla = True
 
     def disrupt(self):
@@ -6840,6 +6867,7 @@ class SlaIncreaseSharesByAttachAnotherSlDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
+    elasticity = True
     sla = True
 
     def disrupt(self):
@@ -6880,6 +6908,7 @@ class CreateIndexNemesis(Nemesis):
 class AddRemoveMvNemesis(Nemesis):
 
     disruptive = True
+    elasticity = True
     schema_changes = True
     free_tier_set = True
 
@@ -6889,6 +6918,7 @@ class AddRemoveMvNemesis(Nemesis):
 
 class ToggleAuditNemesisSyslog(Nemesis):
     disruptive = True
+    elasticity = True
     schema_changes = True
     config_changes = True
     free_tier_set = True
@@ -6908,6 +6938,7 @@ class BootstrapStreamingErrorNemesis(Nemesis):
 
 class DisableBinaryGossipExecuteMajorCompaction(Nemesis):
     disruptive = True
+    elasticity = True
     kubernetes = True
 
     def disrupt(self):
