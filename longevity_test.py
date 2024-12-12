@@ -151,8 +151,21 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
         if tombstone_gc_verification_params := self._get_tombstone_gc_verification_params():
             self.run_tombstone_gc_verification_thread(**tombstone_gc_verification_params)
 
+        extra_nodes_num = 2
+        InfoEvent(message=f"Adding temporary {extra_nodes_num} extra nodes").publish()
+        extra_nodes = self.db_cluster.add_nodes(count=extra_nodes_num, enable_auto_bootstrap=True)
+        self.monitors.reconfigure_scylla_monitoring()
+        up_timeout = MAX_TIME_WAIT_FOR_NEW_NODE_UP
+        with adaptive_timeout(Operations.NEW_NODE, node=self.db_cluster.data_nodes[0], timeout=up_timeout):
+            self.db_cluster.wait_for_init(node_list=extra_nodes, timeout=up_timeout, check_node_health=False)
+        self.db_cluster.wait_for_nodes_up_and_normal(nodes=extra_nodes)
+        InfoEvent(message=f"Temporary {extra_nodes_num} extra nodes are added").publish()
         self.run_prepare_write_cmd()
-
+        InfoEvent(message=f"Decommissioning {extra_nodes[1].name}").publish()
+        self.db_cluster.decommission(extra_nodes[1])
+        InfoEvent(message=f"Decommissioning {extra_nodes[0].name}").publish()
+        self.db_cluster.decommission(extra_nodes[0])
+        InfoEvent(message=f"Temporary {extra_nodes_num} extra nodes are removed").publish()
         # Grow cluster to target size if requested
         if cluster_target_size := self.params.get('cluster_target_size'):
             add_node_cnt = self.params.get('add_node_cnt')
