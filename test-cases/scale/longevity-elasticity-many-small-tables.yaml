@@ -1,24 +1,24 @@
-test_duration: 2160
+test_duration: 216
 
 cs_duration: '0m'
 cs_user_profiles:
     - test-cases/scale/templated-elasticity-tables.yaml
 
 pre_create_schema: true
-user_profile_table_count: 450
-batch_size: 100
+user_profile_table_count: 8
+batch_size: 4
 
-n_loaders: 5
+n_loaders: 1
 n_monitor_nodes: 1
 n_db_nodes: 3
 add_node_cnt: 0
 
-jmx_heap_memory: 1024 # this is a fix/workaround for https://github.com/scylladb/scylla/issues/7609
-
-instance_type_db: 'i4i.xlarge'
-instance_type_loader: 'c6i.4xlarge'
+#jmx_heap_memory: 1024 # this is a fix/workaround for https://github.com/scylladb/scylla/issues/7609
+use_mgmt: false
+instance_type_db: 'i3.xlarge'
+#instance_type_loader: 'c6i.4xlarge'
 user_prefix: 'longevity-elasticity-many-small-tables'
-root_disk_size_runner: 120
+#root_disk_size_runner: 120
 
 
 cluster_health_check: false
