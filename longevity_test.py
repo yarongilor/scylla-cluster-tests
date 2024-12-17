@@ -33,7 +33,7 @@ from sdcm.tester import ClusterTester
 from sdcm.utils import loader_utils
 from sdcm.utils.adaptive_timeouts import adaptive_timeout, Operations
 from sdcm.utils.common import skip_optional_stage
-from sdcm.utils.decorators import optional_stage
+from sdcm.utils.decorators import optional_stage, latency_calculator_decorator
 from sdcm.utils.operations_thread import ThreadParams
 from sdcm.sct_events.system import InfoEvent
 from sdcm.sct_events import Severity
@@ -312,6 +312,7 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                 self._run_user_stress_in_batches(batch_size=batch_size,
                                                  stress_params_list=stress_params_list, duration=duration)
 
+    @latency_calculator_decorator(legend="Run total batches of load")
     def _run_user_stress_in_batches(self, batch_size, stress_params_list, duration):
         """
         run user profile in batches, while adding 4 stress-commands which are not with precreated tables

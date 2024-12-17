@@ -89,7 +89,7 @@ from sdcm.utils.cql_utils import cql_quote_if_needed
 from sdcm.utils.database_query_utils import PartitionsValidationAttributes, fetch_all_rows
 from sdcm.utils.features import is_tablets_feature_enabled
 from sdcm.utils.get_username import get_username
-from sdcm.utils.decorators import log_run_info, retrying, measure_time, optional_stage
+from sdcm.utils.decorators import log_run_info, retrying, measure_time, optional_stage, latency_calculator_decorator
 from sdcm.utils.git import get_git_commit_id, get_git_status_info
 from sdcm.utils.ldap import LDAP_USERS, LDAP_PASSWORD, LDAP_ROLE, LDAP_BASE_OBJECT, \
     LdapConfigurationError, LdapServerType
@@ -2306,6 +2306,7 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):  # pylint: disa
         if self.loaders:  # the test can fail on provision step and loaders are still not provisioned
             self.loaders.kill_stress_thread()
 
+    # @latency_calculator_decorator(legend="Load queue running duration")
     def verify_stress_thread(self, cs_thread_pool):
         if isinstance(cs_thread_pool, dict):
             results = self.get_stress_results_bench(queue=cs_thread_pool)

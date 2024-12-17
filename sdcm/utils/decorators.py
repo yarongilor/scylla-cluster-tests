@@ -210,10 +210,8 @@ def latency_calculator_decorator(original_function: Optional[Callable] = None, *
                 workload = 'read'
             elif 'write' in test_name:
                 workload = 'write'
-            elif 'mixed' in test_name:
-                workload = 'mixed'
             else:
-                return res
+                workload = 'mixed'
 
             latency_results_file_path = tester.latency_results_file
             if not os.path.exists(latency_results_file_path):
