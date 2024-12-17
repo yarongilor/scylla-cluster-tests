@@ -18,7 +18,6 @@
   - topology_changes = True
 - disrupt_add_remove_mv:
   - disruptive = True
-  - elasticity = True
   - schema_changes = True
   - free_tier_set = True
 - disrupt_bootstrap_streaming_error:
@@ -94,6 +93,7 @@
 - disrupt_hot_reloading_internode_certificate:
   - disruptive = False
   - config_changes = True
+  - elasticity = True
 - disrupt_increase_shares_by_attach_another_sl_during_load:
   - disruptive = True
   - elasticity = True
@@ -106,15 +106,18 @@
 - disrupt_ldap_connection_toggle:
   - disruptive = False
   - limited = True
+  - elasticity = True
 - disrupt_load_and_stream:
   - disruptive = False
   - run_with_gemini = False
   - kubernetes = True
   - limited = True
+  - elasticity = True
 - disrupt_major_compaction:
   - disruptive = False
   - kubernetes = True
   - limited = True
+  - elasticity = True
 - disrupt_maximum_allowed_sls_with_max_shares_during_load:
   - disruptive = False
   - sla = True
@@ -150,6 +153,7 @@
   - limited = True
   - schema_changes = True
   - free_tier_set = True
+  - elasticity = True
 - disrupt_multiple_hard_reboot_node:
   - disruptive = True
   - elasticity = True
@@ -192,6 +196,7 @@
   - disruptive = False
   - kubernetes = True
   - limited = True
+  - elasticity = True
 - disrupt_nodetool_cleanup:
   - disruptive = False
   - kubernetes = True
@@ -220,6 +225,7 @@
   - run_with_gemini = False
   - kubernetes = True
   - limited = True
+  - elasticity = True
 - disrupt_nodetool_refresh:
   - disruptive = False
   - run_with_gemini = False
@@ -252,10 +258,12 @@
 - disrupt_resetlocalschema:
   - disruptive = False
   - config_changes = True
+  - elasticity = True
   - free_tier_set = True
 - disrupt_restart_then_repair_node:
   - disruptive = True
   - kubernetes = True
+  - elasticity = True
 - disrupt_restart_with_resharding:
   - disruptive = True
   - kubernetes = True
@@ -265,6 +273,7 @@
   - disruptive = True
   - full_cluster_restart = True
   - config_changes = True
+  - elasticity = True
 - disrupt_rolling_restart_cluster:
   - disruptive = True
   - elasticity = True
@@ -274,6 +283,7 @@
   - disruptive = True
   - kubernetes = True
   - config_changes = True
+  - elasticity = True
   - free_tier_set = True
 - disrupt_run_cdcstressor_tool:
   - disruptive = False
@@ -344,6 +354,7 @@
   - disruptive = False
   - schema_changes = True
   - config_changes = True
+  - elasticity = True
   - free_tier_set = True
 - disrupt_toggle_table_gc_mode:
   - kubernetes = True
@@ -359,6 +370,7 @@
   - kubernetes = True
   - limited = True
   - free_tier_set = True
+  - elasticity = True
 - disrupt_truncate_large_partition:
   - disruptive = False
   - kubernetes = True
