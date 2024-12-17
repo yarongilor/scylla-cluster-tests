@@ -5603,6 +5603,7 @@ def disrupt_method_wrapper(method, is_exclusive=False):  # pylint: disable=too-m
 class SslHotReloadingNemesis(Nemesis):
     disruptive = False
     config_changes = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_hot_reloading_internode_certificate()
@@ -5611,6 +5612,7 @@ class SslHotReloadingNemesis(Nemesis):
 class PauseLdapNemesis(Nemesis):
     disruptive = False
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_ldap_connection_toggle()
@@ -5618,7 +5620,7 @@ class PauseLdapNemesis(Nemesis):
 
 class ToggleLdapConfiguration(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     limited = True
 
     def disrupt(self):
@@ -5664,7 +5666,7 @@ class AddRemoveRackNemesis(Nemesis):
 
 class StopWaitStartMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     limited = True
     zero_node_changes = True
@@ -5675,7 +5677,7 @@ class StopWaitStartMonkey(Nemesis):
 
 class StopStartMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     limited = True
 
@@ -5717,6 +5719,7 @@ class EnableDisableTableEncryptionAwsKmsProviderMonkey(Nemesis):
 class RestartThenRepairNodeMonkey(Nemesis):
     disruptive = True
     kubernetes = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_restart_then_repair_node()
@@ -5724,7 +5727,7 @@ class RestartThenRepairNodeMonkey(Nemesis):
 
 class MultipleHardRebootNodeMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     free_tier_set = True
 
@@ -5734,7 +5737,7 @@ class MultipleHardRebootNodeMonkey(Nemesis):
 
 class HardRebootNodeMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     limited = True
     free_tier_set = True
@@ -5745,7 +5748,7 @@ class HardRebootNodeMonkey(Nemesis):
 
 class SoftRebootNodeMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     limited = True
     free_tier_set = True
@@ -5767,6 +5770,7 @@ class DrainerMonkey(Nemesis):
 class CorruptThenRepairMonkey(Nemesis):
     disruptive = True
     kubernetes = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_destroy_data_then_repair()
@@ -5801,6 +5805,8 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = True
+
 
     def disrupt(self):
         self.disrupt_no_corrupt_repair()
@@ -5810,6 +5816,7 @@ class MajorCompactionMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_major_compaction()
@@ -5820,6 +5827,7 @@ class RefreshMonkey(Nemesis):
     run_with_gemini = False
     kubernetes = True
     limited = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_nodetool_refresh(big_sstable=False)
@@ -5830,6 +5838,7 @@ class LoadAndStreamMonkey(Nemesis):
     run_with_gemini = False
     kubernetes = True
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_load_and_stream()
@@ -5839,7 +5848,7 @@ class RefreshBigMonkey(Nemesis):
     disruptive = False
     run_with_gemini = False
     kubernetes = True
-
+    elasticity = True
     def disrupt(self):
         self.disrupt_nodetool_refresh(big_sstable=True)
 
@@ -5874,6 +5883,7 @@ class NodeToolCleanupMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_nodetool_cleanup()
@@ -5884,6 +5894,7 @@ class TruncateMonkey(Nemesis):
     kubernetes = True
     limited = True
     free_tier_set = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_truncate()
@@ -6204,6 +6215,7 @@ class ModifyTableMonkey(Nemesis):
     limited = True
     schema_changes = True
     free_tier_set = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_modify_table()
@@ -6411,7 +6423,7 @@ class OperatorNodetoolFlushAndReshard(Nemesis):
 
 class ScyllaKillMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     free_tier_set = True
 
@@ -6450,7 +6462,7 @@ class NodeRestartWithResharding(Nemesis):
 
 class ClusterRollingRestart(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     free_tier_set = True
 
@@ -6460,7 +6472,7 @@ class ClusterRollingRestart(Nemesis):
 
 class RollingRestartConfigChangeInternodeCompression(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     full_cluster_restart = True
     config_changes = True
 
@@ -6480,7 +6492,7 @@ class ClusterRollingRestartRandomOrder(Nemesis):
 
 class SwitchBetweenPasswordAuthAndSaslauthdAuth(Nemesis):
     disruptive = True  # the nemesis has rolling restart
-    elasticity = True
+    elasticity = False
     config_changes = True
 
     def disrupt(self):
@@ -6498,7 +6510,7 @@ class TopPartitions(Nemesis):
 
 class RandomInterruptionNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6509,7 +6521,7 @@ class RandomInterruptionNetworkMonkey(Nemesis):
 
 class BlockNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6531,7 +6543,7 @@ class RejectInterNodeNetworkMonkey(Nemesis):
 
 class RejectNodeExporterNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
 
@@ -6541,7 +6553,7 @@ class RejectNodeExporterNetworkMonkey(Nemesis):
 
 class RejectThriftNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
 
@@ -6703,6 +6715,7 @@ class ToggleCDCMonkey(Nemesis):
     schema_changes = True
     config_changes = True
     free_tier_set = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_toggle_cdc_feature_properties_on_table()
@@ -6774,6 +6787,7 @@ class ResetLocalSchemaMonkey(Nemesis):
     disruptive = False
     config_changes = True
     free_tier_set = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_resetlocalschema()
@@ -6908,7 +6922,7 @@ class CreateIndexNemesis(Nemesis):
 class AddRemoveMvNemesis(Nemesis):
 
     disruptive = True
-    elasticity = True
+    elasticity = False
     schema_changes = True
     free_tier_set = True
 
@@ -6918,7 +6932,7 @@ class AddRemoveMvNemesis(Nemesis):
 
 class ToggleAuditNemesisSyslog(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     schema_changes = True
     config_changes = True
     free_tier_set = True
@@ -6938,7 +6952,7 @@ class BootstrapStreamingErrorNemesis(Nemesis):
 
 class DisableBinaryGossipExecuteMajorCompaction(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
 
     def disrupt(self):
