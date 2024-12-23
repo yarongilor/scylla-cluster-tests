@@ -834,6 +834,9 @@ class PerformanceRegressionUpgradeTest(PerformanceRegressionTest, UpgradeTest): 
         time.sleep(sleep_time)
         InfoEvent(message='Ended Post-Upgrade Steady State calculation. Took %ss' % sleep_time).publish()
 
+    def run_workload_and_scale(self):
+        pass
+
     def run_workload_and_upgrade(self, stress_cmd, sub_type=None):
         # next 3 lines, is a workaround to have it working inside `latency_calculator_decorator`
         self.cluster = self.db_cluster  # pylint: disable=attribute-defined-outside-init
@@ -894,6 +897,10 @@ class PerformanceRegressionUpgradeTest(PerformanceRegressionTest, UpgradeTest): 
     def test_latency_mixed_with_upgrade(self):
         self._prepare_latency_with_upgrade()
         self.run_workload_and_upgrade(stress_cmd=self.params.get('stress_cmd_m'))
+
+    def test_latency_mixed_with_scale(self):
+        # self._prepare_latency_with_upgrade()
+        self.run_workload_and_scale()
 
 
 class PerformanceRegressionMaterializedViewLatencyTest(PerformanceRegressionTest):
