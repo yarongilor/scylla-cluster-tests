@@ -33,7 +33,7 @@ from sdcm.tester import ClusterTester
 from sdcm.utils import loader_utils
 from sdcm.utils.adaptive_timeouts import adaptive_timeout, Operations
 from sdcm.utils.common import skip_optional_stage
-from sdcm.utils.decorators import optional_stage, latency_calculator_decorator
+from sdcm.utils.decorators import optional_stage, latency_calculator_decorator, report_latency
 from sdcm.utils.operations_thread import ThreadParams
 from sdcm.sct_events.system import InfoEvent
 from sdcm.sct_events import Severity
@@ -312,7 +312,31 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                 self._run_user_stress_in_batches(batch_size=batch_size,
                                                  stress_params_list=stress_params_list, duration=duration)
 
-    @latency_calculator_decorator(legend="Run total batches of load")
+    @report_latency(legend="Run a batch of load on multiple tables", cycle_name="Run stress batch on multiple user tables")
+    def _run_user_stress_batch(self, batch, extra_tables_idx, duration):
+        stress_queue = []
+        batch_params = dict(duration=duration, round_robin=True, stress_cmd=[])
+
+        # add few stress threads with tables that weren't pre-created
+        customer_profiles = self.params.get('cs_user_profiles')
+        for cs_profile in customer_profiles:
+            cs_profile = sct_abs_path(cs_profile)  # noqa: PLW2901
+            # for now we'll leave to just one fresh table, to kick schema update
+            num_of_newly_created_tables = 1
+            self._pre_create_templated_user_schema(batch_start=extra_tables_idx,
+                                                   batch_end=extra_tables_idx + num_of_newly_created_tables)
+            for i in range(num_of_newly_created_tables):
+                batch += self.create_templated_user_stress_params(extra_tables_idx + i,
+                                                                  cs_profile=cs_profile)  # noqa: PLW2901
+
+        nodes_ips = self.all_node_ips_for_stress_command
+        for params in batch:
+            batch_params['stress_cmd'] += [params['stress_cmd'] + nodes_ips]
+
+        self._run_all_stress_cmds(stress_queue, params=batch_params)
+        for stress in stress_queue:
+            self.verify_stress_thread(cs_thread_pool=stress)
+
     def _run_user_stress_in_batches(self, batch_size, stress_params_list, duration):
         """
         run user profile in batches, while adding 4 stress-commands which are not with precreated tables
@@ -331,27 +355,28 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
 
         for batch, _, _, extra_tables_idx in list(chunks(stress_params_list, batch_size)):
 
-            stress_queue = []
-            batch_params = dict(duration=duration, round_robin=True, stress_cmd=[])
-
-            # add few stress threads with tables that weren't pre-created
-            customer_profiles = self.params.get('cs_user_profiles')
-            for cs_profile in customer_profiles:
-                cs_profile = sct_abs_path(cs_profile)  # noqa: PLW2901
-                # for now we'll leave to just one fresh table, to kick schema update
-                num_of_newly_created_tables = 1
-                self._pre_create_templated_user_schema(batch_start=extra_tables_idx,
-                                                       batch_end=extra_tables_idx+num_of_newly_created_tables)
-                for i in range(num_of_newly_created_tables):
-                    batch += self.create_templated_user_stress_params(extra_tables_idx + i, cs_profile=cs_profile)  # noqa: PLW2901
-
-            nodes_ips = self.all_node_ips_for_stress_command
-            for params in batch:
-                batch_params['stress_cmd'] += [params['stress_cmd'] + nodes_ips]
-
-            self._run_all_stress_cmds(stress_queue, params=batch_params)
-            for stress in stress_queue:
-                self.verify_stress_thread(cs_thread_pool=stress)
+            self._run_user_stress_batch(batch=batch, extra_tables_idx=extra_tables_idx, duration=duration)
+            # stress_queue = []
+            # batch_params = dict(duration=duration, round_robin=True, stress_cmd=[])
+            #
+            # # add few stress threads with tables that weren't pre-created
+            # customer_profiles = self.params.get('cs_user_profiles')
+            # for cs_profile in customer_profiles:
+            #     cs_profile = sct_abs_path(cs_profile)  # noqa: PLW2901
+            #     # for now we'll leave to just one fresh table, to kick schema update
+            #     num_of_newly_created_tables = 1
+            #     self._pre_create_templated_user_schema(batch_start=extra_tables_idx,
+            #                                            batch_end=extra_tables_idx+num_of_newly_created_tables)
+            #     for i in range(num_of_newly_created_tables):
+            #         batch += self.create_templated_user_stress_params(extra_tables_idx + i, cs_profile=cs_profile)  # noqa: PLW2901
+            #
+            # nodes_ips = self.all_node_ips_for_stress_command
+            # for params in batch:
+            #     batch_params['stress_cmd'] += [params['stress_cmd'] + nodes_ips]
+            #
+            # self._run_all_stress_cmds(stress_queue, params=batch_params)
+            # for stress in stress_queue:
+            #     self.verify_stress_thread(cs_thread_pool=stress)
 
     def _run_stress_in_batches(self, total_stress, batch_size, stress_cmd):
         stress_queue = []

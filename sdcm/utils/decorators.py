@@ -157,6 +157,135 @@ def measure_time(func):
     return wrapped
 
 
+def report_latency(original_function: Optional[Callable] = None, *, legend: Optional[str] = None,
+                                 cycle_name: Optional[str] = None):
+    """
+    Gets the start time, end time and then calculates the latency based on function 'calculate_latency'.
+
+    :param func: Remote method to run.
+    :return: Wrapped method.
+    """
+    # calling this import here, because of circular import
+    from sdcm.utils import latency  # pylint: disable=import-outside-toplevel
+
+    def wrapper(func):
+
+        @wraps(func)
+        def wrapped(*args, **kwargs):  # noqa: PLR0914
+            from sdcm.tester import ClusterTester
+            from sdcm.nemesis import Nemesis
+            start = time.time()
+            # If the decorator is applied dynamically, "self" argument is not transferred  via "args" and may be found in bounded function
+            _self = getattr(func, "__self__", None) or args[0]
+            if isinstance(_self, ClusterTester):
+                cluster = _self.db_cluster
+                tester = _self
+                monitoring_set = _self.monitors
+            elif isinstance(_self, Nemesis):
+                cluster = _self.cluster
+                tester = _self.tester
+                monitoring_set = _self.monitoring_set
+            else:
+                raise ValueError(
+                    f"Not expected instance type '{type(_self)}'. Supported types: 'ClusterTester', 'Nemesis'")
+
+            # Keep for debug purposes
+            LOGGER.debug("latency_calculator_decorator cluster: %s", cluster)
+            start_node_list = cluster.nodes[:]
+            func_name = cycle_name or func.__name__
+            with EventCounterContextManager(name=func.__name__,
+                                            event_type=(DatabaseLogEvent.REACTOR_STALLED, )) as counter:
+
+                res = func(*args, **kwargs)
+                reactor_stall_stats = counter.get_stats().copy()
+            end_node_list = cluster.nodes[:]
+            all_nodes_list = list(set(start_node_list + end_node_list))
+            end = time.time()
+            # test_name = tester.__repr__().split('testMethod=')[-1].split('>')[0]
+            if not monitoring_set or not monitoring_set.nodes:
+                return res
+            monitor = monitoring_set.nodes[0]
+            screenshots = monitoring_set.get_grafana_screenshots(node=monitor, test_start_time=start)
+            workload = 'mixed'
+
+            latency_results_file_path = tester.latency_results_file
+            if not os.path.exists(latency_results_file_path):
+                latency_results = {}
+            else:
+                with open(latency_results_file_path, encoding="utf-8") as file:
+                    data = file.read().strip()
+                    latency_results = json.loads(data or '{}')
+
+            # if "steady" not in func_name.lower():
+            if func_name not in latency_results:
+                latency_results[func_name] = {"legend": legend or func_name}
+            if 'cycles' not in latency_results[func_name]:
+                latency_results[func_name]['cycles'] = []
+
+            result = latency.collect_latency(monitor, start, end, workload, cluster, all_nodes_list)
+            result["screenshots"] = screenshots
+            result["duration"] = f"{datetime.timedelta(seconds=int(end - start))}"
+            result["duration_in_sec"] = int(end - start)
+            try:
+                result["hdr"] = tester.get_cs_range_histogram_by_interval(stress_operation=workload,
+                                                                          start_time=start,
+                                                                          end_time=end)
+                LOGGER.debug("hdr: %s", result["hdr"])
+            except Exception as err:  # noqa: BLE001
+                LOGGER.error("Failed to get cs_range_histogram_by_interval error: %s", err)
+                result["hdr"] = {}
+
+            try:
+                result["hdr_summary"] = tester.get_cs_range_histogram(stress_operation=workload,
+                                                                      start_time=start,
+                                                                      end_time=end)
+            except Exception as err:  # noqa: BLE001
+                LOGGER.error("Failed to get cs_range_histogram error: %s", err)
+                result["hdr_summary"] = {}
+            hdr_throughput = 0
+            for summary, values in result["hdr_summary"].items():
+                hdr_throughput += values["throughput"]
+            result["cycle_hdr_throughput"] = round(hdr_throughput)
+            result["reactor_stalls_stats"] = reactor_stall_stats
+
+            # if "steady" in func_name.lower():
+            #     if 'Steady State' not in latency_results:
+            #         latency_results['Steady State'] = result
+            #         send_result_to_argus(
+            #             argus_client=tester.test_config.argus_client(),
+            #             workload=workload,
+            #             name="Steady State",
+            #             description="Latencies without any operation running",
+            #             cycle=0,
+            #             result=result,
+            #             start_time=start,
+            #         )
+            # else:
+            latency_results[func_name]['cycles'].append(result)
+            send_result_to_argus(
+                argus_client=tester.test_config.argus_client(),
+                workload=workload,
+                name=f"{func_name}",
+                description=legend or "",
+                cycle=len(latency_results[func_name]['cycles']),
+                result=result,
+                start_time=start,
+            )
+
+            with open(latency_results_file_path, 'w', encoding="utf-8") as file:
+                json.dump(latency_results, file)
+
+            return res
+
+        return wrapped
+
+    if original_function:
+        return wrapper(original_function)
+
+    return wrapper
+
+
+
 def latency_calculator_decorator(original_function: Optional[Callable] = None, *, legend: Optional[str] = None,
                                  cycle_name: Optional[str] = None):
     """
