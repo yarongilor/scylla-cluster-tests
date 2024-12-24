@@ -5612,7 +5612,7 @@ class SslHotReloadingNemesis(Nemesis):
 class PauseLdapNemesis(Nemesis):
     disruptive = False
     limited = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_ldap_connection_toggle()
@@ -5620,7 +5620,7 @@ class PauseLdapNemesis(Nemesis):
 
 class ToggleLdapConfiguration(Nemesis):
     disruptive = True
-    elasticity = False
+    elasticity = True
     limited = True
 
     def disrupt(self):
@@ -5666,7 +5666,7 @@ class AddRemoveRackNemesis(Nemesis):
 
 class StopWaitStartMonkey(Nemesis):
     disruptive = True
-    elasticity = False
+    elasticity = True
     kubernetes = True
     limited = True
     zero_node_changes = True
@@ -5805,7 +5805,7 @@ class NoCorruptRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
-    elasticity = True
+    elasticity = False
 
 
     def disrupt(self):
@@ -5816,7 +5816,7 @@ class MajorCompactionMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_major_compaction()
@@ -5838,7 +5838,7 @@ class LoadAndStreamMonkey(Nemesis):
     run_with_gemini = False
     kubernetes = True
     limited = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_load_and_stream()
@@ -5848,7 +5848,7 @@ class RefreshBigMonkey(Nemesis):
     disruptive = False
     run_with_gemini = False
     kubernetes = True
-    elasticity = True
+    elasticity = False
     def disrupt(self):
         self.disrupt_nodetool_refresh(big_sstable=True)
 
@@ -6215,7 +6215,7 @@ class ModifyTableMonkey(Nemesis):
     limited = True
     schema_changes = True
     free_tier_set = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_modify_table()
@@ -6298,6 +6298,7 @@ class MgmtCorruptThenRepair(Nemesis):
     manager_operation = True
     disruptive = True
     kubernetes = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_mgmt_corrupt_then_repair()
@@ -6307,6 +6308,7 @@ class AbortRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_abort_repair()
@@ -6433,7 +6435,7 @@ class ScyllaKillMonkey(Nemesis):
 
 class ValidateHintedHandoffShortDowntime(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     free_tier_set = True
 
@@ -6482,7 +6484,7 @@ class RollingRestartConfigChangeInternodeCompression(Nemesis):
 
 class ClusterRollingRestartRandomOrder(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     free_tier_set = True
 
@@ -6492,7 +6494,7 @@ class ClusterRollingRestartRandomOrder(Nemesis):
 
 class SwitchBetweenPasswordAuthAndSaslauthdAuth(Nemesis):
     disruptive = True  # the nemesis has rolling restart
-    elasticity = False
+    elasticity = True
     config_changes = True
 
     def disrupt(self):
@@ -6521,7 +6523,7 @@ class RandomInterruptionNetworkMonkey(Nemesis):
 
 class BlockNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = False
+    elasticity = True
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6532,7 +6534,7 @@ class BlockNetworkMonkey(Nemesis):
 
 class RejectInterNodeNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
     free_tier_set = True
@@ -6563,7 +6565,7 @@ class RejectThriftNetworkMonkey(Nemesis):
 
 class StopStartInterfacesNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
 
@@ -6776,7 +6778,7 @@ class CorruptThenScrubMonkey(Nemesis):
 
 class MemoryStressMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     free_tier_set = True
 
     def disrupt(self):
@@ -6857,7 +6859,7 @@ class SlaReplaceUsingDetachDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
-    elasticity = True
+    elasticity = False
     sla = True
 
     def disrupt(self):
@@ -6869,7 +6871,7 @@ class SlaReplaceUsingDropDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
-    elasticity = True
+    elasticity = False
     sla = True
 
     def disrupt(self):
@@ -6881,7 +6883,7 @@ class SlaIncreaseSharesByAttachAnotherSlDuringLoad(Nemesis):
     #  failures that is not a problem of Scylla. The option "disruptive" was set to True to prevent irrelevant failures. Should be changed
     #  to False when the issue https://github.com/scylladb/scylla-enterprise/issues/2572 will be fixed.
     disruptive = True
-    elasticity = True
+    elasticity = False
     sla = True
 
     def disrupt(self):
@@ -6891,6 +6893,7 @@ class SlaIncreaseSharesByAttachAnotherSlDuringLoad(Nemesis):
 class SlaMaximumAllowedSlsWithMaxSharesDuringLoad(Nemesis):
     disruptive = False
     sla = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_maximum_allowed_sls_with_max_shares_during_load()
