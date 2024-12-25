@@ -50,6 +50,9 @@ use_hdr_cs_histogram: true
 email_subject_postfix: 'elasticity test disruptive nemesis'
 nemesis_double_load_during_grow_shrink_duration: 0
 parallel_node_operations: false
+
 sla: true
+server_encrypt: true
+
 stress_image:
   cassandra-stress: 'scylladb/cassandra-stress:3.17.0'
