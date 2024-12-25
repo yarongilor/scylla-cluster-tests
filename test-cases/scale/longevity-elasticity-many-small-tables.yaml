@@ -28,3 +28,4 @@ nemesis_interval: 60
 
 # TODO: remove when https://github.com/scylladb/scylla-tools-java/issues/175 resolved
 stop_test_on_stress_failure: false
+use_hdr_cs_histogram: true
