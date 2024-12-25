@@ -57,8 +57,9 @@ insert:
 #
 queries:
    read1:
-      cql: SELECT * FROM keyspace1.${table_name} WHERE field1 = ?
+      cql: SELECT * FROM keyspace1.${table_name} WHERE key = ?
       fields: samerow
 
 # Run stress
 # cassandra-stress user profile={} 'ops(insert=1)' cl=QUORUM n=1286131 -rate threads=2 -errors ignore
+# cassandra-stress user profile={} 'ops(read1=1)' cl=QUORUM n=321532 -rate threads=1 -errors ignore
