@@ -206,7 +206,7 @@ def report_latency(original_function: Optional[Callable] = None, *, legend: Opti
                 return res
             monitor = monitoring_set.nodes[0]
             screenshots = monitoring_set.get_grafana_screenshots(node=monitor, test_start_time=start)
-            workload = 'mixed'
+            workload = 'write'
 
             latency_results_file_path = tester.latency_results_file
             if not os.path.exists(latency_results_file_path):
@@ -222,6 +222,7 @@ def report_latency(original_function: Optional[Callable] = None, *, legend: Opti
             if 'cycles' not in latency_results[func_name]:
                 latency_results[func_name]['cycles'] = []
 
+            # for workload in ["mixed", "read", "write"]:  # TODO: report all metric types: read/write/mixed
             result = latency.collect_latency(monitor, start, end, workload, cluster, all_nodes_list)
             result["screenshots"] = screenshots
             result["duration"] = f"{datetime.timedelta(seconds=int(end - start))}"
