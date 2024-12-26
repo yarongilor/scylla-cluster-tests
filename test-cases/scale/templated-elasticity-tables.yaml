@@ -61,5 +61,5 @@ queries:
       fields: samerow
 
 # Run stress
-# cassandra-stress user profile={} 'ops(insert=1)' cl=QUORUM n=1717386 -rate threads=3 -errors ignore
-# cassandra-stress user profile={} 'ops(read1=1)' cl=QUORUM n=429345 -rate threads=1 -errors ignore
+# cassandra-stress user profile={} 'ops(insert=1)' cl=QUORUM n=1286131 -rate threads=3 -errors ignore
+# cassandra-stress user profile={} 'ops(read1=1)' cl=QUORUM n=321532 -rate threads=1 -errors ignore
