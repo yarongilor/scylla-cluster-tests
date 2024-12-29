@@ -106,6 +106,7 @@ from sdcm.utils.common import (get_db_tables, generate_random_string,
                                parse_nodetool_listsnapshots,
                                update_authenticator, ParallelObject,
                                ParallelObjectResult, sleep_for_percent_of_duration, get_views_of_base_table)
+from sdcm.utils.database_query_utils import get_partition_keys
 from sdcm.utils.features import is_tablets_feature_enabled
 from sdcm.utils.quota import configure_quota_on_node_for_scylla_user_context, is_quota_enabled_on_node, enable_quota_on_node, \
     write_data_to_reach_end_of_quota
@@ -2522,7 +2523,9 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         Query MV to verify tombstones data is updated.
         """
 
-        mv_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_non_mv=True)
+        all_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=False)
+        non_mv_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=True)
+        mv_ks_cfs = list(set(all_ks_cfs) - set(non_mv_ks_cfs))
         if not mv_ks_cfs:
             raise UnsupportedNemesis(
                 'Non-system keyspace and materialized-view are not found. disrupt_delete_partitions_and_query_mv nemesis can\'t run')
