@@ -5582,7 +5582,7 @@ def disrupt_method_wrapper(method, is_exclusive=False):  # pylint: disable=too-m
 class SslHotReloadingNemesis(Nemesis):
     disruptive = False
     config_changes = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_hot_reloading_internode_certificate()
@@ -5599,7 +5599,7 @@ class PauseLdapNemesis(Nemesis):
 
 class ToggleLdapConfiguration(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     limited = True
 
     def disrupt(self):
@@ -5645,7 +5645,7 @@ class AddRemoveRackNemesis(Nemesis):
 
 class StopWaitStartMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     kubernetes = True
     limited = True
     zero_node_changes = True
@@ -5749,7 +5749,7 @@ class DrainerMonkey(Nemesis):
 class CorruptThenRepairMonkey(Nemesis):
     disruptive = True
     kubernetes = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_destroy_data_then_repair()
@@ -6277,7 +6277,7 @@ class MgmtCorruptThenRepair(Nemesis):
     manager_operation = True
     disruptive = True
     kubernetes = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_mgmt_corrupt_then_repair()
@@ -6287,7 +6287,7 @@ class AbortRepairMonkey(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_abort_repair()
@@ -6426,6 +6426,7 @@ class SnapshotOperations(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_snapshot_operations()
@@ -6484,6 +6485,7 @@ class TopPartitions(Nemesis):
     disruptive = False
     kubernetes = True
     limited = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_show_toppartitions()
@@ -6502,7 +6504,7 @@ class RandomInterruptionNetworkMonkey(Nemesis):
 
 class BlockNetworkMonkey(Nemesis):
     disruptive = True
-    elasticity = True
+    elasticity = False
     networking = True
     run_with_gemini = False
     kubernetes = True
@@ -6750,6 +6752,7 @@ COMPLEX_NEMESIS = [NoOpMonkey, ChaosMonkey,
 
 class CorruptThenScrubMonkey(Nemesis):
     disruptive = False
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_corrupt_then_scrub()
@@ -6776,6 +6779,7 @@ class ResetLocalSchemaMonkey(Nemesis):
 
 class StartStopMajorCompaction(Nemesis):
     disruptive = False
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_start_stop_major_compaction()
@@ -6783,6 +6787,7 @@ class StartStopMajorCompaction(Nemesis):
 
 class StartStopScrubCompaction(Nemesis):
     disruptive = False
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_start_stop_scrub_compaction()
@@ -6790,6 +6795,7 @@ class StartStopScrubCompaction(Nemesis):
 
 class StartStopCleanupCompaction(Nemesis):
     disruptive = False
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_start_stop_cleanup_compaction()
@@ -6797,6 +6803,7 @@ class StartStopCleanupCompaction(Nemesis):
 
 class StartStopValidationCompaction(Nemesis):
     disruptive = False
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_start_stop_validation_compaction()
@@ -6820,6 +6827,7 @@ class FreeTierSetMonkey(SisyphusMonkey):
 class SlaIncreaseSharesDuringLoad(Nemesis):
     disruptive = False
     sla = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_sla_increase_shares_during_load()
@@ -6828,6 +6836,8 @@ class SlaIncreaseSharesDuringLoad(Nemesis):
 class SlaDecreaseSharesDuringLoad(Nemesis):
     disruptive = False
     sla = True
+    elasticity = True
+
 
     def disrupt(self):
         self.disrupt_sla_decrease_shares_during_load()
@@ -6872,7 +6882,7 @@ class SlaIncreaseSharesByAttachAnotherSlDuringLoad(Nemesis):
 class SlaMaximumAllowedSlsWithMaxSharesDuringLoad(Nemesis):
     disruptive = False
     sla = True
-    elasticity = True
+    elasticity = False
 
     def disrupt(self):
         self.disrupt_maximum_allowed_sls_with_max_shares_during_load()
@@ -6896,6 +6906,7 @@ class CreateIndexNemesis(Nemesis):
     disruptive = False
     schema_changes = True
     free_tier_set = True
+    elasticity = True
 
     def disrupt(self):
         self.disrupt_create_index()
