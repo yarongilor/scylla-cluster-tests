@@ -53,6 +53,7 @@ parallel_node_operations: false
 
 sla: true
 server_encrypt: true
+client_encrypt: true
 
 stress_image:
   cassandra-stress: 'scylladb/cassandra-stress:3.17.0'
