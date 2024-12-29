@@ -2530,7 +2530,9 @@ class Nemesis:
         Query MV to verify tombstones data is updated.
         """
 
-        mv_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_non_mv=True)
+        all_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=False)
+        non_mv_ks_cfs: List[str] = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_out_mv=True)
+        mv_ks_cfs = list(set(all_ks_cfs) - set(non_mv_ks_cfs))
         if not mv_ks_cfs:
             raise UnsupportedNemesis(
                 'Non-system keyspace and materialized-view are not found. disrupt_delete_partitions_and_query_mv nemesis can\'t run')
