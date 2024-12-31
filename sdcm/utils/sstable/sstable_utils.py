@@ -204,8 +204,9 @@ class SstableUtils:
 
     def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
         tombstones_deletion_info = []
+        dump_cmd = get_sstable_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
         self.db_node.remoter.run(
-            f'sudo sstabledump  {sstable} 1>/tmp/sstabledump.json', verbose=True, ignore_status=True)
+            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=True, ignore_status=True)
         result = self.db_node.remoter.run('sudo grep marked_deleted /tmp/sstabledump.json', verbose=True,
                                           ignore_status=False)
         if result.ok:
