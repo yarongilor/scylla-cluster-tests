@@ -46,8 +46,8 @@ class TombstoneGcVerificationThread:
         if not table_repair_date:
             return
         table_repair_date = datetime.datetime.strptime(table_repair_date, '%Y-%m-%d %H:%M:%S')
-        delta_repair_date_minutes = int(
-            (datetime.datetime.now() - table_repair_date).total_seconds()) - self._sstable_utils.propagation_delay_in_seconds
+        delta_repair_date_minutes = (int(
+            (datetime.datetime.now() - table_repair_date).total_seconds()) - self._sstable_utils.propagation_delay_in_seconds) // 60
         self.log.debug(
             "Calculated delta_repair_date_minutes: %d, table_repair_date: %s, propagation_delay: %d",
             delta_repair_date_minutes,
