@@ -1,8 +1,8 @@
 test_duration: 600
 
-prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=10 -clustering-row-count=111 -clustering-row-size=uniform:1024..2048 -concurrency=2 -connection-count=2 -consistency-level=quorum -rows-per-request=10 -timeout=30s -validate-data" ]
+prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=100 -clustering-row-count=11 -clustering-row-size=uniform:1024..2048 -concurrency=2 -connection-count=2 -consistency-level=quorum -rows-per-request=10 -timeout=30s -validate-data" ]
 
-stress_cmd: ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=25 -clustering-row-count=222 -partition-offset=11 -clustering-row-size=uniform:10..1024     -concurrency=3  -connection-count=3  -consistency-level=quorum -rows-per-request=10 -timeout=30s -retry-number=30 -retry-interval=80ms,1s -iterations 0 -duration=4m"]
+stress_cmd: ["scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=300 -clustering-row-count=22 -clustering-row-size=uniform:10..1024     -concurrency=3  -connection-count=3  -consistency-level=quorum -rows-per-request=10 -timeout=30s -retry-number=30 -retry-interval=80ms,1s -iterations 0 -duration=4m"]
 # Create MV + Set tombstone_gc to 'repair' + a propagation_delay_in_seconds of 5 minutes for the tombstone-gc-verification table:
 post_prepare_cql_cmds: [
                         "CREATE MATERIALIZED VIEW scylla_bench.view_test AS SELECT * FROM scylla_bench.test where ck IS NOT NULL AND v is not null PRIMARY KEY (v, pk, ck) with comment = 'TEST VIEW'",
@@ -33,7 +33,7 @@ data_validation: |
   validate_partitions: true
   table_name: "scylla_bench.test"
   primary_key_column: "pk"
-  max_partitions_in_test_table: 35
+  max_partitions_in_test_table: 300
   partition_range_with_data_validation: 0-5
 # Run a verification every 1 minutes:
 run_tombstone_gc_verification: '{"ks_cf": "scylla_bench.test", "interval": 60, "propagation_delay_in_seconds": 30}'

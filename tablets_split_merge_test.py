@@ -1,4 +1,5 @@
 import os
+import random
 import tempfile
 import threading
 import time
@@ -72,10 +73,10 @@ class TabletsSplitMergeTest(LongevityTest):
         InfoEvent(message=f"Create a keyspace ").publish()
         self._pre_create_large_partitions_schema()
         stress_cmd = self.params.get('stress_cmd')
-        deletion_percentage = 20  # How many of dataset partitions should be deleted.
+        deletion_percentage = 60  # How many of dataset partitions should be deleted.
 
         # Run prepare stress
-        self.run_prepare_write_cmd()
+        # self.run_prepare_write_cmd()
 
         # Run Read background stress
         self.node1 = self.db_cluster.data_nodes[0]
@@ -84,7 +85,7 @@ class TabletsSplitMergeTest(LongevityTest):
             self.run_tombstone_gc_verification_thread(**tombstone_gc_verification_params)
 
         # Run cycles of writes and deletions
-        cycles_num = 5
+        cycles_num = 7
         for cycle in range(cycles_num):
             InfoEvent(message=f"Starting write load: {stress_cmd}").publish()
             stress_queue = []
@@ -107,7 +108,10 @@ class TabletsSplitMergeTest(LongevityTest):
                         node in self.db_cluster.data_nodes]
             ParallelObject(objects=triggers, timeout=2400).call_objects()
 
-            self.log.debug(f"Final max tablets number: {self.max_tablets_num}")
+            InfoEvent(message=f"Run a major compaction for {KEYSPACE_NAME}.{TABLE_NAME} on nodes").publish()
+            triggers = [partial(node.run_nodetool, sub_cmd="compact", args=f"{KEYSPACE_NAME} {TABLE_NAME}", ) for
+                        node in self.db_cluster.data_nodes]
+            ParallelObject(objects=triggers, timeout=2400).call_objects()
 
 
     def _is_stress_finished(self, stress_queue) -> bool:
@@ -172,8 +176,7 @@ class TabletsSplitMergeTest(LongevityTest):
         Deletes a percentage of table's partitions using batched queries.
         """
         start_partition = self.partitions_attrs.partition_end_range + 1
-        max_partitions_to_delete = self.partitions_attrs.max_partitions_in_test_table - self.partitions_attrs.partition_end_range
-        num_of_partitions_to_delete = int(max_partitions_to_delete * deletion_percentage / 100)
+        num_of_partitions_to_delete = int(self.partitions_attrs.max_partitions_in_test_table * deletion_percentage / 100)
         end_partition = start_partition + num_of_partitions_to_delete
         batch_size: int = 1000
         self.log.debug(
@@ -181,7 +184,9 @@ class TabletsSplitMergeTest(LongevityTest):
         batch = []
         try:
             with self.db_cluster.cql_connection_patient(self.node1, connect_timeout=300) as session:
-                for pkey in range(start_partition, end_partition):
+                for _ in range(num_of_partitions_to_delete):
+                    pkey = random.randint(0, self.partitions_attrs.max_partitions_in_test_table-1)
+                # for pkey in range(start_partition, end_partition):
                     delete_query = f"DELETE FROM {KS_CF} WHERE pk = {pkey}"
                     batch.append(delete_query)
 
