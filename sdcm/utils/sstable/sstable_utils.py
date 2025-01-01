@@ -3,6 +3,7 @@ import json
 import logging
 import random
 from pathlib import Path
+from tabnanny import verbose
 
 from sdcm.paths import SCYLLA_YAML_PATH
 from sdcm.utils.version_utils import ComparableScyllaVersion
@@ -205,10 +206,15 @@ class SstableUtils:
     def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
         tombstones_deletion_info = []
         dump_cmd = get_sstable_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
+        sstabledump_output_file = "/tmp/sstabledump.json"
+        self.db_node.remoter.run(f"ls -al {sstable}", verbose=True)
+        self.log.debug(f"Running command of: sudo {dump_cmd}  {sstable} 1>{sstabledump_output_file}")
         self.db_node.remoter.run(
-            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=True, ignore_status=True)
-        result = self.db_node.remoter.run('sudo grep marked_deleted /tmp/sstabledump.json', verbose=True,
-                                          ignore_status=False)
+            f'sudo {dump_cmd}  {sstable} 1>{sstabledump_output_file}', verbose=True, ignore_status=False)
+        self.log.debug(f"output of {sstabledump_output_file}:")
+        self.db_node.remoter.run(f"ls -al {sstabledump_output_file}", verbose=True)
+        result = self.db_node.remoter.run(f'sudo grep marked_deleted {sstabledump_output_file}', verbose=True,
+                                          ignore_status=True)
         if result.ok:
             tombstones_deletion_info = result.stdout.splitlines()
         else:
