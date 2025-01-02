@@ -1,0 +1,34 @@
+test_duration: 300
+n_db_nodes: 4
+n_test_oracle_db_nodes: 1
+n_loaders: 1
+n_monitor_nodes: 1
+instance_type_db: 'i4i.2xlarge'
+
+user_prefix: 'gemini-with-grow-shrink'
+
+nemesis_class_name: 'GrowShrinkClusterNemesis'
+nemesis_add_node_cnt: 1
+nemesis_interval: 5
+nemesis_sequence_sleep_between_ops: 5
+nemesis_filter_seeds: false
+
+# gemini
+# cmd: gemini -d -n [NUM_OF_TEST_ITERATIONS] -c [NUM_OF_THREADS] -p [NUM_OF_PARTITION_KEYS_PER_THREAD] -m mixed -f
+#--async-objects-stabilization-backoff duration   Duration between attempts to validate result sets from MV and SI for example 10ms or 1s (default 10ms)
+# the below cmd runs about 3 hours
+gemini_cmd: "gemini -d --duration 3h --warmup 30m \
+-c 50 -m mixed -f --non-interactive --cql-features normal \
+--max-mutation-retries 10 --max-mutation-retries-backoff 500ms \
+--async-objects-stabilization-attempts 5 --async-objects-stabilization-backoff 500ms \
+--replication-strategy \"{'class': 'NetworkTopologyStrategy', 'replication_factor': '3'}\" \
+--oracle-replication-strategy \"{'class': 'NetworkTopologyStrategy', 'replication_factor': '1'}\""
+
+
+gemini_schema_url: 'https://s3.amazonaws.com/scylla-gemini/Binaries/schema.json' # currently is not used
+
+db_type: mixed_scylla
+instance_type_db_oracle: 'i4i.8xlarge'
+
+gemini:
+  image: 'scylladb/hydra-loaders:gemini-v1.8.9'
