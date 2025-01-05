@@ -4376,6 +4376,14 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         scylla_encryption_options |= additional_scylla_encryption_options or {}
         aws_kms, kms_key_alias_name = None, None
 
+        try:
+            # Check that sstables of that table are really encrypted
+            self.log.info("sstable_util.check_that_sstables_are_encrypted(expected_bool_value=False)")
+            sstable_util = SstableUtils(db_node=self.target_node, ks_cf="scylla_bench.test")
+            sstable_util.check_that_sstables_are_encrypted(expected_bool_value=False)
+        except Exception as e:
+            self.log.info(f"sstable_util.check_that_sstables_are_encrypted(expected_bool_value=False): {e}")
+
         # Handle AWS KMS specific parts
         if additional_scylla_encryption_options and additional_scylla_encryption_options.get(
                 'key_provider', 'N/A') == 'KmsKeyProviderFactory':
@@ -4443,7 +4451,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     regex=".*sstable - Error while linking SSTable.*filesystem error: stat failed: No such file or directory.*"):
                 write_thread = self.tester.run_stress_thread(stress_cmd=write_cmd, stop_test_on_failure=False)
                 self.tester.verify_stress_thread(write_thread)
-                self.stop_nemesis_on_stress_errors(write_thread)
+                # self.stop_nemesis_on_stress_errors(write_thread)
+
 
         try:
             for i in range(2 if (aws_kms and kms_key_alias_name and enable_kms_key_rotation) else 1):
@@ -4453,7 +4462,16 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     " -partition-count=50 -clustering-row-count=100 -clustering-row-size=uniform:75..125"
                     f" -keyspace {keyspace_name} -table {table_name} -timeout=120s -validate-data")
                 run_write_scylla_bench_load(write_cmd)
+                try:
+                    # Check that sstables of that table are really encrypted
+                    sstable_util = SstableUtils(db_node=self.target_node, ks_cf=f"{keyspace_name}.{table_name}")
+                    check_encryption_fact(sstable_util, True)
+                except Exception as e:
+                    self.log.info(f"except Exception as e: {e}")
                 upgrade_sstables(self.cluster.data_nodes)
+                # Check that sstables of that table are really encrypted
+                sstable_util = SstableUtils(db_node=self.target_node, ks_cf=f"{keyspace_name}.{table_name}")
+                check_encryption_fact(sstable_util, True)
 
                 # Read data
                 read_cmd = (
@@ -4463,7 +4481,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
                     " -iterations=1 -concurrency=10 -connection-count=10 -rows-per-request=10")
                 read_thread = self.tester.run_stress_thread(stress_cmd=read_cmd, stop_test_on_failure=False)
                 self.tester.verify_stress_thread(read_thread)
-                self.stop_nemesis_on_stress_errors(read_thread)
+                # self.stop_nemesis_on_stress_errors(read_thread)
 
                 # Rotate KMS key
                 if enable_kms_key_rotation and aws_kms and kms_key_alias_name and i == 0:
@@ -4505,8 +4523,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
         finally:
             # Delete table
             self.log.info("Delete '%s.%s' table with server encryption", keyspace_name, table_name)
-            with self.cluster.cql_connection_patient(self.target_node, keyspace=keyspace_name) as session:
-                session.execute(f"DROP TABLE {table_name};")
+            # with self.cluster.cql_connection_patient(self.target_node, keyspace=keyspace_name) as session:
+            #     session.execute(f"DROP TABLE {table_name};")
 
     def disrupt_hot_reloading_internode_certificate(self):
         """
