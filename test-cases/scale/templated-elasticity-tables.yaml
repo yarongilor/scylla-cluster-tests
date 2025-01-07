@@ -62,4 +62,4 @@ queries:
 
 # Run stress
 # cassandra-stress user profile={} 'ops(insert=1)' cl=QUORUM n=2572262 -rate threads=1 -errors ignore
-# cassandra-stress user profile={} 'ops(read1=1)' cl=QUORUM n=643064 -rate threads=1 -errors ignore
+# cassandra-stress user profile={} 'ops(read1=1)' cl=QUORUM n=1286128 -rate threads=1 -errors ignore
