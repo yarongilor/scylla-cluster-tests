@@ -8,7 +8,8 @@ instance_type_db: 'i4i.2xlarge'
 user_prefix: 'gemini-with-grow-shrink'
 
 nemesis_class_name: 'GrowShrinkClusterNemesis'
-nemesis_add_node_cnt: 1
+nemesis_add_node_cnt: 6
+parallel_node_operations: true
 nemesis_interval: 5
 nemesis_sequence_sleep_between_ops: 5
 nemesis_filter_seeds: false
