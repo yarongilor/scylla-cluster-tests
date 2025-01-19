@@ -44,6 +44,3 @@ gemini_cmd: |
   --async-objects-stabilization-backoff 500ms
   --replication-strategy "{'class': 'NetworkTopologyStrategy', 'replication_factor': '3'}"
   --oracle-replication-strategy "{'class': 'NetworkTopologyStrategy', 'replication_factor': '1'}"
-
-
-gemini_log_cql_statements: false
