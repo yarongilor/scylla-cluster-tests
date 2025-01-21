@@ -14,7 +14,7 @@ cs_user_profiles:
 cs_duration: ''
 pre_create_schema: true
 user_profile_table_count: 20
-batch_size: 5
+batch_size: 10
 
 n_loaders: 1
 n_monitor_nodes: 1
