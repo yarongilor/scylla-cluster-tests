@@ -9,7 +9,6 @@
 
 test_duration: 600
 
-cs_duration: '0m'
 cs_user_profiles:
     - data_dir/templated-elasticity-tables.yaml
 
