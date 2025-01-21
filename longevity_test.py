@@ -317,8 +317,10 @@ class LongevityTest(ClusterTester, loader_utils.LoaderUtilsMixin):
                 stress_params_list += self.create_templated_user_stress_params(next(templated_table_counter),
                                                                                cs_profile)
         if not skip_optional_stage('main_load'):
-            self.log.debug("Starting stress in batches of: %d with %d stress commands",
-                           batch_size, len(stress_params_list))
+            total_stress_cmds = len(stress_params_list)
+            self.log.debug("Starting stress in batches of: %d with %d stress commands, for %d tables",
+                           batch_size, total_stress_cmds, user_profile_table_count)
+            self.log.debug("Then there are: %d stresses per table", total_stress_cmds / user_profile_table_count)
             self._run_user_stress_in_batches(batch_size=batch_size,
                                              stress_params_list=stress_params_list, duration=duration,
                                              create_extra_tables=create_extra_tables)
