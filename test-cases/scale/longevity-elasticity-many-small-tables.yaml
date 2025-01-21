@@ -11,7 +11,7 @@ test_duration: 80
 
 cs_user_profiles:
     - data_dir/templated-elasticity-tables.yaml
-
+cs_duration: ''
 pre_create_schema: true
 user_profile_table_count: 20
 batch_size: 5
