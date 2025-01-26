@@ -5778,6 +5778,17 @@ class DecommissionMonkey(Nemesis):
         self.disrupt_nodetool_decommission()
 
 
+class UniqueDriverDisconnectionSequenceMonkey(Nemesis):
+    disruptive = True
+    topology_changes = True
+
+    def disrupt(self):
+        self.disrupt_nodetool_decommission()
+        self.disrupt_bootstrap_streaming_error()
+        self.disrupt_rolling_restart_cluster(random_order=True)
+        self.disrupt_rolling_config_change_internode_compression()
+
+
 class DecommissionSeedNode(Nemesis):
     disruptive = True
     topology_changes = True
