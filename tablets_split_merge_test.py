@@ -108,10 +108,11 @@ class TabletsSplitMergeTest(LongevityTest):
                         node in self.db_cluster.data_nodes]
             ParallelObject(objects=triggers, timeout=2400).call_objects()
 
-            InfoEvent(message=f"Run a major compaction for {KEYSPACE_NAME}.{TABLE_NAME} on nodes").publish()
-            triggers = [partial(node.run_nodetool, sub_cmd="compact", args=f"{KEYSPACE_NAME} {TABLE_NAME}", ) for
-                        node in self.db_cluster.data_nodes]
-            ParallelObject(objects=triggers, timeout=2400).call_objects()
+            if random.choice([True, False]):
+                InfoEvent(message=f"Run a major compaction for {KEYSPACE_NAME}.{TABLE_NAME} on nodes").publish()
+                triggers = [partial(node.run_nodetool, sub_cmd="compact", args=f"{KEYSPACE_NAME} {TABLE_NAME}", ) for
+                            node in self.db_cluster.data_nodes]
+                ParallelObject(objects=triggers, timeout=2400).call_objects()
 
 
     def _is_stress_finished(self, stress_queue) -> bool:
