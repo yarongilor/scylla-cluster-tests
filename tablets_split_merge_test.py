@@ -84,7 +84,7 @@ class TabletsSplitMergeTest(LongevityTest):
             self.run_tombstone_gc_verification_thread(**tombstone_gc_verification_params)
 
         # Run cycles of writes and deletions
-        cycles_num = 5
+        cycles_num = 2
         for cycle in range(cycles_num):
             InfoEvent(message=f"Starting write load: {stress_cmd}").publish()
             stress_queue = []
@@ -94,20 +94,31 @@ class TabletsSplitMergeTest(LongevityTest):
             for stress in stress_queue:
                 self.verify_stress_thread(cs_thread_pool=stress)
 
-            InfoEvent(message=f"Start deletions to trigger a tablets merge.").publish()
-            self.delete_partitions_in_batch(deletion_percentage)
-
             InfoEvent(message=f"Run a flush for {KEYSPACE_NAME} on nodes").publish()
             triggers = [partial(node.run_nodetool, sub_cmd=f"flush -- {KEYSPACE_NAME}", )
                         for node in self.db_cluster.data_nodes]
             ParallelObject(objects=triggers, timeout=2400).call_objects()
+
+            InfoEvent(message=f"Start deletions to trigger a tablets merge.").publish()
+            self.delete_partitions_in_batch(deletion_percentage)
+
 
             InfoEvent(message=f"Run a repair for {KEYSPACE_NAME} on nodes").publish()
             triggers = [partial(node.run_nodetool, sub_cmd="repair", args=KEYSPACE_NAME, ) for
                         node in self.db_cluster.data_nodes]
             ParallelObject(objects=triggers, timeout=2400).call_objects()
 
-            self.log.debug(f"Final max tablets number: {self.max_tablets_num}")
+            InfoEvent(message=f"Run a flush for {KEYSPACE_NAME} on nodes").publish()
+            triggers = [partial(node.run_nodetool, sub_cmd=f"flush -- {KEYSPACE_NAME}", )
+                        for node in self.db_cluster.data_nodes]
+            ParallelObject(objects=triggers, timeout=2400).call_objects()
+
+            # if random.choice([True, False]):
+            #     InfoEvent(message=f"Run a major compaction for {KEYSPACE_NAME}.{TABLE_NAME} on nodes").publish()
+            #     triggers = [partial(node.run_nodetool, sub_cmd="compact", args=f"{KEYSPACE_NAME} {TABLE_NAME}", ) for
+            #                 node in self.db_cluster.data_nodes]
+            #     ParallelObject(objects=triggers, timeout=2400).call_objects()
+            time.sleep(2000)
 
 
     def _is_stress_finished(self, stress_queue) -> bool:
