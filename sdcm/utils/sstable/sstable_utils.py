@@ -162,9 +162,12 @@ class SstableUtils:
         return num_tombstones
 
     def verify_a_live_normal_node_is_used(self):
+        self.log.info('running in verify_a_live_normal_node_is_used')
         if not self.db_node:
+            self.log.info('running not self.db_node')
             self.db_node = next(node for node in self.db_cluster.data_nodes if node.db_up())
         elif not self.db_node.db_up():
+            self.log.info('running not self.db_node.db_up()')
             self.db_node = next(node for node in self.db_node.parent_cluster.data_nodes if node.db_up())
 
     def get_table_repair_date(self) -> str | None:

@@ -91,9 +91,13 @@ class TombstoneGcVerificationThread:
                     tombstone_event.severity = Severity.ERROR
 
     def run(self):
+        self.log.info('Start running sdcm/tombstone_gc_verification_thread.py')
         end_time = time.time() + self.duration
         while time.time() < end_time and not self.termination_event.is_set():
+            self.log.info('running tombstone_gc_verification_thread loop')
+            self.log.info('running verify_a_live_normal_node_is_used')
             self._sstable_utils.verify_a_live_normal_node_is_used()
+            self.log.info('running _run_tombstone_gc_verification()')
             self._run_tombstone_gc_verification()
             self.log.debug('Executed %s', TombstoneGcVerificationEvent.__name__)
             time.sleep(self.interval)
