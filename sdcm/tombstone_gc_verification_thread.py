@@ -22,12 +22,13 @@ class TombstoneGcVerificationThread:
     def __init__(self, db_cluster: [BaseScyllaCluster, BaseCluster], duration: int, interval: int,
                  termination_event: threading.Event, **kwargs):
 
-        self._sstable_utils = SstableUtils(**kwargs)
         self.duration = duration
         self.interval = interval
         self.termination_event = termination_event
         self._thread = threading.Thread(daemon=True, name=self.__class__.__name__, target=self.run)
         self.db_cluster: [BaseScyllaCluster, BaseCluster] = db_cluster
+        node = next(node for node in self.db_cluster.data_nodes if node.db_up())
+        self._sstable_utils = SstableUtils(db_node=node, **kwargs)
         self.log = logging.getLogger(self.__class__.__name__)
 
     def _wait_until_user_table_exists(self, db_node, table_name: str = 'random', timeout_min: int = 20):
