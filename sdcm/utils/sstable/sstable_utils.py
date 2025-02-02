@@ -20,7 +20,9 @@ class SstableUtils:
 
     """
 
+    REMOTE_SSTABLEDUMP_PATH = "/tmp/sstabledump.json"
     # pylint: disable=too-many-instance-attributes
+
     def __init__(self, propagation_delay_in_seconds: int = 0, ks_cf: str = None,
                  db_node: 'BaseNode' = None,  # noqa: F821
                  **kwargs):
@@ -148,18 +150,35 @@ class SstableUtils:
             f" Encryption results: {encryption_results}")
 
     def count_sstable_tombstones(self, sstable: str) -> int:
-        dump_cmd = get_sstable_data_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
-        self.db_node.remoter.run(
-            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
-        tombstones_deletion_info = self.db_node.remoter.run(
-            'sudo egrep \'"expired" : true|tombstone\' /tmp/sstabledump.json', verbose=False, ignore_status=True)
-        if not tombstones_deletion_info:
-            self.log.debug('Got no tombstones for sstable: %s', sstable)
+        """
+        Counts the number of tombstones in a given SSTable.
+
+        :param sstable: The SSTable file path.
+        :return: The number of tombstones in the SSTable.
+        """
+        self._run_sstabledump(sstable=sstable)
+        # Fetch the dumped JSON content
+        result = self.db_node.remoter.run(
+            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False, ignore_status=False)
+
+        if not result.ok:
+            self.log.warning("Failed to retrieve sstable dump data for %s: (%s, %s)", sstable, result.stdout,
+                             result.stderr)
             return 0
 
-        num_tombstones = len(tombstones_deletion_info.stdout.splitlines())
-        self.log.debug('Got %s tombstones for sstable: %s', num_tombstones, sstable)
-        return num_tombstones
+        try:
+            dump_data = json.loads(result.stdout)
+            num_tombstones = 0
+            for partition in dump_data.get("sstables", {}).get("anonymous", []):
+                if "tombstone" in partition or partition.get("expired") is True:
+                    num_tombstones += 1
+
+            self.log.debug("Found %s tombstones in sstable %s", num_tombstones, sstable)
+            return num_tombstones
+
+        except json.JSONDecodeError as e:
+            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+            return 0
 
     def verify_a_live_normal_node_is_used(self):
         self.log.info('running in verify_a_live_normal_node_is_used')
@@ -204,38 +223,81 @@ class SstableUtils:
                        table_repair_date, delta_repair_date_minutes)
         return table_repair_date, delta_repair_date_minutes
 
-    def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
-        tombstones_deletion_info = []
+    def _run_sstabledump(self, sstable: str, remote_json_path=REMOTE_SSTABLEDUMP_PATH):
         dump_cmd = get_sstable_data_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
-        self.db_node.remoter.run(
-            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=True, ignore_status=False)
-        result = self.db_node.remoter.run('sudo grep tombstone /tmp/sstabledump.json', verbose=True,
-                                          ignore_status=True)
-        if result.ok:
-            self.log.debug('Got tombstones results of: %s', result)
-            self.log.debug('Got tombstones result.stdout of: %s', result.stdout)
-            tombstones_deletion_info = result.stdout.splitlines()
-        else:
-            self.log.warning('Failed to find compacted tombstones in %s: (%s, %s)',
-                             sstable, result.stdout, result.stderr)
-        self.log.debug('Found %s tombstones for sstable %s', len(tombstones_deletion_info), sstable)
+        # Run dump-data command on the remote node and save output to a file
+        self.db_node.remoter.run(f'sudo {dump_cmd} {sstable} 1>{remote_json_path}', verbose=False, ignore_status=False)
+
+    def _are_tombstones_in_sstabledump(self, sstable: str, remote_json_path=REMOTE_SSTABLEDUMP_PATH) -> bool:
+        # Check if tombstones exist in the dumped sstable JSON
+        check_tombstones_cmd = f'sudo grep -q tombstone {remote_json_path}'
+        result = self.db_node.remoter.run(check_tombstones_cmd, verbose=False, ignore_status=True)
+
+        if result.exit_status != 0:
+            self.log.debug("No tombstones found in SSTable %s.", sstable)
+            return False
+        self.log.debug("Tombstones are found in SSTable %s.", sstable)
+        return True
+
+    def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
+        """
+        Extracts tombstone deletion info from a compacted SSTable dump.
+
+        :param sstable: The SSTable file path.
+        :return: List of tombstone deletion entries.
+        """
+        self._run_sstabledump(sstable=sstable)
+        if not self._are_tombstones_in_sstabledump(sstable=sstable):
+            return []
+
+        # If tombstones exist, fetch JSON and parse it
+        tombstones_deletion_info = []
+        result = self.db_node.remoter.run(f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False,
+                                          ignore_status=False)
+
+        if not result.ok:
+            self.log.warning("Failed to retrieve sstable dump data for %s: (%s, %s)", sstable, result.stdout,
+                             result.stderr)
+            return tombstones_deletion_info
+
+        try:
+            # Parse JSON output
+            dump_data = json.loads(result.stdout)
+
+            # Extract tombstones
+            for partition in dump_data.get("sstables", {}).get("anonymous", []):
+                if "tombstone" in partition:
+                    tombstones_deletion_info.append(partition)
+
+        except json.JSONDecodeError as e:
+            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+
+        self.log.debug("Found %s tombstones for sstable %s", len(tombstones_deletion_info), sstable)
         return tombstones_deletion_info
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime.datetime, sstable: str):
+        """
+        Verifies that no pre-repair tombstones remain in a post-repair SSTable.
+
+        :param table_repair_date: The repair timestamp.
+        :param sstable: SSTable file.
+        :raises NonDeletedTombstonesFound: If tombstones exist from before the repair date.
+        """
         non_deleted_tombstones = []
         tombstones_deletion_info = self.get_compacted_tombstone_deletion_info(sstable=sstable)
-        for tombstone_deletion_info in tombstones_deletion_info:
-            self.log.debug('processing tombstone_deletion_info: %s', tombstone_deletion_info)
-            tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
+        for partition in tombstones_deletion_info:
+            self.log.debug('processing tombstone_deletion_info: %s', partition)
+            tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=partition)
             self.log.debug('processing tombstone_delete_date: %s', tombstone_delete_date)
-            self.log.debug('processing tombstone_delete_date %s < table_repair_date: %s', tombstone_delete_date, table_repair_date)
+            self.log.debug('processing tombstone_delete_date %s < table_repair_date: %s',
+                           tombstone_delete_date, table_repair_date)
             if tombstone_delete_date < table_repair_date:
                 non_deleted_tombstones.append(tombstone_delete_date)
         if non_deleted_tombstones:
             raise NonDeletedTombstonesFound(
                 f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}")
 
-    def get_tombstone_date(self, tombstone_deletion_info: str) -> datetime.datetime:
+    def get_tombstone_date(self, tombstone_deletion_info: dict) -> datetime.datetime:
         """
         Parse a datetime value out of an sstable tombstone dump.
         Example input:
@@ -248,9 +310,8 @@ class SstableUtils:
         }
         Example Output: datetime.datetime(2025, 1, 30, 9, 49, 23)
         """
-        tombstone_dict = json.loads(tombstone_deletion_info)
-        self.log.debug('Found tombstone tombstone_dict of: %s', tombstone_dict)
-        deletion_datetime_str = tombstone_dict['tombstone']['deletion_time']
+        self.log.debug('Found tombstone tombstone_dict of: %s', tombstone_deletion_info)
+        deletion_datetime_str = tombstone_deletion_info["tombstone"]['deletion_time']
         self.log.debug('Found tombstone deletion_datetime_str of: %s', deletion_datetime_str)
         # Remove 'z' and parse the datetime string
         full_deletion_date_datetime = datetime.datetime.strptime(deletion_datetime_str.rstrip('z'), '%Y-%m-%d %H:%M:%S')
@@ -329,4 +390,4 @@ def get_sstable_data_dump_command(node, keyspace: str, table: str) -> str:
     """
     if not is_new_sstable_dump_supported(node):
         return 'sstabledump'
-    return _generate_sstable_dump_command(node, "dump-data", keyspace, table)
+    return _generate_sstable_dump_command(node, "dump-data --merge", keyspace, table)
