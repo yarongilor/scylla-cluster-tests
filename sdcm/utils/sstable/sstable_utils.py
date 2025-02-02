@@ -208,10 +208,12 @@ class SstableUtils:
         tombstones_deletion_info = []
         dump_cmd = get_sstable_data_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
         self.db_node.remoter.run(
-            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=False, ignore_status=True)
-        result = self.db_node.remoter.run('sudo grep tombstone /tmp/sstabledump.json', verbose=False,
+            f'sudo {dump_cmd}  {sstable} 1>/tmp/sstabledump.json', verbose=True, ignore_status=False)
+        result = self.db_node.remoter.run('sudo grep tombstone /tmp/sstabledump.json', verbose=True,
                                           ignore_status=True)
         if result.ok:
+            self.log.debug('Got tombstones results of: %s', result)
+            self.log.debug('Got tombstones result.stdout of: %s', result.stdout)
             tombstones_deletion_info = result.stdout.splitlines()
         else:
             self.log.warning('Failed to find compacted tombstones in %s: (%s, %s)',
@@ -223,15 +225,17 @@ class SstableUtils:
         non_deleted_tombstones = []
         tombstones_deletion_info = self.get_compacted_tombstone_deletion_info(sstable=sstable)
         for tombstone_deletion_info in tombstones_deletion_info:
+            self.log.debug('processing tombstone_deletion_info: %s', tombstone_deletion_info)
             tombstone_delete_date = self.get_tombstone_date(tombstone_deletion_info=tombstone_deletion_info)
+            self.log.debug('processing tombstone_delete_date: %s', tombstone_delete_date)
+            self.log.debug('processing tombstone_delete_date %s < table_repair_date: %s', tombstone_delete_date, table_repair_date)
             if tombstone_delete_date < table_repair_date:
                 non_deleted_tombstones.append(tombstone_delete_date)
         if non_deleted_tombstones:
             raise NonDeletedTombstonesFound(
                 f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}")
 
-    @staticmethod
-    def get_tombstone_date(tombstone_deletion_info: str) -> datetime.datetime:
+    def get_tombstone_date(self, tombstone_deletion_info: str) -> datetime.datetime:
         """
         Parse a datetime value out of an sstable tombstone dump.
         Example input:
@@ -245,11 +249,12 @@ class SstableUtils:
         Example Output: datetime.datetime(2025, 1, 30, 9, 49, 23)
         """
         tombstone_dict = json.loads(tombstone_deletion_info)
+        self.log.debug('Found tombstone tombstone_dict of: %s', tombstone_dict)
         deletion_datetime_str = tombstone_dict['tombstone']['deletion_time']
-
+        self.log.debug('Found tombstone deletion_datetime_str of: %s', deletion_datetime_str)
         # Remove 'z' and parse the datetime string
         full_deletion_date_datetime = datetime.datetime.strptime(deletion_datetime_str.rstrip('z'), '%Y-%m-%d %H:%M:%S')
-
+        self.log.debug('Found tombstone deletion date of: %s', full_deletion_date_datetime)
         return full_deletion_date_datetime
 
     def corrupt_sstables(self, sstables_to_corrupt_count: int = 1):
