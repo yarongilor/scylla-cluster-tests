@@ -4,6 +4,7 @@ import time
 from functools import partial
 
 from longevity_twcs_test import TWCSLongevityTest
+from sdcm.tester import CriticalTestFailure
 from sdcm.utils.common import ParallelObject, skip_optional_stage
 from sdcm.utils.sstable.sstable_utils import SstableUtils
 

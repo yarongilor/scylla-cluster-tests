@@ -144,7 +144,7 @@ class SstableUtils:
 
         # Fetch the dumped JSON content
         result = self.db_node.remoter.run(
-            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False, ignore_status=False)
+            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=True, ignore_status=False)
 
         if not result.ok:
             self.log.debug("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
@@ -153,10 +153,18 @@ class SstableUtils:
 
         try:
             dump_data = json.loads(result.stdout)
-            num_tombstones = sum(
-                1 for partition in dump_data.get("sstables", {}).get("anonymous", [])
-                if "tombstone" in partition or partition.get("expired") is True
-            )
+            num_tombstones = 0
+
+            for partition in dump_data.get("sstables", {}).get("anonymous", []):
+                # Count regular tombstones
+                if "tombstone" in partition:
+                    num_tombstones += 1
+
+                # Count TTL-expired tombstones by checking `is_live` and `deletion_time`
+                for row in partition.get("clustering_elements", []):
+                    for col_data in row.get("columns", {}).values():
+                        if not col_data.get("is_live", True) and "deletion_time" in col_data:
+                            num_tombstones += 1
 
             self.log.debug("Found %s tombstones in SSTable %s", num_tombstones, sstable)
             return num_tombstones
