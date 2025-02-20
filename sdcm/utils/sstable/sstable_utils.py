@@ -36,9 +36,11 @@ class SstableUtils:
         self.password = kwargs.get("password", None)
 
     def count_tombstones(self):
+        self.log.debug("tombstonedbg: count_tombstones")
         sstables = self.get_sstables()
         tombstones_num = 0
         for sstable in sstables:
+            self.log.debug(f"tombstonedbg: parsing {sstable}")
             tombstones_num += self.count_sstable_tombstones(sstable=sstable)
         self.log.debug('Got %s tombstones for %s', tombstones_num, self.ks_cf)
         return tombstones_num
@@ -138,13 +140,14 @@ class SstableUtils:
         :param sstable: The SSTable file path.
         :return: The number of tombstones in the SSTable, or 0 if SSTable doesn't exist.
         """
+        self.log.debug("tombstonedbg: count_sstable_tombstones")
         if not self._run_sstabledump(sstable=sstable):  # Check if SSTable exists and was dumped
             self.log.debug("Skipping tombstone count as SSTable %s does not exist or dump failed.", sstable)
             return 0
-
+        self.log.debug("tombstonedbg: sudo cat {self.REMOTE_SSTABLEDUMP_PATH}")
         # Fetch the dumped JSON content
         result = self.db_node.remoter.run(
-            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=True, ignore_status=False)
+            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False, ignore_status=False)
 
         if not result.ok:
             self.log.debug("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
@@ -152,19 +155,27 @@ class SstableUtils:
             return 0
 
         try:
+            self.log.debug(f"tombstonedbg: dump_data = json.loads(result.stdout)")
             dump_data = json.loads(result.stdout)
             num_tombstones = 0
 
+            self.log.debug(f"tombstonedbg: for partition in dump_data.get")
             for partition in dump_data.get("sstables", {}).get("anonymous", []):
+                self.log.debug(f"tombstonedbg: parsing partition: {partition}")
                 # Count regular tombstones
                 if "tombstone" in partition:
                     num_tombstones += 1
 
                 # Count TTL-expired tombstones by checking `is_live` and `deletion_time`
                 for row in partition.get("clustering_elements", []):
+                    self.log.debug(f"tombstonedbg: parsing row: {row}")
                     for col_data in row.get("columns", {}).values():
-                        if not col_data.get("is_live", True) and "deletion_time" in col_data:
+                        self.log.debug(f"tombstonedbg: parsing col_data: {col_data}")
+                        if not col_data.get("is_live", True):
+                            self.log.debug(f"tombstonedbg: not col_data.get(is_live, True)")
                             num_tombstones += 1
+                        else:
+                            self.log.debug(f"tombstonedbg: col_data.get(is_live, True)")
 
             self.log.debug("Found %s tombstones in SSTable %s", num_tombstones, sstable)
             return num_tombstones

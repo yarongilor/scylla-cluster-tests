@@ -158,6 +158,28 @@ class DataCenterTopologyRfControl:
         # Get the original number of nodes in the data center
         return len([n for n in self.cluster.data_nodes if n.dc_idx == node.dc_idx])
 
+    def _get_keyspace_replication(self, keyspace: str, session) -> dict:
+        """
+        Fetches the current replication configuration for a keyspace.
+
+        :param keyspace: The name of the keyspace.
+        :param session: The CQL session.
+        :return: A dictionary containing the replication factor per datacenter.
+        """
+        query = f"SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = '{keyspace}'"
+        result = session.execute(query)
+
+        if not result or not result.one():
+            LOGGER.warning(f"Could not retrieve replication settings for keyspace {keyspace}")
+            return {}
+
+        replication = result.one().replication
+        if 'NetworkTopologyStrategy' not in replication.get('class', ''):
+            LOGGER.debug(f"Keyspace {keyspace} is not using NetworkTopologyStrategy, skipping modification.")
+            return {}
+
+        return {dc: int(rf) for dc, rf in replication.items() if dc != 'class'}
+
     def _get_keyspaces_to_decrease_rf(self, session) -> list:
         """
         Returns a list of keyspaces of the data-center that have the specified replication factor.
