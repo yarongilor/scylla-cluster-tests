@@ -161,21 +161,29 @@ class SstableUtils:
 
             self.log.debug(f"tombstonedbg: for partition in dump_data.get")
             for partition in dump_data.get("sstables", {}).get("anonymous", []):
-                self.log.debug(f"tombstonedbg: parsing partition: {partition}")
                 # Count regular tombstones
                 if "tombstone" in partition:
                     num_tombstones += 1
 
-                # Count TTL-expired tombstones by checking `is_live` and `deletion_time`
-                for row in partition.get("clustering_elements", []):
-                    self.log.debug(f"tombstonedbg: parsing row: {row}")
-                    for col_data in row.get("columns", {}).values():
-                        self.log.debug(f"tombstonedbg: parsing col_data: {col_data}")
-                        if not col_data.get("is_live", True):
-                            self.log.debug(f"tombstonedbg: not col_data.get(is_live, True)")
-                            num_tombstones += 1
-                        else:
-                            self.log.debug(f"tombstonedbg: col_data.get(is_live, True)")
+            # Count TTL-expired tombstones by checking "is_live"
+            for sstable_data in dump_data.get("sstables", {}).values():
+                self.log.debug(f"tombstonedbg: sstable_data length: {len(sstable_data)}")
+                for partition in sstable_data:
+                    self.log.debug(f"tombstonedbg: parsing partition: {partition['key']}")
+
+                    # Check each clustering row for tombstone markers
+                    c_elements = partition.get("clustering_elements", [])
+                    self.log.debug(f"tombstonedbg: clustering_elements number: {c_elements}")
+                    for row in partition.get("clustering_elements", []):
+                        self.log.debug(f"tombstonedbg: parsing row: {row}")
+                        for col_data in row.get("columns", {}).values():
+                            self.log.debug(f"tombstonedbg: parsing col_data: {col_data}")
+
+                            if not col_data.get("is_live", True):
+                                self.log.debug(f"tombstonedbg: Found tombstone in row: {row['key']}")
+                                num_tombstones += 1
+                            else:
+                                self.log.debug(f"tombstonedbg: col_data.get(is_live, True)")
 
             self.log.debug("Found %s tombstones in SSTable %s", num_tombstones, sstable)
             return num_tombstones
