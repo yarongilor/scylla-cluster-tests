@@ -88,7 +88,9 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         tombstone_num_post_repair = sstable_utils.count_tombstones()
         assert tombstone_num_post_repair >= tombstone_num_pre_repair, \
             f"Found unexpected fewer tombstones: {tombstone_num_post_repair} / {tombstone_num_pre_repair}"
-
+        self.log.info('Test get_ttl_expired_tombstone_deletion_info')  # TODO: DBG REMOVE
+        for sstable in sstable_utils.get_sstables():
+            sstable_utils.get_ttl_expired_tombstone_deletion_info(sstable=sstable)  # TODO: DBG REMOVE
         self.log.info("change gc-grace-seconds back to default of 10 days and tombstone-gc mode to 'repair'")
         with self.db_cluster.cql_connection_patient(node=self.db_node) as session:
             query = "ALTER TABLE scylla_bench.test with gc_grace_seconds = 864000 " \
@@ -101,10 +103,9 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
 
         table_repair_date, delta_repair_date_minutes = sstable_utils.get_table_repair_date_and_delta_minutes()
         sstables = sstable_utils.get_sstables(from_minutes_ago=delta_repair_date_minutes)
-        self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
+        self.log.debug('Starting sstable dump to verify correctness of tombstones for %s sstables',
                        len(sstables))
-        for sstable in sstables:
-            sstable_utils.verify_post_repair_sstable_tombstones(table_repair_date=table_repair_date, sstable=sstable)
+        sstable_utils.verify_post_repair_ttl_expired_tombstones(table_repair_date=table_repair_date, sstables=sstables)
 
         self.log.info("Change tombstone-gc mode to 'immediate'")
         with self.db_cluster.cql_connection_patient(node=self.db_node) as session:
@@ -131,5 +132,5 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self.log.debug('Starting sstabledump to verify correctness of tombstones for %s sstables',
                        len(sstables))
         for sstable in sstables:
-            tombstone_deletion_info = sstable_utils.get_compacted_tombstone_deletion_info(sstable=sstable)
+            tombstone_deletion_info = sstable_utils.get_ttl_expired_tombstone_deletion_info(sstable=sstable)
             assert not tombstone_deletion_info, f"Found unexpected existing tombstones: {tombstone_deletion_info} for sstable: {sstable}"

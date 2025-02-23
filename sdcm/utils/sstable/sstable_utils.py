@@ -277,7 +277,7 @@ class SstableUtils:
 
     def _are_tombstones_in_sstabledump(self, sstable: str, remote_json_path: str = REMOTE_SSTABLEDUMP_PATH) -> bool:
         # Check if tombstones exist in the dumped sstable JSON
-        check_tombstones_cmd = f'sudo grep -q tombstone {remote_json_path}'
+        check_tombstones_cmd = f'sudo grep -q deletion_time {remote_json_path}'
         result = self.db_node.remoter.run(check_tombstones_cmd, verbose=False, ignore_status=True)
 
         if result.exit_status != 0:
@@ -286,6 +286,34 @@ class SstableUtils:
         self.log.debug("Tombstones are found in SSTable %s.", sstable)
         return True
 
+    def _get_sstable_dump_data(self, sstable: str) -> dict | None:
+        """
+        Extracts Json data from a compacted SSTable dump.
+
+        :param sstable: The SSTable file path.
+        :return: sstable data in a Json format.
+        """
+        if not self._run_sstabledump(sstable=sstable):  # Check if SSTable exists and was dumped
+            self.log.debug("Skipping tombstone search as SSTable %s does not exist or dump failed.", sstable)
+            return None
+        if not self._are_tombstones_in_sstabledump(sstable=sstable):
+            return None
+
+        result = self.db_node.remoter.run(f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False,
+                                          ignore_status=False)
+
+        if not result.ok:
+            self.log.warning("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
+                             result.stderr)
+            return None
+
+        try:
+            return json.loads(result.stdout)
+
+        except json.JSONDecodeError as e:
+            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+            raise
+
     def get_compacted_tombstone_deletion_info(self, sstable: str) -> list:
         """
         Extracts tombstone deletion info from a compacted SSTable dump.
@@ -293,35 +321,53 @@ class SstableUtils:
         :param sstable: The SSTable file path.
         :return: List of tombstone deletion entries.
         """
-        if not self._run_sstabledump(sstable=sstable):  # Check if SSTable exists and was dumped
-            self.log.debug("Skipping tombstone search as SSTable %s does not exist or dump failed.", sstable)
-            return []
-        if not self._are_tombstones_in_sstabledump(sstable=sstable):
-            return []
-
         tombstones_deletion_info = []
-        result = self.db_node.remoter.run(f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False,
-                                          ignore_status=False)
-
-        if not result.ok:
-            self.log.warning("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
-                             result.stderr)
-            return tombstones_deletion_info
-
         try:
-            dump_data = json.loads(result.stdout)
+            if dump_data := self._get_sstable_dump_data(sstable=sstable):
 
-            # Get the list of records for the given SSTable
-            sstable_data = dump_data['sstables'].get(sstable, [])
+                # Get the list of records for the given SSTable
+                sstable_data = dump_data['sstables'].get(sstable, [])
 
-            # Extract entries that contain a tombstone
-            tombstones_deletion_info = [entry for entry in sstable_data if 'tombstone' in entry]
+                # Extract entries that contain a tombstone
+                tombstones_deletion_info = [entry for entry in sstable_data if 'tombstone' in entry]
 
         except json.JSONDecodeError as e:
             self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
             raise
 
         self.log.debug("Found %s tombstones for sstable %s", len(tombstones_deletion_info), sstable)
+        return tombstones_deletion_info
+
+    def get_ttl_expired_tombstone_deletion_info(self, sstable: str) -> list[tuple[dict, str]]:
+        """
+        Extracts ttl-expired tombstone deletion info from a compacted SSTable dump.
+
+        :param sstable: The SSTable file path.
+        :return: List of tuples (partition, deletion_time) where a TTL-expired tombstone exists.
+        """
+        tombstones_deletion_info = []
+        try:
+            if dump_data := self._get_sstable_dump_data(sstable=sstable):
+                # Iterate over all partitions in the given SSTable
+                for sstable_data in dump_data.get("sstables", {}).values():
+                    for partition in sstable_data:
+                        # Use a generator expression to find the first deletion_time in the partition
+                        deletion_time = next(
+                            (col_data["deletion_time"]
+                             for row in partition.get("clustering_elements", [])
+                             for col_data in row.get("columns", {}).values()
+                             if "deletion_time" in col_data),
+                            None  # Default if no deletion_time found
+                        )
+                        if deletion_time:
+                            self.log.debug("Found an expired ttl tombstone date %s", deletion_time)
+                            tombstones_deletion_info.append((partition, deletion_time))
+
+        except json.JSONDecodeError as e:
+            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+            raise
+
+        self.log.debug("Found %s TTL-expired tombstones for SSTable %s", len(tombstones_deletion_info), sstable)
         return tombstones_deletion_info
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime.datetime, sstable: str):
@@ -359,6 +405,31 @@ class SstableUtils:
             raise NonDeletedTombstonesFound(
                 f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}"
             )
+
+    def verify_post_repair_ttl_expired_tombstones(self, table_repair_date: datetime.datetime, sstables: list):
+        """
+        Verifies that no pre-repair ttl-expired tombstones remain in a post-repair SSTable.
+
+        :param table_repair_date: The repair timestamp.
+        :param sstable: SSTable file.
+        :raises NonDeletedTombstonesFound: If ttl-expired tombstones exist from before the repair date.
+        """
+        for sstable in sstables:
+            non_deleted_tombstones = []
+            tombstone_deletion_info = self.get_ttl_expired_tombstone_deletion_info(sstable=sstable)
+            for partition, deletion_time in tombstone_deletion_info:
+                # Convert deletion_time (e.g., '2025-02-21 08:16:10z') to datetime object
+                tombstone_date = datetime.datetime.strptime(deletion_time.rstrip('z'), '%Y-%m-%d %H:%M:%S')
+
+                self.log.debug('Checking tombstone delete date %s < table repair date: %s',
+                               tombstone_date, table_repair_date)
+                if tombstone_date < table_repair_date:
+                    non_deleted_tombstones.append(tombstone_deletion_info)
+
+                if non_deleted_tombstones:
+                    raise NonDeletedTombstonesFound(
+                        f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}"
+                    )
 
     def get_tombstone_date(self, tombstone_deletion_info) -> datetime.datetime | None:
         """
