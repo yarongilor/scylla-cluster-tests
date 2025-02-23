@@ -144,53 +144,69 @@ class SstableUtils:
         if not self._run_sstabledump(sstable=sstable):  # Check if SSTable exists and was dumped
             self.log.debug("Skipping tombstone count as SSTable %s does not exist or dump failed.", sstable)
             return 0
-        self.log.debug("tombstonedbg: sudo cat {self.REMOTE_SSTABLEDUMP_PATH}")
-        # Fetch the dumped JSON content
+
         result = self.db_node.remoter.run(
-            f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False, ignore_status=False)
+            f"sudo awk -F 'deletion_time' '{{print NF-1}}' {self.REMOTE_SSTABLEDUMP_PATH}",
+            verbose = True,
+            ignore_status = False
+        )
 
-        if not result.ok:
-            self.log.debug("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
-                           result.stderr)
-            return 0
-
-        try:
-            self.log.debug(f"tombstonedbg: dump_data = json.loads(result.stdout)")
-            dump_data = json.loads(result.stdout)
-            num_tombstones = 0
-
-            self.log.debug(f"tombstonedbg: for partition in dump_data.get")
-            for partition in dump_data.get("sstables", {}).get("anonymous", []):
-                # Count regular tombstones
-                if "tombstone" in partition:
-                    num_tombstones += 1
-
-            # Count TTL-expired tombstones by checking "is_live"
-            for sstable_data in dump_data.get("sstables", {}).values():
-                self.log.debug(f"tombstonedbg: sstable_data length: {len(sstable_data)}")
-                for partition in sstable_data:
-                    self.log.debug(f"tombstonedbg: parsing partition: {partition['key']}")
-
-                    # Check each clustering row for tombstone markers
-                    c_elements = partition.get("clustering_elements", [])
-                    self.log.debug(f"tombstonedbg: clustering_elements number: {c_elements}")
-                    for row in partition.get("clustering_elements", []):
-                        self.log.debug(f"tombstonedbg: parsing row: {row}")
-                        for col_data in row.get("columns", {}).values():
-                            self.log.debug(f"tombstonedbg: parsing col_data: {col_data}")
-
-                            if not col_data.get("is_live", True):
-                                self.log.debug(f"tombstonedbg: Found tombstone in row: {row['key']}")
-                                num_tombstones += 1
-                            else:
-                                self.log.debug(f"tombstonedbg: col_data.get(is_live, True)")
-
-            self.log.debug("Found %s tombstones in SSTable %s", num_tombstones, sstable)
+        if result.ok:
+            num_tombstones = int(result.stdout.strip())
+            self.log.debug("tombstonedbg: Found %d TTL-expired tombstones in SSTable %s", num_tombstones, sstable)
             return num_tombstones
 
-        except json.JSONDecodeError as e:
-            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
-            raise
+        else:
+            self.log.debug("tombstonedbg: Failed to count TTL-expired tombstones in %s dump: %s", sstable, result.stderr)
+            return 0
+
+        # self.log.debug("tombstonedbg: sudo cat {self.REMOTE_SSTABLEDUMP_PATH}")
+        # # Fetch the dumped JSON content
+        # result = self.db_node.remoter.run(
+        #     f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False, ignore_status=False)
+        #
+        # if not result.ok:
+        #     self.log.debug("Failed to retrieve SSTable dump data for %s: (%s, %s)", sstable, result.stdout,
+        #                    result.stderr)
+        #     return 0
+        #
+        # try:
+        #     self.log.debug(f"tombstonedbg: dump_data = json.loads(result.stdout)")
+        #     dump_data = json.loads(result.stdout)
+        #     num_tombstones = 0
+        #
+        #     self.log.debug(f"tombstonedbg: for partition in dump_data.get")
+        #     for partition in dump_data.get("sstables", {}).get("anonymous", []):
+        #         # Count regular tombstones
+        #         if "tombstone" in partition:
+        #             num_tombstones += 1
+        #
+        #     # Count TTL-expired tombstones by checking "is_live"
+        #     for sstable_data in dump_data.get("sstables", {}).values():
+        #         self.log.debug(f"tombstonedbg: sstable_data length: {len(sstable_data)}")
+        #         for partition in sstable_data:
+        #             self.log.debug(f"tombstonedbg: parsing partition: {partition['key']}")
+        #
+        #             # Check each clustering row for tombstone markers
+        #             c_elements = partition.get("clustering_elements", [])
+        #             self.log.debug(f"tombstonedbg: clustering_elements number: {c_elements}")
+        #             for row in partition.get("clustering_elements", []):
+        #                 self.log.debug(f"tombstonedbg: parsing row: {row}")
+        #                 for col_data in row.get("columns", {}).values():
+        #                     self.log.debug(f"tombstonedbg: parsing col_data: {col_data}")
+        #
+        #                     if not col_data.get("is_live", True):
+        #                         self.log.debug(f"tombstonedbg: Found tombstone in row: {row['key']}")
+        #                         num_tombstones += 1
+        #                     else:
+        #                         self.log.debug(f"tombstonedbg: col_data.get(is_live, True)")
+        #
+        #     self.log.debug("Found %s tombstones in SSTable %s", num_tombstones, sstable)
+        #     return num_tombstones
+        #
+        # except json.JSONDecodeError as e:
+        #     self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+        #     raise
 
     def verify_a_live_normal_node_is_used(self):
         if not self.db_node:
