@@ -424,7 +424,7 @@ class SstableUtils:
                 self.log.debug('Checking tombstone delete date %s < table repair date: %s',
                                tombstone_date, table_repair_date)
                 if tombstone_date < table_repair_date:
-                    non_deleted_tombstones.append(tombstone_deletion_info)
+                    non_deleted_tombstones.append((partition.get('key', {}), deletion_time))
 
                 if non_deleted_tombstones:
                     raise NonDeletedTombstonesFound(
