@@ -191,7 +191,7 @@ class SstableUtils:
 
         table_repair_date = datetime.datetime.strptime(self.get_table_repair_date(), '%Y-%m-%d %H:%M:%S')
         now = datetime.datetime.now()
-        delta_repair_date_minutes = ((now - table_repair_date).seconds - self.propagation_delay_in_seconds) // 60
+        delta_repair_date_minutes = ((now - table_repair_date).seconds - self.propagation_delay_in_seconds) // 60 - 1
         self.log.debug('Found table-repair-date: %s, Ended %s minutes ago',
                        table_repair_date, delta_repair_date_minutes)
         return table_repair_date, delta_repair_date_minutes
