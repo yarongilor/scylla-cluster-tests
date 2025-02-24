@@ -102,6 +102,7 @@ class TombstoneGcLongevityTest(TWCSLongevityTest):
         self.log.info("verify no tombstones exist in post-repair-created sstables")
 
         table_repair_date, delta_repair_date_minutes = sstable_utils.get_table_repair_date_and_delta_minutes()
+        time.sleep(60)  # TODO: DBG REMOVE
         sstables = sstable_utils.get_sstables(from_minutes_ago=delta_repair_date_minutes)
         self.log.debug('Starting sstable dump to verify correctness of tombstones for %s sstables',
                        len(sstables))
