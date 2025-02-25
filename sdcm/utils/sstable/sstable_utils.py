@@ -310,7 +310,7 @@ class SstableUtils:
                             None  # Default if no deletion_time found
                         )
                         if deletion_time:
-                            tombstones_deletion_info.append((partition, deletion_time))
+                            tombstones_deletion_info.append((partition.get('key', {}), deletion_time))
 
         except json.JSONDecodeError as e:
             self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
@@ -373,7 +373,7 @@ class SstableUtils:
                 self.log.debug('Checking tombstone delete date %s < table repair date: %s',
                                tombstone_date, table_repair_date)
                 if tombstone_date < table_repair_date:
-                    non_deleted_tombstones.append((partition.get('key', {}), deletion_time))
+                    non_deleted_tombstones.append((partition, deletion_time))
 
                 if non_deleted_tombstones:
                     InfoEvent(
