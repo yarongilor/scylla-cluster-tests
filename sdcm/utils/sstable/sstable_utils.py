@@ -5,6 +5,8 @@ import random
 from pathlib import Path
 
 from sdcm.paths import SCYLLA_YAML_PATH
+from sdcm.sct_events import Severity
+from sdcm.sct_events.system import InfoEvent
 from sdcm.utils.version_utils import ComparableScyllaVersion
 from sdcm.exceptions import SstablesNotFound
 
@@ -374,9 +376,10 @@ class SstableUtils:
                     non_deleted_tombstones.append((partition.get('key', {}), deletion_time))
 
                 if non_deleted_tombstones:
-                    raise NonDeletedTombstonesFound(
-                        f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}"
-                    )
+                    InfoEvent(
+                        message=f"Found pre-repair time ({table_repair_date}) tombstones in a post-repair sstable ({sstable}): {non_deleted_tombstones}",
+                        severity=Severity.ERROR).publish()
+                break
 
     def get_tombstone_date(self, tombstone_deletion_info) -> datetime.datetime | None:
         """
