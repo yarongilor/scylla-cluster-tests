@@ -1,0 +1,28 @@
+test_duration: 210
+
+prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=1 -partition-count=10 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048 -concurrency=10 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=30s",
+                     "cassandra-stress write cl=QUORUM n=2097152 -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=80 -pop seq=1..2097152 -col 'n=FIXED(10) size=FIXED(512)' -log interval=5",
+                    ]
+
+stress_cmd: [
+             "scylla-bench -workload=sequential -mode=read  -replication-factor=1 -partition-count=1 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048   -concurrency=250 -connection-count=200 -consistency-level=one -rows-per-request=10 -timeout=30s -retry-number=2 -retry-interval=3ms,5ms -iterations 0 -duration=60m",
+             "scylla-bench -workload=sequential -mode=read  -replication-factor=1 -partition-count=1 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048   -concurrency=250 -connection-count=200 -consistency-level=one -rows-per-request=10 -timeout=30s -retry-number=3 -retry-interval=4ms,8ms -iterations 0 -duration=60m",
+             "scylla-bench -workload=sequential -mode=read  -replication-factor=1 -partition-count=1 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048   -concurrency=250 -connection-count=200 -consistency-level=one -rows-per-request=10 -timeout=30s -retry-number=3 -retry-interval=4ms,8ms -iterations 0 -duration=60m",
+             "scylla-bench -workload=sequential -mode=write -replication-factor=1 -partition-count=30 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048 -concurrency=7 -connection-count=5 -consistency-level=one -rows-per-request=10 -timeout=30s -iterations 0 -duration=60m",
+             "cassandra-stress read  cl=QUORUM duration=60m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=22 -pop seq=1..2097152 -col 'n=FIXED(10) size=FIXED(512)' -log interval=5",
+            ]
+
+n_db_nodes: 3
+n_loaders: 2
+n_monitor_nodes: 1
+
+round_robin: true
+
+instance_type_db: 'i3.large'
+
+nemesis_class_name: 'NoOpMonkey'
+nemesis_interval: 60
+nemesis_during_prepare: false
+
+user_prefix: 'replica-load-shedding'
+use_mgmt: false
