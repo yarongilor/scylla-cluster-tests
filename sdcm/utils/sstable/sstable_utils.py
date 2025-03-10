@@ -5,6 +5,7 @@ import random
 from pathlib import Path
 
 from sdcm.paths import SCYLLA_YAML_PATH
+from sdcm.sct_events.system import InfoEvent
 from sdcm.utils.version_utils import ComparableScyllaVersion
 from sdcm.exceptions import SstablesNotFound
 
@@ -234,7 +235,7 @@ class SstableUtils:
         self.log.debug("Tombstones are found in SSTable %s.", sstable)
         return True
 
-    def _get_sstable_dump_data(self, sstable: str) -> dict | None:
+    def _get_sstable_dump_data(self, sstable: str, verify_tombstones_exist: bool = False) -> dict | None:
         """
         Extracts Json data from a compacted SSTable dump.
 
@@ -244,7 +245,7 @@ class SstableUtils:
         if not self._run_sstabledump(sstable=sstable):  # Check if SSTable exists and was dumped
             self.log.debug("Skipping tombstone search as SSTable %s does not exist or dump failed.", sstable)
             return None
-        if not self._are_tombstones_in_sstabledump(sstable=sstable):
+        if verify_tombstones_exist and not self._are_tombstones_in_sstabledump(sstable=sstable):
             return None
 
         result = self.db_node.remoter.run(f'sudo cat {self.REMOTE_SSTABLEDUMP_PATH}', verbose=False,
@@ -271,7 +272,7 @@ class SstableUtils:
         """
         tombstones_deletion_info = []
         try:
-            if dump_data := self._get_sstable_dump_data(sstable=sstable):
+            if dump_data := self._get_sstable_dump_data(sstable=sstable, verify_tombstones_exist=True):
 
                 # Get the list of records for the given SSTable
                 sstable_data = dump_data['sstables'].get(sstable, [])
@@ -295,7 +296,7 @@ class SstableUtils:
         """
         tombstones_deletion_info = []
         try:
-            if dump_data := self._get_sstable_dump_data(sstable=sstable):
+            if dump_data := self._get_sstable_dump_data(sstable=sstable, verify_tombstones_exist=True):
                 # Iterate over all partitions in the given SSTable
                 for sstable_data in dump_data.get("sstables", {}).values():
                     for partition in sstable_data:
@@ -316,6 +317,35 @@ class SstableUtils:
 
         self.log.debug("Found %s TTL-expired tombstones for SSTable %s", len(tombstones_deletion_info), sstable)
         return tombstones_deletion_info
+
+    def get_partition_keys(self, sstable: str, max_partitions_num: int = 0) -> list[int]:
+        """
+        Extracts a list of partition keys from an SSTable dump.
+
+        :return: List of partition keys found. example returned output: [1,3,7,42]
+
+        Args:
+            sstable: The SSTable file path.
+            max_partition_num: The maximum number of partitions (found in sstable) to return
+        """
+        partitions = []
+        try:
+            if dump_data := self._get_sstable_dump_data(sstable=sstable):
+                InfoEvent(message=f"Got dump data for {sstable}").publish()  # TODO: DBG REMOVE
+                # Iterate over all partitions in the given SSTable
+                for sstable_data in dump_data.get("sstables", {}).values():
+                    for partition in sstable_data:
+                        if max_partitions_num and len(partitions) == max_partitions_num:
+                            return partitions
+                        if key := partition.get('key', {}).get('value'):
+                            partitions.append(int(key))
+
+        except json.JSONDecodeError as e:
+            self.log.error("Failed to parse SSTable dump JSON for %s: %s", sstable, str(e))
+            raise
+
+        self.log.debug("Found %s partitions for SSTable %s", len(partitions), sstable)
+        return partitions
 
     def verify_post_repair_sstable_tombstones(self, table_repair_date: datetime.datetime, sstable: str):
         """

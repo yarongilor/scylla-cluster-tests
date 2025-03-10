@@ -1,0 +1,36 @@
+test_duration: 420
+
+prepare_write_cmd:  ["scylla-bench -workload=sequential -mode=write -replication-factor=2 -partition-count=60 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048 -concurrency=5 -connection-count=5 -consistency-level=all -rows-per-request=10 -timeout=30s",
+                     "cassandra-stress write cl=ALL n=2097152 -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=80 -pop seq=1..2097152 -col 'n=FIXED(10) size=FIXED(512)' -log interval=5",
+                    ]
+
+stress_cmd: [
+             "scylla-bench -workload=sequential -mode=write -replication-factor=2 -partition-count=60 -clustering-row-count=200000                       -clustering-row-size=uniform:1024..2048 -concurrency=50 -connection-count=50 -consistency-level=one -rows-per-request=10 -timeout=30s -iterations 0 -duration=360m",
+             "cassandra-stress read  cl=QUORUM duration=360m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=22 -pop seq=1..2097152 -col 'n=FIXED(10) size=FIXED(512)' -log interval=5",
+             "cassandra-stress write cl=QUORUM duration=360m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=22 -pop seq=1..20971520 -col 'n=FIXED(10) size=FIXED(512)' -log interval=5"
+            ]
+
+stress_read_cmd: "scylla-bench -workload=sequential -mode=read  -replication-factor=2 -partition-count=1 -clustering-row-count=200000 -partition-offset={} -clustering-row-size=uniform:1024..2048   -concurrency=200 -connection-count=200 -consistency-level=one -rows-per-request=10 -timeout=1s -retry-number=3 -retry-interval=2ms,4ms -iterations 0 -duration=360m"
+
+post_prepare_cql_cmds: "CREATE MATERIALIZED VIEW scylla_bench.view_test AS SELECT * FROM scylla_bench.test where ck IS NOT NULL AND pk is not null PRIMARY KEY (pk, ck) with comment = 'TEST VIEW'"
+
+n_db_nodes: 6  # TODO: 8
+n_loaders: 4  #TODO: 2
+n_monitor_nodes: 1
+
+round_robin: true
+
+instance_type_db: 'i3.xlarge'
+instance_type_loader: 'c6i.4xlarge'
+#nemesis_class_name: 'NoOpMonkey'
+#nemesis_interval: 60
+#nemesis_during_prepare: false
+
+user_prefix: 'replica-load-shedding'
+use_mgmt: false
+
+nemesis_class_name: 'ClusterRollingRestartRandomOrder'
+nemesis_seed: '024'
+nemesis_interval: 1
+nemesis_during_prepare: false
+#nemesis_selector: ["disruptive and not topology_changes"]

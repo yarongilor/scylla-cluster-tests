@@ -4984,10 +4984,12 @@ class BaseScyllaCluster:  # pylint: disable=too-many-public-methods, too-many-in
             random.shuffle(nodes_to_restart)
         self.log.info("Going to restart Scylla on %s", [n.name for n in nodes_to_restart])
         for node in nodes_to_restart:
+            InfoEvent(
+                message=f"Restarting node: {node.name} {node.ip_address}").publish()
             node.stop_scylla(verify_down=True)
             node.start_scylla(verify_up=True)
             self.log.debug("'%s' restarted.", node.name)
-            self.wait_all_nodes_un()  # wait for all nodes to be up due to issue https://github.com/scylladb/scylladb/issues/18647
+            # self.wait_all_nodes_un()  # wait for all nodes to be up due to issue https://github.com/scylladb/scylladb/issues/18647
 
     @retrying(n=15, sleep_time=5, allowed_exceptions=ClusterNodesNotReady)
     def wait_all_nodes_un(self):

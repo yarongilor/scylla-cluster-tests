@@ -1022,8 +1022,8 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
     @decorate_with_context(ignore_ycsb_connection_refused)
     @target_all_nodes
-    def disrupt_rolling_restart_cluster(self, random_order=False):
-        self.cluster.restart_scylla(random_order=random_order)
+    def disrupt_rolling_restart_cluster(self, random_order=False, nodes=None):
+        self.cluster.restart_scylla(random_order=random_order, nodes=nodes)
 
     def disrupt_switch_between_password_authenticator_and_saslauthd_authenticator_and_back(self):
         """
@@ -6677,7 +6677,7 @@ class ClusterRollingRestartRandomOrder(Nemesis):
     free_tier_set = True
 
     def disrupt(self):
-        self.disrupt_rolling_restart_cluster(random_order=True)
+        self.disrupt_rolling_restart_cluster(random_order=True, nodes=self.cluster.data_nodes[1:])
 
 
 class SwitchBetweenPasswordAuthAndSaslauthdAuth(Nemesis):

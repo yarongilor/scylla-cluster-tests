@@ -1,0 +1,12 @@
+#!groovy
+
+// trick from https://github.com/jenkinsci/workflow-cps-global-lib-plugin/pull/43
+def lib = library identifier: 'sct@snapshot', retriever: legacySCM(scm)
+
+longevityPipeline(
+    backend: 'aws',
+    region: 'eu-west-1',
+    test_name: 'replica_load_shedding_test.ReplicaLoadSheddingTest.test_replica_load_shedding',
+    test_config: 'test-cases/features/replica-load-shedding.yaml'
+
+)
