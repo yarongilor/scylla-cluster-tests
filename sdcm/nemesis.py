@@ -1023,7 +1023,18 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     @decorate_with_context(ignore_ycsb_connection_refused)
     @target_all_nodes
     def disrupt_rolling_restart_cluster(self, random_order=False, nodes=None):
+        # Run write stress
+        stress_queue = []
+        InfoEvent(message="Starting read/write stress").publish()
+        stress_cmd = self.cluster.params.get('stress_cmd')
+        self.tester.assemble_and_run_all_stress_cmd(stress_queue, stress_cmd, keyspace_num=1)
+        InfoEvent(message="Sleep 2 minutes with new load").publish()
+        time.sleep(120)
+        # cs_thread = self.tester.run_stress_thread(stress_cmd=stress_cmd, round_robin=True)
+        # self.tester.verify_stress_thread(cs_thread, error_handler=self._nemesis_stress_failure_handler)
         self.cluster.restart_scylla(random_order=random_order, nodes=nodes)
+        for stress in stress_queue:
+            self.tester.verify_stress_thread(stress)
 
     def disrupt_switch_between_password_authenticator_and_saslauthd_authenticator_and_back(self):
         """

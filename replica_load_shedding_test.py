@@ -57,11 +57,11 @@ class ReplicaLoadSheddingTest(LargePartitionLongevityTest):
         InfoEvent(message="Starting read stress").publish()
         self._run_all_stress_cmds(stress_queue, params)
 
-        # Run write stress
-        InfoEvent(message="Starting write stress").publish()
-        stress_cmd = self.params.get('stress_cmd')
-        params = {'stress_cmd': stress_cmd, 'round_robin': self.params.get('round_robin')}
-        self._run_all_stress_cmds(stress_queue, params)
+        # # Run write stress
+        # InfoEvent(message="Starting write stress").publish()
+        # stress_cmd = self.params.get('stress_cmd')
+        # params = {'stress_cmd': stress_cmd, 'round_robin': self.params.get('round_robin')}
+        # self._run_all_stress_cmds(stress_queue, params)
 
         # Start nemesis
         self.db_cluster.start_nemesis()
