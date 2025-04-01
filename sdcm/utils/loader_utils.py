@@ -20,9 +20,10 @@ from functools import cached_property
 from sdcm.sct_events import Severity
 from sdcm.sct_events.system import TestFrameworkEvent
 from sdcm.utils.common import skip_optional_stage
-from sdcm.utils.decorators import optional_stage
+from sdcm.utils.decorators import optional_stage, retrying
 from sdcm.utils.issues import SkipPerIssues
 from sdcm.utils.features import is_tablets_feature_enabled
+from cassandra import InvalidRequest
 
 DEFAULT_USER = "cassandra"
 DEFAULT_USER_PASSWORD = "cassandra"
@@ -235,6 +236,7 @@ class LoaderUtilsMixin:
         cmds = self.params.get('pre_create_keyspace')
         self._run_cql_commands(cmds)
 
+    @retrying(n=30, sleep_time=30, allowed_exceptions=(InvalidRequest,))
     def run_post_prepare_cql_cmds(self):
         if post_prepare_cql_cmds := self.params.get('post_prepare_cql_cmds'):
             self.log.debug("Execute post prepare queries: %s", post_prepare_cql_cmds)

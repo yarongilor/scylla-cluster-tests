@@ -706,6 +706,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
     @decorate_with_context(ignore_raft_topology_cmd_failing)
     @target_all_nodes
     def disrupt_stop_wait_start_scylla_server(self, sleep_time=300):  # pylint: disable=invalid-name
+        self.target_node = random.choice(self.cluster.data_nodes[3:])
         self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
         self.log.info("Sleep for %s seconds", sleep_time)
         time.sleep(sleep_time)
