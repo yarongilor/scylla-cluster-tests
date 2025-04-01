@@ -1,0 +1,31 @@
+test_duration: 780
+n_db_nodes: 6
+n_test_oracle_db_nodes: 1
+n_loaders: 1
+n_monitor_nodes: 1
+instance_type_db: 'i4i.2xlarge'
+instance_type_loader: 'm6i.xlarge'
+
+user_prefix: 'gemini-tombstones'
+
+nemesis_class_name: 'StopWaitStartMonkey'
+nemesis_interval: 3
+
+gemini_cmd: |
+  --duration 8h
+  --warmup 10m
+  --concurrency 60
+  --mode mixed
+  --max-mutation-retries-backoff 10s
+  --max-mutation-retries 60
+  --token-range-slices 10000
+
+gemini_schema_url: 'https://s3.amazonaws.com/scylla-gemini/Binaries/schema.json' # currently is not used
+gemini_log_cql_statements: false
+gemini_table_options:
+  - "gc_grace_seconds=60 "
+
+#post_prepare_cql_cmds: "ALTER TABLE ks1.table1 with gc_grace_seconds = 60;"
+db_type: mixed_scylla
+instance_type_db_oracle: 'i4i.8xlarge'
+hinted_handoff: 'disabled'
