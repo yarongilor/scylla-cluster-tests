@@ -8,7 +8,7 @@ instance_type_loader: 'm6i.xlarge'
 
 user_prefix: 'gemini-tombstones-network'
 
-nemesis_class_name: 'BlockNetworkMonkey'
+nemesis_class_name: 'StopStartInterfacesNetworkMonkey'
 nemesis_interval: 3
 
 gemini_cmd: |
