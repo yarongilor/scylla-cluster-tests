@@ -143,10 +143,23 @@ class SstableUtils:
             return 0
 
         result = self.db_node.remoter.run(
-            f"sudo awk -F 'deletion_time' '{{print NF-1}}' {self.REMOTE_SSTABLEDUMP_PATH}",
-            verbose=True,
-            ignore_status=False
+            f"""sudo jq '[
+            .[] |
+            select(
+                (.type ==  \"row\" and .deletion_info.deletion_time != null) or
+                 (.type ==  \"cell\" and .deletion_time != null)
+                 )
+        ] | length
+        ' {self.REMOTE_SSTABLEDUMP_PATH}""",
+        verbose = True,
+        ignore_status = False
         )
+
+        # result = self.db_node.remoter.run(
+        #     f"sudo awk -F 'deletion_time' '{{print NF-1}}' {self.REMOTE_SSTABLEDUMP_PATH}",
+        #     verbose=True,
+        #     ignore_status=False
+        # )
 
         if result.ok:
             num_tombstones = int(result.stdout.strip())
