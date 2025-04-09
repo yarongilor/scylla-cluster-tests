@@ -24,7 +24,7 @@ gemini_schema_url: 'https://s3.amazonaws.com/scylla-gemini/Binaries/schema.json'
 gemini_log_cql_statements: false
 gemini_table_options:
   - "gc_grace_seconds=60 "
-
+gemini_seed: 51
 #post_prepare_cql_cmds: "ALTER TABLE ks1.table1 with gc_grace_seconds = 60;"
 db_type: mixed_scylla
 instance_type_db_oracle: 'i4i.8xlarge'
