@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import json
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -17,9 +17,11 @@
 # pylint: disable=too-many-lines
 import random
 import threading
+import uuid
 from enum import Enum
+from os import major
 from pathlib import Path
-from functools import cached_property
+from functools import cached_property, partial
 import re
 import time
 from textwrap import dedent
@@ -35,17 +37,19 @@ from invoke import exceptions
 from argus.client.generic_result import Status
 from sdcm import mgmt
 from sdcm.argus_results import (send_manager_benchmark_results_to_argus, send_manager_snapshot_details_to_argus,
-                                submit_results_to_argus, ManagerBackupReadResult, ManagerBackupBenchmarkResult)
+                                submit_results_to_argus, ReadStressResult, ManagerBackupBenchmarkResult,
+                                WriteStressResult)
 from sdcm.mgmt import ScyllaManagerError, TaskStatus, HostStatus, HostSsl, HostRestStatus
 from sdcm.mgmt.cli import ScyllaManagerTool, RestoreTask
-from sdcm.mgmt.common import reconfigure_scylla_manager, get_persistent_snapshots
+from sdcm.mgmt.common import reconfigure_scylla_manager, get_persistent_snapshots, get_backup_size
 from sdcm.provision.helpers.certificate import TLSAssets
 from sdcm.remote import shell_script_cmd, LOCALRUNNER
 from sdcm.tester import ClusterTester
-from sdcm.cluster import TestConfig
+from sdcm.cluster import TestConfig, BaseNode
 from sdcm.nemesis import MgmtRepair
 from sdcm.utils.adaptive_timeouts import adaptive_timeout, Operations
-from sdcm.utils.common import reach_enospc_on_node, clean_enospc_on_node
+from sdcm.utils.cluster_tools import flush_nodes, major_compaction_nodes
+from sdcm.utils.common import reach_enospc_on_node, clean_enospc_on_node, ParallelObject
 from sdcm.utils.loader_utils import LoaderUtilsMixin
 from sdcm.utils.time_utils import ExecutionTimer
 from sdcm.sct_events.system import InfoEvent
@@ -1820,13 +1824,29 @@ class ManagerRestoreBenchmarkTests(ManagerTestFunctionsMixIn):
 
 class ManagerReportType(Enum):
     READ = 1
-    BACKUP = 2
+    WRITE = 2
+    BACKUP = 3
+
+
+def format_size(size_in_bytes):
+    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
+        if size_in_bytes < 1024:
+            return f"{size_in_bytes:.2f} {unit}"
+        size_in_bytes /= 1024
 
 
 class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
+    keyspace = 'keyspace1'
+    table = 'standard1'
+    snapshot_list_lock = threading.Lock()
+    base_prefix = ""
+
     def report_to_argus(self, report_type: ManagerReportType, data: dict, label: str):
         if report_type == ManagerReportType.READ:
-            table = ManagerBackupReadResult(sut_timestamp=mgmt.get_scylla_manager_tool(
+            table = ReadStressResult(sut_timestamp=mgmt.get_scylla_manager_tool(
+                manager_node=self.monitors.nodes[0]).sctool.client_version_timestamp)
+        elif report_type == ManagerReportType.WRITE:
+            table = WriteStressResult(sut_timestamp=mgmt.get_scylla_manager_tool(
                 manager_node=self.monitors.nodes[0]).sctool.client_version_timestamp)
         elif report_type == ManagerReportType.BACKUP:
             table = ManagerBackupBenchmarkResult(sut_timestamp=mgmt.get_scylla_manager_tool(
@@ -1838,21 +1858,37 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
             table.add_result(column=key, value=value, row=label, status=Status.UNSET)
         submit_results_to_argus(self.test_config.argus_client(), table)
 
-    def create_backup_and_report(self, mgr_cluster, label: str):
-        # After the issue https://github.com/scylladb/scylla-manager/issues/4125 is resolved try to rerun it with
-        # different `transfers` settings to apply more IO pressure on the scylla cluster
+    def manager_backup_and_report(self, mgr_cluster, label: str, delete_snapshot: bool = False):
+        InfoEvent(message='Starting `rclone` based backup').publish()
         task = mgr_cluster.create_backup_task(location_list=self.locations, rate_limit_list=["0"])
 
-        backup_status = task.wait_and_get_final_status(timeout=7200)
+        backup_status = task.wait_and_get_final_status(timeout=72000)
         assert backup_status == TaskStatus.DONE, "Backup upload has failed!"
 
-        InfoEvent(
-            message=f'Backup total time is: {task.duration}.').publish()
         backup_report = {
-            "backup time": int(task.duration.total_seconds()),
+            "Size": get_backup_size(mgr_cluster, task.id),
+            "Time": int(task.duration.total_seconds()),
         }
         self.report_to_argus(ManagerReportType.BACKUP, backup_report, label)
+        if delete_snapshot:
+            self.log.info("Delete backup snapshot")
+            task.delete_backup_snapshot()
         return task
+
+    def native_backup_and_report(self, label):
+        self.snapshot_ids = {}
+        self.node_backup_size = {}
+        self.base_prefix = f"standard1/keyspace1/{str(uuid.uuid4())}"
+        with ExecutionTimer() as backup_timer:
+            backup_jobs = [partial(self.native_backup, scylla_node=node, )
+                           for node in self.db_cluster.data_nodes]
+            ParallelObject(objects=backup_jobs, timeout=3000).call_objects()
+
+        backup_report = {
+            "Size": format_size(sum(self.node_backup_size.values()) / len(self.node_backup_size.values())),
+            "Time": int(backup_timer.duration.total_seconds()),
+        }
+        self.report_to_argus(ManagerReportType.BACKUP, backup_report, label)
 
     def run_read_stress_and_report(self, label):
         stress_queue = []
@@ -1870,6 +1906,65 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         }
         self.report_to_argus(ManagerReportType.READ, read_stress_report, label)
 
+    def run_stress_and_report(self, label):
+        """
+        Run all read and write stress in parallel.
+        Wait for all to finish.
+        Report its perf stats to Argus.
+        Args:
+            label: a postfix for reporting
+        """
+        stress_write_cmd = self.params.get('stress_cmd')
+        stress_read_cmd = self.params.get('stress_read_cmd')
+        stress_write_queue = self._run_stress_batch(cmds=stress_write_cmd)
+        stress_read_queue = self._run_stress_batch(cmds=stress_read_cmd)
+
+        def get_stress_averages(queue):
+            # prepare the measures
+            averages = {'op rate': 0.0, 'partition rate': 0.0, 'row rate': 0.0, 'latency 99th percentile': 0.0}
+            num_results = 0
+
+            # For each stress result
+            for stress in queue:  # TODO: why not: results = self.get_stress_results(queue=queue)?
+                # Get all results
+                results = self.get_stress_results(queue=stress)
+                num_results += len(results)
+
+                # sum of averages of all keys
+                for result in results:
+                    for key in averages:
+                        averages[key] += float(result[key])
+            # Compute average (of sum averages)
+            stats = {key: averages[key] / num_results for key in averages}
+
+            return stats
+
+        with ExecutionTimer() as stress_timer:
+            for stress in stress_write_queue + stress_read_queue:
+                self.verify_stress_thread(thread_pool=stress)
+        read_stats = get_stress_averages(stress_read_queue)
+        write_stats = get_stress_averages(stress_write_queue)
+
+        InfoEvent(message=f'Read and Write stress duration: {stress_timer.duration}s.').publish()
+
+        read_stress_report = {
+            "read time": int(stress_timer.duration.total_seconds()),
+            "op rate": read_stats['op rate'],
+            "partition rate": read_stats['partition rate'],
+            "row rate": read_stats['row rate'],
+            "latency 99th percentile": read_stats['latency 99th percentile'],
+        }
+        self.report_to_argus(ManagerReportType.READ, read_stress_report, "Read stress: " + label)
+
+        write_stress_report = {
+            "read time": int(stress_timer.duration.total_seconds()),
+            "op rate": write_stats['op rate'],
+            "partition rate": write_stats['partition rate'],
+            "row rate": write_stats['row rate'],
+            "latency 99th percentile": write_stats['latency 99th percentile'],
+        }
+        self.report_to_argus(ManagerReportType.WRITE, write_stress_report, "Write stress: " + label)
+
     def test_backup_benchmark(self):
         self.log.info("Executing test_backup_restore_benchmark...")
 
@@ -1886,7 +1981,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         mgr_cluster = self.ensure_and_get_cluster(manager_tool)
 
         self.log.info("Create and report backup time")
-        backup_task = self.create_backup_and_report(mgr_cluster, "Backup")
+        backup_task = self.manager_backup_and_report(mgr_cluster, "Backup")
 
         self.log.info("Remove backup")
         backup_task.delete_backup_snapshot()
@@ -1896,7 +1991,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         self.log.info("Create and report backup time during read stress")
 
-        backup_thread = threading.Thread(target=self.create_backup_and_report,
+        backup_thread = threading.Thread(target=self.manager_backup_and_report,
                                          kwargs={"mgr_cluster": mgr_cluster, "label": "Backup during read stress"})
 
         read_stress_thread = threading.Thread(target=self.run_read_stress_and_report,
@@ -1906,3 +2001,67 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         backup_thread.join()
         read_stress_thread.join()
+
+    def _run_stress_batch(self, cmds):
+        stress_queue = []
+        InfoEvent(message=f'Run stress batch of {len(cmds)} commands').publish()
+        params = {'stress_cmd': cmds, 'round_robin': True}
+        self._run_all_stress_cmds(stress_queue, params)
+        return stress_queue
+
+    def _cluster_flush_and_major_compaction(self):
+        InfoEvent(message='Flush cluster then run a major compaction and wait for finish').publish()
+        flush_nodes(cluster=self.db_cluster, keyspace=self.keyspace)
+        major_compaction_nodes(cluster=self.db_cluster, keyspace=self.keyspace, table=self.table)
+        self.wait_no_compactions_running(n=400, sleep_time=60)
+
+    def native_backup(self, scylla_node: BaseNode):
+        result = scylla_node.run_nodetool('snapshot')
+        snapshot_name = re.findall(r'(\d+)', result.stdout.split("snapshot name")[1])[0]
+        with self.snapshot_list_lock:
+            self.snapshot_ids[scylla_node.uuid] = snapshot_name
+            backup_size_res = scylla_node.remoter.sudo(
+                f"du -sb /var/lib/scylla/data/keyspace1/standard1-*/snapshots/{snapshot_name}/")
+            if backup_size_res.stdout:
+                self.node_backup_size[scylla_node.uuid] = int(
+                    backup_size_res.stdout[:backup_size_res.stdout.find("\t")])
+
+        backup_res = scylla_node.run_nodetool(
+            f"backup --endpoint s3.us-east-1.amazonaws.com --bucket manager-backup-tests-us-east-1  --prefix {self.base_prefix}/{snapshot_name} --keyspace keyspace1 --table standard1 --snapshot {snapshot_name}")
+        if backup_res is not None and backup_res.exit_status != 0:
+            raise Exception(f"Backup failed: {backup_res.stdout}")
+
+    def test_native_backup_benchmark(self):
+        self.log.info("Executing test_native_backup_benchmark...")
+
+        InfoEvent(message='Pre-load dataset').publish()
+        self.run_prepare_write_cmd()
+
+        # Run a major compaction before perf measurements
+        self._cluster_flush_and_major_compaction()
+
+        InfoEvent(message='Start Read and Write stress baseline').publish()
+        self.run_stress_and_report("Baseline stress")
+
+        # Cleanup the extra stress
+        self._cluster_flush_and_major_compaction()
+
+        # Backup baseline (rClone)
+        manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
+        mgr_cluster = self.ensure_and_get_cluster(manager_tool)
+        self.log.info("Create and report backup baseline time")
+        self.manager_backup_and_report(mgr_cluster, "Manager Backup baseline", True)
+
+        # Backup With Read and Write Stress (rclone)
+        backup_and_stress_jobs = [
+            partial(self.manager_backup_and_report, mgr_cluster=mgr_cluster, label="backup with stress",
+                    delete_snapshot=True),
+            partial(self.run_stress_and_report, label="stress with backup")
+        ]
+        ParallelObject(objects=backup_and_stress_jobs, timeout=3000).call_objects()
+
+        # Cleanup the extra stress
+        self._cluster_flush_and_major_compaction()
+
+        # Backup native
+        self.native_backup_and_report(label="Native Backup baseline")
