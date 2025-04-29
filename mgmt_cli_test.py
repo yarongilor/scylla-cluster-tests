@@ -1957,7 +1957,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         self.report_to_argus(ManagerReportType.READ, read_stress_report, "Read stress: " + label)
 
         write_stress_report = {
-            "read time": int(stress_timer.duration.total_seconds()),
+            "write time": int(stress_timer.duration.total_seconds()),
             "op rate": write_stats['op rate'],
             "partition rate": write_stats['partition rate'],
             "row rate": write_stats['row rate'],

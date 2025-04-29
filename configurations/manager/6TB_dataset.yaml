@@ -10,6 +10,7 @@ stress_read_cmd: [ "cassandra-stress read cl=QUORUM duration=4m -schema 'replica
 instance_type_db: 'i3.large'
 n_db_nodes: 3
 n_loaders: 1
+n_monitor_nodes: 1
 region_name: us-east-1
 
 append_scylla_yaml:

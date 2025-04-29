@@ -136,6 +136,7 @@ class ReadStressResult(GenericResultTable):
         name = "Read timing"
         description = "Read timing"
         Columns = [
+            ColumnMetadata(name="read time", unit="s", type=ResultType.DURATION, higher_is_better=False),
             ColumnMetadata(name="op rate", unit="op/s", type=ResultType.FLOAT, higher_is_better=True),
             ColumnMetadata(name="partition rate", unit="pk/s", type=ResultType.FLOAT, higher_is_better=True),
             ColumnMetadata(name="row rate", unit="row/s", type=ResultType.FLOAT, higher_is_better=True),
@@ -148,6 +149,7 @@ class WriteStressResult(GenericResultTable):
         name = "Write timing"
         description = "Write timing"
         Columns = [
+            ColumnMetadata(name="write time", unit="s", type=ResultType.DURATION, higher_is_better=False),
             ColumnMetadata(name="op rate", unit="op/s", type=ResultType.FLOAT, higher_is_better=True),
             ColumnMetadata(name="partition rate", unit="pk/s", type=ResultType.FLOAT, higher_is_better=True),
             ColumnMetadata(name="row rate", unit="row/s", type=ResultType.FLOAT, higher_is_better=True),
