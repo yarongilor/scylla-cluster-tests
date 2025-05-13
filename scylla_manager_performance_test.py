@@ -389,7 +389,6 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         InfoEvent(message='Start Read and Write stress baseline').publish()
         self.run_stress_and_report(legend="Baseline stress")
-        return
         # Cleanup the extra stress
         self._align_cluster_data_state(self.keyspace, self.table)
 
