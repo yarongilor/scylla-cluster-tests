@@ -390,11 +390,21 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         InfoEvent(message='Pre-load dataset').publish()
         self.run_prepare_write_cmd()
 
-        # Backup baseline (native)
+        # Backup baseline (rClone)
+        self.log.info("Create and report rClone backup baseline time")
         self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="rClone Backup baseline", delete_snapshot=True,
-                                       object_storage_upload_mode=ObjectStorageUploadMode.NATIVE,
-                                       timeout=self.benchmark_timeout)
+                                       object_storage_upload_mode=ObjectStorageUploadMode.RCLONE, timeout=self.benchmark_timeout)
 
+        # rClone backup with stress
+        backup_and_stress_jobs = [
+            partial(self.manager_backup_and_report, mgr_cluster, ObjectStorageUploadMode.RCLONE,
+                    "rClone backup with stress", True, self.benchmark_timeout),
+            partial(self.run_stress_and_report, legend="stress with rClone backup")
+        ]
+
+        ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
+
+        return
         # Run a major compaction before perf measurements
         self._align_cluster_data_state(self.keyspace, self.table)
 
