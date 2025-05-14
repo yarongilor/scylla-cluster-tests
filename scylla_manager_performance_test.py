@@ -30,6 +30,9 @@ from sdcm.cluster import BaseNode
 from sdcm.mgmt import TaskStatus
 from sdcm.mgmt.cli import RestoreTask, BackupTask, ManagerCluster
 from sdcm.mgmt.common import get_backup_size, ObjectStorageUploadMode
+from sdcm.sct_events import Severity
+from sdcm.sct_events.filters import EventsSeverityChangerFilter
+from sdcm.sct_events.loaders import CassandraStressEvent
 from sdcm.sct_events.system import InfoEvent
 from sdcm.utils.cluster_tools import clear_snapshot_nodes
 from sdcm.utils.common import ParallelObject, format_size
@@ -234,6 +237,20 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         assert backup_status == TaskStatus.DONE, "Backup upload has failed!"
         return task
 
+    def manager_backup_and_stop_stress_and_report(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode, label: str, delete_snapshot: bool = False, timeout: int = 7200):
+        task = self._manager_backup(mgr_cluster=mgr_cluster,
+                                    object_storage_upload_mode=object_storage_upload_mode, timeout=timeout)
+        self.log.info("Stopping all running stress")
+        with EventsSeverityChangerFilter(new_severity=Severity.NORMAL,
+                                         event_class=CassandraStressEvent,
+                                         extra_time_to_expiration=60):
+            self.loaders.kill_stress_thread()
+        self.report_manager_backup_results_to_argus(label=label, task=task, mgr_cluster=mgr_cluster)
+        if delete_snapshot:
+            self.log.info("Delete Manager backup snapshot")
+            task.delete_backup_snapshot()
+        return task
+
     def manager_backup_and_report(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode, label: str, delete_snapshot: bool = False, timeout: int = 7200):
         task = self._manager_backup(mgr_cluster=mgr_cluster,
                                     object_storage_upload_mode=object_storage_upload_mode, timeout=timeout)
@@ -280,16 +297,25 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         }
         self.report_to_argus(ManagerReportType.READ, read_stress_report, label)
 
-    def run_stress_and_report(self, legend: str):
+    def run_stress_and_report(self, legend: str, set_long_duration: bool = False):
         """
         Run all read and write stress in parallel.
         Wait for all to finish.
         Report its perf stats to Argus.
         Args:
             legend: a label for Argus reporting
+            set_long_duration: will replace existing stress duration with a value of 24 hours.
+                So that it could run in background during a long period of a backup,
+                and be stopped externally at backup completion.
         """
         stress_write_cmd = self.params.get('stress_cmd')
         stress_read_cmd = self.params.get('stress_read_cmd')
+        if set_long_duration:
+            def replace_duration(cmd):
+                return re.sub(r'duration=\S+', 'duration=24h', cmd)
+
+            stress_write_cmd = [replace_duration(cmd) for cmd in stress_write_cmd]
+            stress_read_cmd = [replace_duration(cmd) for cmd in stress_read_cmd]
 
         decorated_run_stress_write = latency_calculator_decorator(
             legend=f"{legend} - Write:", cycle_name=legend, workload="write"
@@ -390,21 +416,6 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         InfoEvent(message='Pre-load dataset').publish()
         self.run_prepare_write_cmd()
 
-        # Backup baseline (rClone)
-        self.log.info("Create and report rClone backup baseline time")
-        self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="rClone Backup baseline", delete_snapshot=True,
-                                       object_storage_upload_mode=ObjectStorageUploadMode.RCLONE, timeout=self.benchmark_timeout)
-
-        # rClone backup with stress
-        backup_and_stress_jobs = [
-            partial(self.manager_backup_and_report, mgr_cluster, ObjectStorageUploadMode.RCLONE,
-                    "rClone backup with stress", True, self.benchmark_timeout),
-            partial(self.run_stress_and_report, legend="stress with rClone backup")
-        ]
-
-        ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
-
-        return
         # Run a major compaction before perf measurements
         self._align_cluster_data_state(self.keyspace, self.table)
 
@@ -421,9 +432,9 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         # rClone backup with stress
         backup_and_stress_jobs = [
-            partial(self.manager_backup_and_report, mgr_cluster, ObjectStorageUploadMode.RCLONE,
+            partial(self.manager_backup_and_stop_stress_and_report, mgr_cluster, ObjectStorageUploadMode.RCLONE,
                     "rClone backup with stress", True, self.benchmark_timeout),
-            partial(self.run_stress_and_report, legend="stress with rClone backup")
+            partial(self.run_stress_and_report, legend="stress with rClone backup", set_long_duration=True)
         ]
 
         ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
@@ -439,8 +450,8 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         # Backup native with read and write stress
         backup_and_stress_jobs = [
-            partial(self.manager_backup_and_report, mgr_cluster, ObjectStorageUploadMode.NATIVE,
+            partial(self.manager_backup_and_stop_stress_and_report, mgr_cluster, ObjectStorageUploadMode.NATIVE,
                     "Native backup with stress", True, self.benchmark_timeout),
-            partial(self.run_stress_and_report, legend="stress with Native backup")
+            partial(self.run_stress_and_report, legend="stress with Native backup", set_long_duration=True)
         ]
         ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
