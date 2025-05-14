@@ -227,7 +227,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
     def _manager_backup(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode = None, timeout: int = 7200):
         InfoEvent(
-            message=f'Starting a Manager backup (Object Storage Upload Mode: {ObjectStorageUploadMode})').publish()
+            message=f'Starting a Manager backup (Object Storage Upload Mode: {object_storage_upload_mode})').publish()
         task = mgr_cluster.create_backup_task(location_list=self.locations, rate_limit_list=["0"],
                                               object_storage_upload_mode=object_storage_upload_mode)
         backup_status = task.wait_and_get_final_status(timeout=timeout)
