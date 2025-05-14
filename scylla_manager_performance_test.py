@@ -14,6 +14,7 @@
 # pylint: disable=too-many-lines
 import re
 import threading
+import time
 import uuid
 from datetime import timedelta
 from enum import Enum
@@ -240,6 +241,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
     def manager_backup_and_stop_stress_and_report(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode, label: str, delete_snapshot: bool = False, timeout: int = 7200):
         task = self._manager_backup(mgr_cluster=mgr_cluster,
                                     object_storage_upload_mode=object_storage_upload_mode, timeout=timeout)
+        time.sleep(120)
         self.log.info("Stopping all running stress")
         with EventsSeverityChangerFilter(new_severity=Severity.NORMAL,
                                          event_class=CassandraStressEvent,
@@ -416,6 +418,14 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         InfoEvent(message='Pre-load dataset').publish()
         self.run_prepare_write_cmd()
 
+        # rClone backup with stress
+        backup_and_stress_jobs = [
+            partial(self.manager_backup_and_stop_stress_and_report, mgr_cluster, ObjectStorageUploadMode.RCLONE,
+                    "rClone backup with stress", True, self.benchmark_timeout),
+            partial(self.run_stress_and_report, legend="stress with rClone backup", set_long_duration=True)
+        ]
+        ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
+        return
         # Run a major compaction before perf measurements
         self._align_cluster_data_state(self.keyspace, self.table)
 
