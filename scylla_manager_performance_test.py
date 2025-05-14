@@ -390,11 +390,6 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         InfoEvent(message='Pre-load dataset').publish()
         self.run_prepare_write_cmd()
 
-        # Backup baseline (native)
-        self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="rClone Backup baseline", delete_snapshot=True,
-                                       object_storage_upload_mode=ObjectStorageUploadMode.NATIVE,
-                                       timeout=self.benchmark_timeout)
-
         # Run a major compaction before perf measurements
         self._align_cluster_data_state(self.keyspace, self.table)
 
@@ -422,7 +417,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         self._align_cluster_data_state(self.keyspace, self.table)
 
         # Backup baseline (native)
-        self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="rClone Backup baseline", delete_snapshot=True,
+        self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="Native Backup baseline", delete_snapshot=True,
                                        object_storage_upload_mode=ObjectStorageUploadMode.NATIVE,
                                        timeout=self.benchmark_timeout)
         self.run_fstrim_on_all_db_nodes()
@@ -430,7 +425,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         # Backup native with read and write stress
         backup_and_stress_jobs = [
             partial(self.manager_backup_and_report, mgr_cluster, ObjectStorageUploadMode.NATIVE,
-                    "rClone backup with stress", True, self.benchmark_timeout),
+                    "Native backup with stress", True, self.benchmark_timeout),
             partial(self.run_stress_and_report, legend="stress with Native backup")
         ]
         ParallelObject(objects=backup_and_stress_jobs, timeout=self.benchmark_timeout).call_objects()
