@@ -384,8 +384,16 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         if not self._get_object_storage_endpoint():
             raise Exception("object_storage_endpoints are not defined in Yaml configuration, skipping test")
         self.benchmark_timeout = int(timedelta(hours=14).total_seconds())
+        manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
+        mgr_cluster = self.ensure_and_get_cluster(manager_tool)
+
         InfoEvent(message='Pre-load dataset').publish()
         self.run_prepare_write_cmd()
+
+        # Backup baseline (native)
+        self.manager_backup_and_report(mgr_cluster=mgr_cluster, label="rClone Backup baseline", delete_snapshot=True,
+                                       object_storage_upload_mode=ObjectStorageUploadMode.NATIVE,
+                                       timeout=self.benchmark_timeout)
 
         # Run a major compaction before perf measurements
         self._align_cluster_data_state(self.keyspace, self.table)
@@ -395,9 +403,6 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
 
         # Cleanup the extra stress
         self._align_cluster_data_state(self.keyspace, self.table)
-
-        manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
-        mgr_cluster = self.ensure_and_get_cluster(manager_tool)
 
         # Backup baseline (rClone)
         self.log.info("Create and report rClone backup baseline time")
