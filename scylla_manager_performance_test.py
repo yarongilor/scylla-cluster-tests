@@ -444,6 +444,7 @@ class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):
         params = {'stress_cmd': cmds, 'round_robin': True}
         self._run_all_stress_cmds(stress_queue, params)
         backup_status = backup_task.wait_and_get_final_status(timeout=timeout)
+        time.sleep(120)
         assert backup_status == TaskStatus.DONE, "Backup upload has failed!"
         results = []
         for stress in stress_queue:
