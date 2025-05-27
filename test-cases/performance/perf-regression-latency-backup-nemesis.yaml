@@ -3,7 +3,7 @@ test_duration: 200
 
 prepare_write_cmd: [ "cassandra-stress write cl=QUORUM n=15000 -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native  -rate threads=5 -col 'size=FIXED(1024) n=FIXED(1)' -pop seq=1..15000"]
 
-stress_cmd_m: [ "cassandra-stress mixed cl=QUORUM duration=5m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native  -rate threads=5 -col 'size=FIXED(1024) n=FIXED(1)' -pop seq=1..15000"]
+stress_cmd_m: "cassandra-stress mixed cl=QUORUM duration=5m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native  -rate threads=5 -col 'size=FIXED(1024) n=FIXED(1)' -pop seq=1..15000"
 
 
 instance_type_db: 'i3.large'
