@@ -2865,7 +2865,10 @@ class Nemesis:
         disrupt_func = getattr(self, disrupt_func_name)
         disrupt_func()
 
-    @latency_calculator_decorator(legend="Scylla-Manager Backup")
+    def _run_manager_backup(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode, timeout: int) -> BackupTask:
+        task = manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
+        return task
+
     def _manager_backup_and_report(self, object_storage_upload_mode: ObjectStorageUploadMode, label) -> BackupTask:
         """
         Run a backup using Scylla Manager and report the result to Argus.
@@ -2877,7 +2880,9 @@ class Nemesis:
         timeout = int(timedelta(hours=14).total_seconds())
         manager_tool = self.get_manager_tool()
         mgr_cluster = self.tester.ensure_and_get_cluster(manager_tool)
-        task = manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
+        decorated = latency_calculator_decorator(legend="Scylla-Manager Backup", cycle_name=label)(
+            self._run_manager_backup)
+        task = decorated(mgr_cluster, object_storage_upload_mode, timeout)
         report_manager_backup_results_to_argus(self.tester.monitors, self.tester.test_config, label, task, mgr_cluster)
         return task
 
@@ -2890,7 +2895,9 @@ class Nemesis:
             label: Label for reporting to Argus.
         """
 
-        task = self._manager_backup_and_report(object_storage_upload_mode, label)
+        time_postfix = datetime.now().strftime("_%Y%m%d_%H%M%S")
+        label_with_time = f"{label}{time_postfix}"
+        task = self._manager_backup_and_report(object_storage_upload_mode, label_with_time)
         self.log.info("Delete Manager backup snapshot")
         task.delete_backup_snapshot()
 
