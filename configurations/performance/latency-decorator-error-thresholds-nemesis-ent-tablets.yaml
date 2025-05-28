@@ -56,3 +56,6 @@ latency_decorator_error_thresholds:
     _run_manager_backup:
       duration:
         fixed_limit: 18000
+    _measure_stress_baseline:
+      duration:
+        fixed_limit: 3700
