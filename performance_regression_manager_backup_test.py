@@ -29,14 +29,16 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
     And specifically, a Scylla Manager backup Nemesis
     """
 
-    @latency_calculator_decorator(legend="Stress Baseline", cycle_name="Stress Baseline")
-    def _measure_stress_baseline(self, sleep_duration: int = 100):
-        InfoEvent(f'Start steady state test duration ({sleep_duration})').publish()
+    @latency_calculator_decorator
+    def steady_state_latency(self, hdr_tags: list[str], sleep_duration: int = 240):
+        # NOTE: 'hdr_tags' will be used by the 'latency_calculator_decorator' decorator
+        InfoEvent(message='Starting Steady State calculation for %ss' % sleep_duration).publish()
         time.sleep(sleep_duration)
+        InfoEvent(message='Ended Steady State calculation. Took %ss' % sleep_duration).publish()
 
-    def _test_stress_steady_state(self, stress_cmd: str):
-        self.run_stress_thread(stress_cmd=stress_cmd, stress_num=1, stats_aggregate_cmds=False)
-        self._measure_stress_baseline()
+    def test_stress_steady_state(self, stress_cmd: str):
+        stress_queue = self.run_stress_thread(stress_cmd=stress_cmd, stress_num=1, stats_aggregate_cmds=False)
+        self.steady_state_latency(hdr_tags=stress_queue.hdr_tags)
         with EventsSeverityChangerFilter(new_severity=Severity.NORMAL,
                                          event_class=CassandraStressEvent,
                                          extra_time_to_expiration=60):
@@ -48,6 +50,6 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
         stress_cmd = self.params.get('stress_cmd_m')
         self.run_fstrim_on_all_db_nodes()
         self.preload_data()
-        self._test_stress_steady_state(stress_cmd=stress_cmd)
+        self.test_stress_steady_state(stress_cmd=stress_cmd)
         self.align_cluster_data_state(keyspace, table)
         self.run_workload(stress_cmd=stress_cmd, nemesis=True, sub_type='mixed')
