@@ -30,7 +30,7 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
     """
 
     @latency_calculator_decorator(legend="Stress Baseline", cycle_name="Stress Baseline")
-    def _measure_stress_baseline(self, sleep_duration: int = 1800):
+    def _measure_stress_baseline(self, sleep_duration: int = 100):
         InfoEvent(f'Start steady state test duration ({sleep_duration})').publish()
         time.sleep(sleep_duration)
 
