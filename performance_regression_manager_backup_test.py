@@ -31,7 +31,7 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
         self.preload_data()
         self.align_cluster_data_state(keyspace, table)
         self.run_workload(stress_cmd=self.params.get('stress_cmd_m'), nemesis=True, sub_type='mixed')
-        self.align_cluster_data_state(keyspace, table)
+        self.align_cluster_data_state(keyspace, table, clear_snapshots=False)
         self.db_cluster.start_nemesis(interval=1, cycles_count=1)
         for nemesis_thread in self.db_cluster.nemesis_threads:
             nemesis_thread.join()

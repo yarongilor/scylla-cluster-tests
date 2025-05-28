@@ -88,8 +88,9 @@ class ClusterOperations(ClusterTester):
         major_compaction_nodes(cluster=self.db_cluster, keyspace=keyspace, table=table)
         self.wait_no_compactions_running(n=400, sleep_time=60)
 
-    def align_cluster_data_state(self, keyspace: str, table: str):
-        clear_snapshot_nodes(cluster=self.db_cluster)
+    def align_cluster_data_state(self, keyspace: str, table: str, clear_snapshots: bool = True):
+        if clear_snapshots:
+            clear_snapshot_nodes(cluster=self.db_cluster)
         self._cluster_flush_and_major_compaction(keyspace, table)
         self.run_fstrim_on_all_db_nodes()
 

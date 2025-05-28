@@ -2895,7 +2895,7 @@ class Nemesis:
             label: Label for reporting to Argus.
         """
 
-        time_postfix = datetime.now().strftime("_%Y%m%d_%H%M%S")
+        time_postfix = datetime.datetime.now().strftime("_%Y%m%d_%H%M%S")
         label_with_time = f"{label}{time_postfix}"
         task = self._manager_backup_and_report(object_storage_upload_mode, label_with_time)
         self.log.info("Delete Manager backup snapshot")
