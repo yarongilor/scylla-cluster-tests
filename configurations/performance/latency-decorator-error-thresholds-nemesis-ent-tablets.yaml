@@ -15,10 +15,7 @@ latency_decorator_error_thresholds:
     replace_node:
       duration:
         fixed_limit: 3600
-    _native_backup:
-      duration:
-        fixed_limit: 7200
-    _rclone_backup:
+    _manager_backup_and_report:
       duration:
         fixed_limit: 18000
   read:
@@ -37,10 +34,7 @@ latency_decorator_error_thresholds:
     replace_node:
       duration:
         fixed_limit: 3000
-    _native_backup:
-      duration:
-        fixed_limit: 7200
-    _rclone_backup:
+    _manager_backup_and_report:
       duration:
         fixed_limit: 18000
   mixed:
@@ -59,9 +53,6 @@ latency_decorator_error_thresholds:
     replace_node:
       duration:
         fixed_limit: 3000
-    _native_backup:
-      duration:
-        fixed_limit: 7200
-    _rclone_backup:
+    _manager_backup_and_report:
       duration:
         fixed_limit: 18000
