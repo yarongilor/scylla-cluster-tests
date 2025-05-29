@@ -11,15 +11,12 @@
 # See LICENSE for more details.
 #
 # Copyright (c) 2025 ScyllaDB
-import time
 
 from performance_regression_test import PerformanceRegressionTest
 from sdcm.mgmt.operations import ManagerTestFunctionsMixIn
 from sdcm.sct_events import Severity
 from sdcm.sct_events.filters import EventsSeverityChangerFilter
 from sdcm.sct_events.loaders import CassandraStressEvent
-from sdcm.sct_events.system import InfoEvent
-from sdcm.utils.decorators import latency_calculator_decorator
 
 
 class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerTestFunctionsMixIn):
@@ -29,16 +26,9 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
     And specifically, a Scylla Manager backup Nemesis
     """
 
-    @latency_calculator_decorator
-    def steady_state_latency(self, hdr_tags: list[str], sleep_duration: int = 240):
-        # NOTE: 'hdr_tags' will be used by the 'latency_calculator_decorator' decorator
-        InfoEvent(message='Starting Steady State calculation for %ss' % sleep_duration).publish()
-        time.sleep(sleep_duration)
-        InfoEvent(message='Ended Steady State calculation. Took %ss' % sleep_duration).publish()
-
     def test_stress_steady_state(self, stress_cmd: str):
         stress_queue = self.run_stress_thread(stress_cmd=stress_cmd, stress_num=1, stats_aggregate_cmds=False)
-        self.steady_state_latency(hdr_tags=stress_queue.hdr_tags)
+        self.steady_state_latency(hdr_tags=stress_queue.hdr_tags, sleep_time=1800)
         with EventsSeverityChangerFilter(new_severity=Severity.NORMAL,
                                          event_class=CassandraStressEvent,
                                          extra_time_to_expiration=60):
