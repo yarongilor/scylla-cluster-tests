@@ -40,6 +40,7 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
         stress_cmd = self.params.get('stress_cmd_m')
         self.run_fstrim_on_all_db_nodes()
         self.preload_data()
+        self.align_cluster_data_state(keyspace, table)
         self.test_stress_steady_state(stress_cmd=stress_cmd)
         self.align_cluster_data_state(keyspace, table)
         self.run_workload(stress_cmd=stress_cmd, nemesis=True, sub_type='mixed')
