@@ -11,6 +11,7 @@
 # See LICENSE for more details.
 #
 # Copyright (c) 2025 ScyllaDB
+import time
 
 from performance_regression_test import PerformanceRegressionTest
 from sdcm.mgmt.operations import ManagerTestFunctionsMixIn
@@ -28,6 +29,7 @@ class PerformanceRegressionManagerBackupTest(PerformanceRegressionTest, ManagerT
 
     def test_stress_steady_state(self, stress_cmd: str):
         stress_queue = self.run_stress_thread(stress_cmd=stress_cmd, stress_num=1, stats_aggregate_cmds=False)
+        time.sleep(60)  # postpone measure steady state latency to skip c-s start period when latency is high
         self.steady_state_latency(hdr_tags=stress_queue.hdr_tags, sleep_time=1800)
         with EventsSeverityChangerFilter(new_severity=Severity.NORMAL,
                                          event_class=CassandraStressEvent,
