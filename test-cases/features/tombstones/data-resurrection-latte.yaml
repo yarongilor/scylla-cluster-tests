@@ -1,0 +1,35 @@
+test_duration: 200
+
+prepare_write_cmd:
+  - >
+    latte run --function=insert --consistency=ALL --duration=100000
+    -P keyspace="latte"
+    --threads=3 --concurrency=128
+    --start-cycle=1 --end-cycle=10000 -P row_count=10000
+    data_dir/latte/delete_validation_serial.rn
+
+stress_cmd:
+  - >
+    latte run --consistency=QUORUM --duration=10000
+    -P row_count=10000 -P range_size=1000
+    --function=load_and_validate
+    data_dir/latte/delete_validation_serial.rn
+
+n_db_nodes: 3
+n_loaders: 1
+n_monitor_nodes: 1
+
+instance_type_db: 'i4i.large'
+nemesis_class_name: 'StopWaitStartMonkey'
+nemesis_interval: 1
+
+user_prefix: 'data-resurrection-latte'
+
+post_prepare_cql_cmds: >
+  ALTER TABLE latte.validation_poc with gc_grace_seconds = 60 and tombstone_gc = {'mode': 'timeout', 'propagation_delay_in_seconds': '60'};
+
+latte_schema_parameters:
+  keyspace: latte
+  compaction_strategy: IncrementalCompactionStrategy
+  column_count: 5
+  replication_factor: 3

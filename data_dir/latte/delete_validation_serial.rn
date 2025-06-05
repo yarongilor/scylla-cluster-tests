@@ -1,0 +1,232 @@
+use latte::*;
+
+const ROW_COUNT = latte::param!("row_count", 100000);
+const OFFSET = latte::param!("offset", 0);
+const REPLICATION_FACTOR = latte::param!("replication_factor", 3);
+const ROWS_PER_PARTITION = latte::param!("rows_per_partition", 1);
+const PARTITION_SIZES = latte::param!("partition_sizes", "100:1");
+
+const INSERTS_PER_CYCLE = latte::param!("inserts_per_cycle", 4);
+const DELETES_PER_CYCLE = latte::param!("deletes_per_cycle", 2);
+const READS_PER_CYCLE   = latte::param!("reads_per_cycle", 1);
+
+const RANGE_SIZE = 100;
+
+const KEYSPACE = "latte";
+const TABLE = "validation_poc";
+
+const P_STMT = #{
+    "INSERT": #{
+        "NAME": "p_stmt_validation__insert",
+        "CQL": `INSERT INTO ${KEYSPACE}.${TABLE}(pk, ck) VALUES (:pk, :ck)`,
+    },
+    "GET": #{
+        "NAME": "p_stmt_validation__get",
+        "CQL": `SELECT pk, ck FROM ${KEYSPACE}.${TABLE} WHERE pk = :pk LIMIT 1`,
+    },
+    "DELETE": #{
+        "NAME": "p_stmt_validation__delete",
+        "CQL": `DELETE FROM ${KEYSPACE}.${TABLE} WHERE pk = :pk`,
+    },
+};
+
+pub async fn schema(db) {
+    db.execute(`CREATE KEYSPACE IF NOT EXISTS ${KEYSPACE} WITH REPLICATION = {
+        'class': 'NetworkTopologyStrategy', 'replication_factor': ${REPLICATION_FACTOR} }`).await?;
+
+    db.execute(`CREATE TABLE IF NOT EXISTS ${KEYSPACE}.${TABLE}(
+        pk bigint,
+        ck bigint,
+        PRIMARY KEY (pk, ck)
+    ) WITH CLUSTERING ORDER BY (ck ASC)`).await?;
+}
+
+pub async fn erase(db) {
+    db.execute(`TRUNCATE TABLE ${KEYSPACE}.${TABLE}`).await?;
+}
+
+pub async fn prepare(db) {
+    db.init_partition_row_distribution_preset(
+        "main", ROW_COUNT, ROWS_PER_PARTITION, PARTITION_SIZES,
+    ).await?;
+    db.prepare(P_STMT.INSERT.NAME, P_STMT.INSERT.CQL).await?;
+    db.prepare(P_STMT.GET.NAME, P_STMT.GET.CQL).await?;
+    db.prepare(P_STMT.DELETE.NAME, P_STMT.DELETE.CQL).await?;
+}
+
+// === MAIN FUNCTION ===
+
+pub async fn load_and_validate(db, i) {
+    let range_list = build_range_list(RANGE_SIZE);
+    let partition_range_status = #{};  // map range_key -> status ("exist", "deleted")
+
+    // pick index for this operation:
+    let idx = i % ROW_COUNT;
+
+    println!(
+        ">>> [load_and_validate] i={}, base_idx={}: INSERT x{}, DELETE x{}, READ x{}",
+        i, idx, INSERTS_PER_CYCLE, DELETES_PER_CYCLE, READS_PER_CYCLE
+    );
+
+    // INSERT loop
+    let j = 0;
+    while j < INSERTS_PER_CYCLE {
+        do_insert_range(db, i + j, range_list, partition_range_status).await;
+        j = j + 1;
+    }
+
+    // DELETE loop
+    let j = 0;
+    while j < DELETES_PER_CYCLE {
+        do_delete_range(db, i + j, range_list, partition_range_status).await;
+        j = j + 1;
+    }
+
+    // READ loop
+    let j = 0;
+    while j < READS_PER_CYCLE {
+        do_read_range(db, i + j, range_list, partition_range_status).await;
+        j = j + 1;
+    }
+}
+
+// === HELPERS ===
+
+pub fn build_range_list(range_size) {
+    let list = [];
+    let i = 0;
+    while i < ROW_COUNT {
+        let start = i;
+        let end = if (i + range_size - 1) < (ROW_COUNT - 1) {
+            i + range_size - 1
+        } else {
+            ROW_COUNT - 1
+        };
+        let key = `${start}-${end}`;
+        list.push(key);
+        i = i + range_size;
+    }
+    list
+}
+
+
+pub fn get_candidates(range_list, partition_range_status, target_status) {
+    let candidates = [];
+    let i = 0;
+    while i < range_list.len() {
+        let key = range_list[i];
+        let status = partition_range_status.get(key);
+        if (target_status == "new" && status == Option::None) ||
+           (status == Some(target_status)) {
+            candidates.push(key);
+        }
+        i = i + 1;
+    }
+    candidates
+}
+
+pub fn my_random_index(i, size) {
+    (i * 17 + 3) % size
+}
+
+pub async fn do_insert_range(db, i, range_list, partition_range_status) {
+    let candidates = get_candidates(range_list, partition_range_status, "new");
+    if candidates.is_empty() {
+        return;
+    }
+    let rnd_idx = my_random_index(i, candidates.len());
+    let range_key = candidates[rnd_idx];
+
+    println!("  INSERT range={}", range_key);
+
+    let parts = range_key.split("-");
+    let start = parts.next().unwrap().parse::<i64>().unwrap();
+    let end = parts.next().unwrap().parse::<i64>().unwrap();
+
+    let k = start;
+    while k <= end {
+        do_insert(db, k).await;
+        k = k + 1;
+    }
+    partition_range_status[range_key] = "exist";
+}
+
+pub async fn do_delete_range(db, i, range_list, partition_range_status) {
+    let candidates = get_candidates(range_list, partition_range_status, "exist");
+    if candidates.is_empty() {
+        return;
+    }
+    let rnd_idx = my_random_index(i, candidates.len());
+    let range_key = candidates[rnd_idx];
+
+    println!("  DELETE range={}", range_key);
+
+    let parts = range_key.split("-");
+    let start = parts.next().unwrap().parse::<i64>().unwrap();
+    let end = parts.next().unwrap().parse::<i64>().unwrap();
+
+    let k = start;
+    while k <= end {
+        do_delete(db, k).await;
+        k = k + 1;
+    }
+    partition_range_status[range_key] = "deleted";
+}
+
+pub async fn do_read_range(db, i, range_list, partition_range_status) {
+    let candidates = get_candidates(range_list, partition_range_status, "deleted");
+    if candidates.is_empty() {
+        return;
+    }
+    let rnd_idx = my_random_index(i, candidates.len());
+    let range_key = candidates[rnd_idx];
+
+    println!("  READ range={}", range_key);
+
+    let parts = range_key.split("-");
+    let start = parts.next().unwrap().parse::<i64>().unwrap();
+    let end = parts.next().unwrap().parse::<i64>().unwrap();
+
+    let k = start;
+    while k <= end {
+        do_read(db, k).await;
+        k = k + 1;
+    }
+    // status remains "deleted"
+}
+
+pub async fn do_insert(db, idx) {
+    let partition = db.get_partition_info("main", idx).await;
+    partition.idx += OFFSET;
+    let pk = hash(partition.idx);
+    let ck = hash(idx);
+    db.execute_prepared(P_STMT.INSERT.NAME, [pk, ck]).await?;
+}
+
+pub async fn do_delete(db, idx) {
+    let partition = db.get_partition_info("main", idx).await;
+    partition.idx += OFFSET;
+    let pk = hash(partition.idx);
+    db.execute_prepared(P_STMT.DELETE.NAME, [pk]).await?;
+}
+
+pub async fn do_read(db, idx) {
+    let partition = db.get_partition_info("main", idx).await;
+    partition.idx += OFFSET;
+    let pk = hash(partition.idx);
+
+    db.execute_prepared_with_validation(P_STMT.GET.NAME, [pk], [0, "Expected no rows, since partition is marked deleted"]).await?;
+}
+
+pub async fn insert(db, i) {
+    let idx = i % ROW_COUNT + OFFSET;
+    let partition = db.get_partition_info("main", idx).await;
+    partition.idx += OFFSET;
+    let pk = hash(partition.idx);
+    let ck = hash(idx);
+    if USE_PREPARED_STATEMENTS {
+        db.execute_prepared(P_STMT.INSERT.NAME, [pk, ck]).await?
+    } else {
+        db.execute(P_STMT.INSERT.CQL.replace(":pk", `${pk}`).replace(":ck", `${ck}`)).await?
+    }
+}
