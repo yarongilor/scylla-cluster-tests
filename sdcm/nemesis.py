@@ -2542,8 +2542,8 @@ class Nemesis(NemesisFlags):
         self.log.info('Waiting scylla services to be up after started...')
         self.target_node.wait_db_up(timeout=14400)
         self.log.debug("Execute a complete repair for target node")
-        # self.repair_nodetool_repair()
-        self.target_node.run_nodetool(sub_cmd=f"repair {keyspace}")
+        self.repair_nodetool_repair()
+        # self.target_node.run_nodetool(sub_cmd=f"repair {keyspace}")
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
             session.default_consistency_level = ConsistencyLevel.ONE
@@ -5973,7 +5973,7 @@ class StopWaitStartMonkey(Nemesis):
     kubernetes = True
     limited = True
     zero_node_changes = True
-    stop_start_or_repair = True
+    # stop_start_or_repair = True
 
     def disrupt(self):
         self.disrupt_stop_wait_start_scylla_server(600)
