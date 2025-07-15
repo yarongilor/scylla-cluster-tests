@@ -2539,8 +2539,11 @@ class Nemesis(NemesisFlags):
         self.log.debug('Sleeping for: %s before validating deletions in MV', random_sleep)
         time.sleep(random_sleep)
         self.target_node.start_scylla_server(verify_up=True, verify_down=False)
+        self.log.info('Waiting scylla services to be up after started...')
+        self.target_node.wait_db_up(timeout=14400)
         self.log.debug("Execute a complete repair for target node")
-        self.repair_nodetool_repair()
+        # self.repair_nodetool_repair()
+        self.target_node.run_nodetool(sub_cmd=f"repair {keyspace}")
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
             session.default_consistency_level = ConsistencyLevel.ONE
