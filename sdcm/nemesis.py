@@ -2546,7 +2546,9 @@ class Nemesis(NemesisFlags):
         # self.target_node.run_nodetool(sub_cmd=f"repair {keyspace}")
 
         with self.cluster.cql_connection_patient(self.target_node, connect_timeout=300) as session:
-            session.default_consistency_level = ConsistencyLevel.ONE
+            tested_cl = ConsistencyLevel.QUORUM
+            self.log.debug("Testing base-table - MV sync query with CL: %s" , tested_cl)
+            session.default_consistency_level = tested_cl
             mv_query = session.prepare(
                 f"select * from {mv_ks_cf} where {partition_key_name} = ? ALLOW FILTERING using timeout 5m")
             base_table_query = session.prepare(
