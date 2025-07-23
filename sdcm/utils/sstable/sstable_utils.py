@@ -223,7 +223,7 @@ class SstableUtils:
         # Proceed with dump command
         dump_cmd = get_sstable_data_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
         dump_result = self.db_node.remoter.run(
-            f'sudo {dump_cmd} {sstable} 1>{remote_json_path}', verbose=False, ignore_status=True)
+            f'sudo bash -c "{dump_cmd} {sstable} 1>{remote_json_path}"', verbose=True, ignore_status=False)
 
         if not dump_result.ok:
             self.log.error("Failed to run SSTable dump for %s: %s", sstable, dump_result.stderr)
