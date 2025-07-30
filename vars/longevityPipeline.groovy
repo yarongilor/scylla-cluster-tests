@@ -335,6 +335,7 @@ def call(Map pipelineParams) {
                 steps {
                     catchError(stageResult: 'FAILURE') {
                         script {
+                            sh "ls -l /home/ubuntu/sct-results/"
                             wrap([$class: 'BuildUser']) {
                                 dir('scylla-cluster-tests') {
                                     timeout(time: testRunTimeout, unit: 'MINUTES') {
@@ -367,6 +368,7 @@ def call(Map pipelineParams) {
                 steps {
                     catchError(stageResult: 'FAILURE') {
                         script {
+                            sh "ls -l /home/ubuntu/sct-results/"
                             wrap([$class: 'BuildUser']) {
                                 dir('scylla-cluster-tests') {
                                     timeout(time: collectLogsTimeout, unit: 'MINUTES') {
