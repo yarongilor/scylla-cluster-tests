@@ -21,8 +21,7 @@ from botocore.exceptions import ClientError
 import boto3
 
 from sdcm.exceptions import CapacityReservationError
-from sdcm.utils.common import all_aws_regions
-from sdcm.utils.parallel_object import ParallelObject
+from sdcm.utils.common import all_aws_regions, ParallelObject
 from sdcm.utils.get_username import get_username
 
 LOGGER = logging.getLogger(__name__)
