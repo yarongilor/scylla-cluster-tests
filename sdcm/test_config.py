@@ -76,6 +76,7 @@ class TestConfig(metaclass=Singleton):
             test_id_file_path = os.path.join(cls.logdir(), "test_id")
             with open(test_id_file_path, "w", encoding="utf-8") as test_id_file:
                 test_id_file.write(str(test_id))
+            LOGGER.info(f"updated file of {test_id_file_path} with: {test_id}")
 
     @classmethod
     def tester_obj(cls):
@@ -92,6 +93,7 @@ class TestConfig(metaclass=Singleton):
 
     @classmethod
     def make_new_logdir(cls, update_latest_symlink: bool, postfix: str = "") -> str:
+        LOGGER.info("Creating a new log dir..")
         base = cls.base_logdir()
         logdir = os.path.join(base, datetime.now().strftime("%Y%m%d-%H%M%S-%f") + postfix)
         os.makedirs(logdir, exist_ok=True)
@@ -107,8 +109,11 @@ class TestConfig(metaclass=Singleton):
     @classmethod
     def logdir(cls) -> str:
         if not cls._logdir:
+            LOGGER.info("log dir doesn't exist, creating a new one")
             cls._logdir = cls.make_new_logdir(update_latest_symlink=True)
             os.environ['_SCT_TEST_LOGDIR'] = cls._logdir
+        else:
+            LOGGER.info("log dir exists, not creating it")
         return cls._logdir
 
     @classmethod
