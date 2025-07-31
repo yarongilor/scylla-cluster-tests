@@ -21,7 +21,7 @@ from datetime import timedelta
 from sdcm import mgmt
 from sdcm.argus_results import (send_manager_snapshot_details_to_argus, send_manager_benchmark_results_to_argus)
 from sdcm.mgmt import ScyllaManagerError, TaskStatus, HostStatus, HostSsl, HostRestStatus
-from sdcm.mgmt.argus_report import report_to_argus
+from sdcm.mgmt.argus_report import report_to_argus, ManagerReportType
 from sdcm.mgmt.cli import RestoreTask
 from sdcm.mgmt.common import reconfigure_scylla_manager, get_persistent_snapshots, get_backup_size
 from sdcm.provision.helpers.certificate import TLSAssets
@@ -1164,17 +1164,17 @@ class ManagerOneToOneRestore(ManagerTestFunctionsMixIn):
             self.log.info("Skipping verification read stress because of the test or snapshot configuration")
 
 
-class ManagerReportType(Enum):
-    READ = 1
-    WRITE = 2
-    BACKUP = 3
+# class ManagerReportType(Enum):
+#     READ = 1
+#     WRITE = 2
+#     BACKUP = 3
 
 
-def format_size(size_in_bytes):
-    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
-        if size_in_bytes < 1024:
-            return f"{size_in_bytes:.2f} {unit}"
-        size_in_bytes /= 1024
+# def format_size(size_in_bytes):
+#     for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
+#         if size_in_bytes < 1024:
+#             return f"{size_in_bytes:.2f} {unit}"
+#         size_in_bytes /= 1024
 
 
 class ManagerBackupRestoreConcurrentTests(ManagerTestFunctionsMixIn):

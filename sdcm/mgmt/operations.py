@@ -10,20 +10,20 @@ import boto3
 import yaml
 from invoke import exceptions
 
-from . import TaskStatus
-from .cli import ScyllaManagerTool
-from .. import mgmt
-from ..exceptions import FilesNotCorrupted
-from ..remote import shell_script_cmd, LOCALRUNNER
-from ..sct_events.system import InfoEvent
-from ..test_config import TestConfig
-from ..tester import ClusterTester
-from ..utils.azure_utils import AzureService
-from ..utils.cluster_tools import flush_nodes, major_compaction_nodes, clear_snapshot_nodes
-from ..utils.compaction_ops import CompactionOps
-from ..utils.gce_utils import get_gce_storage_client
-from ..utils.loader_utils import LoaderUtilsMixin
-from ..utils.time_utils import ExecutionTimer
+from sdcm import mgmt
+from sdcm.exceptions import FilesNotCorrupted
+from sdcm.mgmt import TaskStatus
+from sdcm.mgmt.cli import ScyllaManagerTool
+from sdcm.remote import shell_script_cmd, LOCALRUNNER
+from sdcm.sct_events.system import InfoEvent
+from sdcm.test_config import TestConfig
+from sdcm.tester import ClusterTester
+from sdcm.utils.azure_utils import AzureService
+from sdcm.utils.cluster_tools import flush_nodes, major_compaction_nodes, clear_snapshot_nodes
+from sdcm.utils.compaction_ops import CompactionOps
+from sdcm.utils.gce_utils import get_gce_storage_client
+from sdcm.utils.loader_utils import LoaderUtilsMixin
+from sdcm.utils.time_utils import ExecutionTimer
 
 
 class ClusterOperations(ClusterTester):
@@ -795,3 +795,25 @@ class ManagerTestFunctionsMixIn(
             repair_task.wait_for_percentage(next_percentage_block)
         repair_task.wait_and_get_final_status(step=30)
         InfoEvent(message="Repair ended").publish()
+
+
+def run_manager_backup(mgr_cluster, locations, object_storage_upload_mode=None, timeout=7200):
+    """
+    Perform a Manager backup task and wait for its completion.
+
+    Args:
+        mgr_cluster: The ManagerCluster object.
+        locations: List of backup locations.
+        object_storage_upload_mode: The upload mode (e.g., RCLONE or NATIVE).
+        timeout: Timeout for the backup task.
+
+    Returns:
+        The completed backup task.
+    """
+    InfoEvent(
+        message=f'Starting a Manager backup (Object Storage Upload Mode: {object_storage_upload_mode})').publish()
+    task = mgr_cluster.create_backup_task(location_list=locations, rate_limit_list=["0"],
+                                          object_storage_upload_mode=object_storage_upload_mode)
+    backup_status = task.wait_and_get_final_status(timeout=timeout)
+    assert backup_status == TaskStatus.DONE, "Backup upload has failed!"
+    return task
