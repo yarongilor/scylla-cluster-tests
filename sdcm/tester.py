@@ -102,7 +102,6 @@ from sdcm.utils.decorators import log_run_info, retrying, measure_time, optional
 from sdcm.utils.git import get_git_commit_id, get_git_status_info
 from sdcm.utils.ldap import LDAP_USERS, LDAP_PASSWORD, LDAP_ROLE, LDAP_BASE_OBJECT, \
     LdapConfigurationError, LdapServerType
-from sdcm.utils.log import configure_logging, handle_exception
 from sdcm.utils.issues import SkipPerIssues
 from sdcm.utils.nemesis_utils.node_allocator import NemesisNodeAllocator
 from sdcm.db_stats import PrometheusDBStats
@@ -171,7 +170,6 @@ except ImportError as import_exc:
     cluster_cloud = None
     CLUSTER_CLOUD_IMPORT_ERROR = str(import_exc)
 
-configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
 
 try:
     from botocore.vendored.requests.packages.urllib3.contrib.pyopenssl import extract_from_urllib3
