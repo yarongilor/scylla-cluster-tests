@@ -170,7 +170,11 @@ except ImportError as import_exc:
     cluster_cloud = None
     CLUSTER_CLOUD_IMPORT_ERROR = str(import_exc)
 
-configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_logging_fixture():
+    configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
+
 
 try:
     from botocore.vendored.requests.packages.urllib3.contrib.pyopenssl import extract_from_urllib3
