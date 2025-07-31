@@ -72,7 +72,6 @@ from sdcm.log import SDCMAdapter
 from sdcm.logcollector import save_kallsyms_map
 from sdcm.mgmt.common import TaskStatus, ScyllaManagerError, get_persistent_snapshots, manager_backup, \
     ObjectStorageUploadMode
-# from sdcm.mgmt.operations import run_manager_backup
 from sdcm.mgmt.argus_report import report_manager_backup_results_to_argus
 from sdcm.mgmt.helpers import get_dc_name_from_ks_statement, get_schema_create_statements_from_snapshot
 from sdcm.nemesis_publisher import NemesisElasticSearchPublisher
@@ -2857,8 +2856,9 @@ class Nemesis(NemesisFlags):
         disrupt_func()
 
     def _run_manager_backup(self, mgr_cluster, object_storage_upload_mode: ObjectStorageUploadMode, timeout: int) -> BackupTask:
-        task = manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
-        # task = run_manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
+        # task = manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
+        from sdcm.mgmt.operations import run_manager_backup
+        task = run_manager_backup(mgr_cluster, self.tester.locations, object_storage_upload_mode, timeout)
         return task
 
     def _manager_backup_and_report(self, object_storage_upload_mode: ObjectStorageUploadMode, label) -> BackupTask:
