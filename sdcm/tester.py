@@ -171,9 +171,9 @@ except ImportError as import_exc:
     CLUSTER_CLOUD_IMPORT_ERROR = str(import_exc)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def configure_logging_fixture():
-    configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
+# @pytest.fixture(scope="session", autouse=True)
+# def configure_logging_fixture():
+#     configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
 
 
 try:

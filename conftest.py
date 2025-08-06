@@ -1,5 +1,7 @@
 import pytest
 
+from sdcm.test_config import TestConfig
+from sdcm.utils.log import configure_logging, handle_exception
 from sdcm.utils.subtest_utils import SUBTESTS_FAILURES
 
 
@@ -23,3 +25,8 @@ def pytest_runtest_logreport(report: pytest.TestReport):
     if report.when == "call" and getattr(report, "context", None):
         if report.failed:
             SUBTESTS_FAILURES[report.nodeid].append(report)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_logging_fixture():
+    configure_logging(exception_handler=handle_exception, variables={'log_dir': TestConfig().logdir()})
