@@ -27,3 +27,4 @@ gemini_log_cql_statements: true
 #  - "gc_grace_seconds=60 "
 db_type: mixed_scylla
 instance_type_db_oracle: 'i4i.8xlarge'
+hinted_handoff: 'enabled'
