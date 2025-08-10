@@ -43,6 +43,7 @@
 - ModifyTableMonkey
 - MultipleHardRebootNodeMonkey
 - NemesisSequence
+- NemesisGeminiSequence
 - NoCorruptRepairMonkey
 - NodeRestartWithResharding
 - NodeTerminateAndReplace
