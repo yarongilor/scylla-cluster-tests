@@ -597,6 +597,29 @@ class Nemesis(NemesisFlags):
             result = self.target_node.run_nodetool("clearsnapshot")
         self.log.debug(result)
 
+    def _start_stop_scrub_compaction(self):
+        compaction_args = self._prepare_start_stop_compaction()
+        trigger_func = partial(compaction_args.compaction_ops.trigger_scrub_compaction)
+        watch_func = partial(compaction_args.compaction_ops.stop_on_user_compaction_logged,
+                             node=compaction_args.target_node,
+                             mark=compaction_args.target_node.mark_log(),
+                             watch_for="Scrubbing",
+                             timeout=compaction_args.timeout,
+                             stop_func=compaction_args.compaction_ops.stop_scrub_compaction)
+        with DbNodeLogger(self.cluster.nodes, "start and stop scrub compaction", target_node=self.target_node):
+            results = ParallelObject.run_named_tasks_in_parallel(
+                tasks={"trigger": trigger_func, "watcher": watch_func},
+                timeout=compaction_args.timeout + 5,
+                ignore_exceptions=True
+            )
+
+        self._handle_start_stop_compaction_results(
+            trigger_and_watcher_futures=results,
+            allow_trigger_exceptions=True
+        )
+
+        self.clear_snapshots()
+
     def disrupt_start_stop_scrub_compaction(self):
         """
         Start and stop a scrub compaction on a non-system columnfamily.
@@ -671,6 +694,28 @@ class Nemesis(NemesisFlags):
         ks_cf = f"{compaction_args.keyspace}.{compaction_args.columnfamily}"
         with DbNodeLogger(self.cluster.nodes, "start and stop cleanup compaction", target_node=self.target_node), \
                 self.action_log_scope(f"start and stop cleanup compaction on {ks_cf} table on {self.target_node.name} node"):
+            results = ParallelObject.run_named_tasks_in_parallel(
+                tasks={"trigger": trigger_func, "watcher": watch_func},
+                timeout=compaction_args.timeout + 5,
+                ignore_exceptions=True
+            )
+
+        self._handle_start_stop_compaction_results(
+            trigger_and_watcher_futures=results,
+            allow_trigger_exceptions=True
+        )
+
+    def _start_stop_validation_compaction(self):
+        compaction_args = self._prepare_start_stop_compaction()
+        trigger_func = partial(compaction_args.compaction_ops.trigger_validation_compaction)
+        watch_func = partial(compaction_args.compaction_ops.stop_on_user_compaction_logged,
+                             node=compaction_args.target_node,
+                             mark=compaction_args.target_node.mark_log(),
+                             watch_for="Scrubbing ",
+                             timeout=compaction_args.timeout,
+                             stop_func=compaction_args.compaction_ops.stop_validation_compaction)
+
+        with DbNodeLogger(self.cluster.nodes, "start and stop validation compaction", target_node=self.target_node):
             results = ParallelObject.run_named_tasks_in_parallel(
                 tasks={"trigger": trigger_func, "watcher": watch_func},
                 timeout=compaction_args.timeout + 5,
@@ -4677,6 +4722,39 @@ class Nemesis(NemesisFlags):
         self._shrink_cluster(rack=None)
         InfoEvent(message='Finished shrink disruption').publish()
 
+    def disrupt_run_gemini_unique_sequence(self):
+        sleep_time_between_ops = self.cluster.params.get('nemesis_sequence_sleep_between_ops')
+        sleep_time_between_ops = sleep_time_between_ops if sleep_time_between_ops else 7
+        sleep_time_between_ops = sleep_time_between_ops * 60
+
+        InfoEvent(message='StartEvent - disrupt_hard_reboot_node started').publish()
+        self.target_node = self.cluster.nodes[4]
+        self.reboot_node(target_node=self.target_node, hard=True)
+        self.target_node.wait_node_fully_start()
+        InfoEvent(message='FinishEvent - disrupt_hard_reboot_node finished').publish()
+        time.sleep(sleep_time_between_ops)
+
+        InfoEvent(message='StartEvent - disrupt_soft_reboot_node started').publish()
+        self.target_node = self.cluster.nodes[1]
+        self.reboot_node(target_node=self.target_node, hard=False)
+        self.target_node.wait_node_fully_start()
+        InfoEvent(message='FinishEvent - disrupt_soft_reboot_node finished').publish()
+        time.sleep(sleep_time_between_ops)
+
+        InfoEvent(message='StartEvent - disrupt_start_stop_scrub_compaction started').publish()
+        self.target_node = self.cluster.nodes[5]
+        self._start_stop_scrub_compaction()
+        InfoEvent(message='FinishEvent - disrupt_start_stop_scrub_compaction finished').publish()
+        time.sleep(sleep_time_between_ops)
+
+        InfoEvent(message='StartEvent - disrupt_start_stop_validation_compaction started').publish()
+        self.target_node = self.cluster.nodes[1]
+        self._start_stop_validation_compaction()
+        InfoEvent(message='FinishEvent - disrupt_start_stop_validation_compaction finished').publish()
+        time.sleep(sleep_time_between_ops)
+        InfoEvent(message='Sleep an extra interval of sleep_time_between_ops').publish()
+        time.sleep(sleep_time_between_ops)
+
     def _k8s_disrupt_memory_stress(self):
         """Uses chaos-mesh experiment based on https://github.com/chaos-mesh/memStress"""
         if not self.target_node.k8s_cluster.chaos_mesh.initialized:
@@ -6798,6 +6876,14 @@ class NemesisSequence(Nemesis):
 
     def disrupt(self):
         self.disrupt_run_unique_sequence()
+
+
+class NemesisGeminiSequence(Nemesis):
+    disruptive = True
+    networking = False
+
+    def disrupt(self):
+        self.disrupt_run_gemini_unique_sequence()
 
 
 class TerminateAndRemoveNodeMonkey(Nemesis):
