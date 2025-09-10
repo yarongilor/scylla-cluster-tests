@@ -30,5 +30,6 @@ gemini_log_cql_statements: true
 db_type: mixed_scylla
 instance_type_db_oracle: 'i4i.8xlarge'
 
-commitlog_sync: 'periodic'
-commitlog_sync_period_in_ms: 500
+append_scylla_yaml:
+  commitlog_sync: 'periodic'
+  commitlog_sync_period_in_ms: 500
