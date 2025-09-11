@@ -32,4 +32,4 @@ instance_type_db_oracle: 'i4i.8xlarge'
 
 append_scylla_yaml:
   commitlog_sync: 'periodic'
-  commitlog_sync_period_in_ms: 500
+  commitlog_sync_period_in_ms: 50
