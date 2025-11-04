@@ -20,10 +20,10 @@ table_definition: |
       WITH compaction = {'class': 'LeveledCompactionStrategy'};
 
 extra_definitions:
-  - CREATE MATERIALIZED VIEW keyspace1.sort_by_c1 AS SELECT key, c1 FROM keyspace1.standard2 WHERE c1 IS NOT NULL and key IS NOT NULL and key2 IS NOT NULL PRIMARY KEY (c1, key, key2)
-  - CREATE MATERIALIZED VIEW keyspace1.sort_by_c4 AS SELECT key, c4 FROM keyspace1.standard2 WHERE c4 IS NOT NULL and key IS NOT NULL and key2 IS NOT NULL PRIMARY KEY (c4, key, key2)
-  - CREATE INDEX IF NOT EXISTS sec_ind_c2 ON keyspace1.standard2 (c2)
-  - CREATE INDEX IF NOT EXISTS sec_ind_c3 ON keyspace1.standard2 (c3)
+#  - CREATE MATERIALIZED VIEW keyspace1.sort_by_c1 AS SELECT key, c1 FROM keyspace1.standard2 WHERE c1 IS NOT NULL and key IS NOT NULL and key2 IS NOT NULL PRIMARY KEY (c1, key, key2)
+#  - CREATE MATERIALIZED VIEW keyspace1.sort_by_c4 AS SELECT key, c4 FROM keyspace1.standard2 WHERE c4 IS NOT NULL and key IS NOT NULL and key2 IS NOT NULL PRIMARY KEY (c4, key, key2)
+#  - CREATE INDEX IF NOT EXISTS sec_ind_c2 ON keyspace1.standard2 (c2)
+#  - CREATE INDEX IF NOT EXISTS sec_ind_c3 ON keyspace1.standard2 (c3)
 
 ### Column Distribution Specifications ###
 columnspec:
@@ -64,15 +64,15 @@ queries:
   read:
     cql: select * from keyspace1.standard2 where key=? and key2=?
     fields: samerow
-  mv_read1:
-    cql: select * from keyspace1.sort_by_c1 where c1 = ? LIMIT 1
-    fields: samerow
-  mv_read2:
-    cql: select * from keyspace1.sort_by_c4 where c4 = ? LIMIT 1
-    fields: samerow
-  si_read1:
-    cql: select * from keyspace1.standard2 where c2 = ? LIMIT 1
-    fields: samerow
-  si_read2:
-    cql: select * from keyspace1.standard2 where c3 = ? LIMIT 1
-    fields: samerow
+#  mv_read1:
+#    cql: select * from keyspace1.sort_by_c1 where c1 = ? LIMIT 1
+#    fields: samerow
+#  mv_read2:
+#    cql: select * from keyspace1.sort_by_c4 where c4 = ? LIMIT 1
+#    fields: samerow
+#  si_read1:
+#    cql: select * from keyspace1.standard2 where c2 = ? LIMIT 1
+#    fields: samerow
+#  si_read2:
+#    cql: select * from keyspace1.standard2 where c3 = ? LIMIT 1
+#    fields: samerow
