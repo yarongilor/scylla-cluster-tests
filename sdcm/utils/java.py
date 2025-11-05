@@ -3,7 +3,7 @@ import os
 from sdcm import sct_abs_path
 
 
-JAVA_DOCKER_IMAGE = 'openjdk:21-slim'
+JAVA_DOCKER_IMAGE = 'eclipse-temurin:21-jre-jammy'
 
 
 class JavaContainerMixin:
