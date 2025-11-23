@@ -493,6 +493,10 @@ class Nemesis(NemesisFlags):
     def _is_it_on_kubernetes(self) -> bool:
         return isinstance(getattr(self.tester, "db_cluster", None), PodCluster)
 
+    def _skip_repairs_if_requested(self):
+        if self.cluster.params.get('skip_repairs'):
+            raise UnsupportedNemesis('Skipping Nemesis due to repair skip request')
+
     def __str__(self):
         try:
             return str(self.__class__).split("'")[1]
@@ -837,6 +841,7 @@ class Nemesis(NemesisFlags):
 
     @target_all_nodes
     def disrupt_restart_then_repair_node(self):
+        self._skip_repairs_if_requested()
         with (
             DbEventsFilter(
                 db_event=DatabaseLogEvent.DATABASE_ERROR,
@@ -2116,6 +2121,7 @@ class Nemesis(NemesisFlags):
     # End of Nemesis running code
     @latency_calculator_decorator(legend="Run repair process with nodetool repair")
     def repair_nodetool_repair(self, node=None, publish_event=True):
+        self._skip_repairs_if_requested()
         node = node if node else self.target_node
         with (
             adaptive_timeout(Operations.REPAIR, node, timeout=HOUR_IN_SEC * 48),
@@ -2128,6 +2134,7 @@ class Nemesis(NemesisFlags):
         Execute a nodetool repair on the specified nodes, disregarding errors that may
         arise from failed or unavailable nodes during the process.
         """
+        self._skip_repairs_if_requested()
         if not self.cluster.params.get("use_mgmt") and not self.cluster.params.get("use_cloud_manager"):
             for node in nodes:
                 try:
@@ -2142,6 +2149,7 @@ class Nemesis(NemesisFlags):
             self._mgmt_repair_cli(ignore_down_hosts=ignore_down_hosts)
 
     def repair_nodetool_rebuild(self):
+        self._skip_repairs_if_requested()
         with adaptive_timeout(Operations.REBUILD, self.target_node, timeout=60):
             self.target_node.run_nodetool("rebuild", long_running=True, retry=0)
 
@@ -3525,6 +3533,7 @@ class Nemesis(NemesisFlags):
 
     @latency_calculator_decorator(legend="Scylla-Manger repair")
     def _mgmt_repair_cli(self, ignore_down_hosts=None):
+        self._skip_repairs_if_requested()
         self.log.debug("Manager repair started")
         mgr_cluster = self.cluster.get_cluster_manager()
         self.actions_log.info("Starting Scylla Manager repair task")
@@ -3551,6 +3560,7 @@ class Nemesis(NemesisFlags):
 
         @raise_event_on_failure
         def silenced_nodetool_repair_to_fail():
+            self._skip_repairs_if_requested()
             try:
                 self.actions_log.info(f"Starting nodetool repair on {self.target_node.name} expected to be aborted")
                 self.target_node.run_nodetool(
@@ -4103,6 +4113,7 @@ class Nemesis(NemesisFlags):
         # node_to_remove must be different than node
         # node_to_remove is single/last seed in cluster, before
         # it will be terminated, choose new seed node
+        self._skip_repairs_if_requested()
         num_of_seed_nodes = len(self.cluster.seed_nodes)
         if node_to_remove.is_seed and num_of_seed_nodes < 2:
             new_seed_node = random.choice([n for n in self.cluster.nodes if n is not node_to_remove])
@@ -4578,6 +4589,7 @@ class Nemesis(NemesisFlags):
         3. Stop it with a hard reboot once the repair starts.
         4. Trigger a rebuild on the target node after the reboot.
         """
+        self._skip_repairs_if_requested()
         self._destroy_data_and_restart_scylla()
         trigger = partial(
             self.target_node.run_nodetool,
