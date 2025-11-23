@@ -349,3 +349,4 @@ agent:
   binary_url: ""
   max_concurrent_jobs: 10
   log_level: "info"
+skip_repairs: false

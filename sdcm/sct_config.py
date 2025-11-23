@@ -367,6 +367,12 @@ class SCTConfiguration(dict):
              """,
         ),
         dict(
+            name="skip_repairs",
+            env="SCT_SKIP_REPAIRS",
+            type=boolean,
+            help="If True, all nemesis containing a repair are skipped"
+         ),
+        dict(
             name="user_credentials_path",
             env="SCT_USER_CREDENTIALS_PATH",
             type=str,
