@@ -1039,9 +1039,11 @@ class ManagerRestoreBenchmarkTests(ManagerTestFunctionsMixIn):
 
         ks_number = self.params.get('keyspace_num') or 1
         ks_names = self.get_keyspace_name(ks_number=ks_number)
-        for ks_name in ks_names:
-            self.db_cluster.nodes[0].run_cqlsh(f'TRUNCATE {ks_name}.standard1')
-
+        try:
+            for ks_name in ks_names:
+                self.db_cluster.nodes[0].run_cqlsh(f'TRUNCATE {ks_name}.standard1')
+        except Exception as exc:  # noqa: BLE001
+            self.log.error("Failed to truncate keyspaces before restore")
         extra_params = self.get_restore_extra_parameters()
         task = self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=backup_task.get_snapshot_tag(),
                                              timeout=110000, restore_data=True, extra_params=extra_params, object_storage_method=object_storage_method)
@@ -1085,9 +1087,9 @@ class ManagerRestoreBenchmarkTests(ManagerTestFunctionsMixIn):
             self.db_cluster.nodes[0].run_cqlsh(cmd="grant scylla_admin to scylla_manager")
 
         self.log.info("Restoring the schema")
-        self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=snapshot_data.tag, timeout=600,
+        restore_schema_task = self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=snapshot_data.tag, timeout=600,
                                       restore_schema=True, location_list=locations)
-
+        self._send_restore_results_to_argus(restore_schema_task, mgr_cluster.sctool.client_version_timestamp, dataset_label=snapshot_name)
         if restore_outside_manager:
             self.log.info("Restoring the data outside the Manager")
             with ExecutionTimer() as timer:
