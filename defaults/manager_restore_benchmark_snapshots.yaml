@@ -102,6 +102,26 @@ sizes:  # size of backed up dataset in GB
       replication: "NetworkTopologyStrategy"
       rf: 3
     one_one_restore_params: None
+  1tb_1t_ics_2025_1:
+    tag: "sm_20251217120202UTC"
+    locations:
+      - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
+    exp_timeout: 28800  # 8 hours
+    scylla_version: "2025.1.10"
+    number_of_nodes: 9
+    prohibit_verification_read: false
+    dataset:
+      schema:
+        keyspace1:
+          - standard1: 1024
+      num_of_rows: 1073741824
+      compaction: "IncrementalCompactionStrategy"
+      cl: "ONE"
+      col_size: 1024
+      col_n: 1
+      replication: "NetworkTopologyStrategy"
+      rf: 3
+    one_one_restore_params: None
   1tb_4t_twcs:
     tag: "sm_20240821145503UTC"
     locations:
