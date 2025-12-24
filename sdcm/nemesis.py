@@ -4427,7 +4427,6 @@ class Nemesis(NemesisFlags):
         ignore_ipv6_failure_to_assign, issue_refs=["https://github.com/scylladb/scylladb/issues/20387"]
     )
     def reboot_node(self, target_node, hard=True, verify_ssh=True):
-        raise UnsupportedNemesis('Reboot cannot be tested due to https://github.com/scylladb/scylladb/issues/26811, hence skipping')
         with self.action_log_scope(f"Reboot {target_node.name} node. hard: {hard}"):
             target_node.reboot(hard=hard, verify_ssh=verify_ssh)
         if self.tester.params.get("print_kernel_callstack"):
