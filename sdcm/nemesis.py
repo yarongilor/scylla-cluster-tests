@@ -882,16 +882,12 @@ class Nemesis(NemesisFlags):
 
     @target_all_nodes
     def disrupt_hard_reboot_node(self):
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
         self.reboot_node(target_node=self.target_node, hard=True)
         with self.action_log_scope(f"Wait for {self.target_node.name} node to be fully started"):
             self.target_node.wait_node_fully_start()
 
     @target_all_nodes
     def disrupt_multiple_hard_reboot_node(self) -> None:
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
         cdc_expected_error_patterns = [
             "cdc - Could not update CDC description table with generation",
         ]
@@ -940,8 +936,6 @@ class Nemesis(NemesisFlags):
 
     @target_all_nodes
     def disrupt_soft_reboot_node(self):
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
         self.reboot_node(target_node=self.target_node, hard=False)
         with self.action_log_scope(f"Wait for {self.target_node.name} node to be fully started"):
             self.target_node.wait_node_fully_start()
