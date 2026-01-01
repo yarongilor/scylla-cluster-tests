@@ -257,3 +257,50 @@ class ObjectStorageUploadMode(str, Enum):
     AUTO = "auto"
     RCLONE = "rclone"
     NATIVE = "native"
+
+
+def parse_bandwidth_value(bandwidth_str: str) -> float | None:
+    """Parse bandwidth value from Manager output string.
+
+    Args:
+        bandwidth_str: String containing bandwidth value (e.g., "22.313MiB/s/shard")
+
+    Returns:
+        Float value of bandwidth in MiB/s/shard, or None if parsing fails
+    """
+    bandwidth_match = re.search(r"(\d+\.\d+)", bandwidth_str)
+    if bandwidth_match:
+        return float(bandwidth_match.group(1))
+    else:
+        LOGGER.warning(f"Bandwidth value is non-numeric: {bandwidth_str.strip()}. Returning None.")
+        return None
+
+
+def calculate_restore_metrics(
+    total_seconds: int,
+    repair_seconds: int,
+    download_bw: float | None = None,
+    load_and_stream_bw: float | None = None,
+) -> dict[str, int | float]:
+    """Calculate restore metrics for Argus reporting.
+
+    Args:
+        total_seconds: Total restore time in seconds
+        repair_seconds: Post-restore repair time in seconds
+        download_bw: Download bandwidth in MiB/s/shard (optional)
+        load_and_stream_bw: Load&stream bandwidth in MiB/s/shard (optional)
+
+    Returns:
+        Dictionary containing restore metrics (restore time, repair time, total, and bandwidth values)
+    """
+    results = {
+        "restore time": (total_seconds - repair_seconds),
+        "repair time": repair_seconds,
+        "total": total_seconds,
+    }
+    if download_bw:
+        results["download bandwidth"] = download_bw
+    if load_and_stream_bw:
+        results["l&s bandwidth"] = load_and_stream_bw
+    return results
+
