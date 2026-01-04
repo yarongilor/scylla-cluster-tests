@@ -373,6 +373,12 @@ class SCTConfiguration(dict):
             help="If True, all nemesis containing a repair are skipped"
          ),
         dict(
+            name="skip_reboot",
+            env="SCT_SKIP_REBOOT",
+            type=boolean,
+            help="If True, all nemesis containing a reboot are skipped"
+         ),
+        dict(
             name="user_credentials_path",
             env="SCT_USER_CREDENTIALS_PATH",
             type=str,

@@ -497,6 +497,10 @@ class Nemesis(NemesisFlags):
         if self.cluster.params.get('skip_repairs'):
             raise UnsupportedNemesis('Skipping Nemesis due to repair skip request')
 
+    def _skip_reboot_if_requested(self):
+        if self.cluster.params.get('skip_reboot'):
+            raise UnsupportedNemesis('Skipping Nemesis due to reboot skip request')
+
     def __str__(self):
         try:
             return str(self.__class__).split("'")[1]
@@ -882,16 +886,14 @@ class Nemesis(NemesisFlags):
 
     @target_all_nodes
     def disrupt_hard_reboot_node(self):
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
+        self._skip_reboot_if_requested()
         self.reboot_node(target_node=self.target_node, hard=True)
         with self.action_log_scope(f"Wait for {self.target_node.name} node to be fully started"):
             self.target_node.wait_node_fully_start()
 
     @target_all_nodes
     def disrupt_multiple_hard_reboot_node(self) -> None:
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
+        self._skip_reboot_if_requested()
         cdc_expected_error_patterns = [
             "cdc - Could not update CDC description table with generation",
         ]
@@ -940,8 +942,7 @@ class Nemesis(NemesisFlags):
 
     @target_all_nodes
     def disrupt_soft_reboot_node(self):
-        raise UnsupportedNemesis(
-            "Skipping due to https://github.com/scylladb/scylladb/issues/26811.")
+        self._skip_reboot_if_requested()
         self.reboot_node(target_node=self.target_node, hard=False)
         with self.action_log_scope(f"Wait for {self.target_node.name} node to be fully started"):
             self.target_node.wait_node_fully_start()
@@ -4427,7 +4428,7 @@ class Nemesis(NemesisFlags):
         ignore_ipv6_failure_to_assign, issue_refs=["https://github.com/scylladb/scylladb/issues/20387"]
     )
     def reboot_node(self, target_node, hard=True, verify_ssh=True):
-        raise UnsupportedNemesis('Reboot cannot be tested due to https://github.com/scylladb/scylladb/issues/26811, hence skipping')
+        self._skip_reboot_if_requested()
         with self.action_log_scope(f"Reboot {target_node.name} node. hard: {hard}"):
             target_node.reboot(hard=hard, verify_ssh=verify_ssh)
         if self.tester.params.get("print_kernel_callstack"):
@@ -4501,6 +4502,7 @@ class Nemesis(NemesisFlags):
         a new node in its place in case it was.
         4. Trigger a rebuild on the decommissioned node.
         """
+        self._skip_reboot_if_requested()
 
         def decommission_post_action():
             """
@@ -4589,6 +4591,7 @@ class Nemesis(NemesisFlags):
         3. Stop it with a hard reboot once the repair starts.
         4. Trigger a rebuild on the target node after the reboot.
         """
+        self._skip_reboot_if_requested()
         self._skip_repairs_if_requested()
         self._destroy_data_and_restart_scylla()
         trigger = partial(
@@ -4626,6 +4629,7 @@ class Nemesis(NemesisFlags):
         3. Stop it with a hard reboot once the rebuild starts.
         4. Trigger another rebuild after the hard reboot on the target node.
         """
+        self._skip_reboot_if_requested()
         self._destroy_data_and_restart_scylla()
 
         timeout = 1800
