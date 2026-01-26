@@ -80,6 +80,26 @@ sizes:  # size of backed up dataset in GB
       replication: "NetworkTopologyStrategy"
       rf: 3
     one_one_restore_params: None
+  2tb_1t_ics_2025_2:
+    tag: "sm_20260126110703UTC"
+    locations:
+      - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
+    exp_timeout: 28800  # 8 hours
+    scylla_version: "2025.2.5"
+    number_of_nodes: 3
+    prohibit_verification_read: false
+    dataset:
+      schema:
+        keyspace1:
+          - standard1: 2048
+      num_of_rows: 2147483648
+      compaction: "IncrementalCompactionStrategy"
+      cl: "QUORUM"
+      col_size: 1024
+      col_n: 1
+      replication: "NetworkTopologyStrategy"
+      rf: 3
+    one_one_restore_params: None
   2tb_1t_ics_2025_1:
     tag: "sm_20251218165735UTC"
     locations:
