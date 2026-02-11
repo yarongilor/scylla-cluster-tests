@@ -4123,17 +4123,61 @@ class BaseCluster:
             )
         self.log.debug("ssl_context: %s", str(ssl_context))
 
-        kwargs = dict(contact_points=node_ips, port=port, ssl_context=ssl_context)
-        cluster_driver = ClusterDriver(
+        # Increase connect_timeout if not explicitly set to handle slow connections
+        connect_timeout = max(200, connect_timeout or 0)
+        self.log.debug("Using connect_timeout: %s seconds", connect_timeout)
+
+        # Driver configuration
+        driver_config = dict(
+            contact_points=node_ips,
+            port=port,
+            ssl_context=ssl_context,
             auth_provider=auth_provider,
             compression=compression,
             protocol_version=protocol_version,
             load_balancing_policy=load_balancing_policy,
             default_retry_policy=FlakyRetryPolicy(),
             connect_timeout=connect_timeout,
-            **kwargs,
         )
-        session = cluster_driver.connect()
+        cluster_driver = ClusterDriver(**driver_config)
+
+        # Retry connection with exponential backoff to handle transient driver errors
+        # This is a defense-in-depth approach in addition to the high-level retries
+        # See: https://github.com/scylladb/python-driver/issues/614
+        session = None
+
+        for attempt in range(10):  # max_connect_retries
+            try:
+                self.log.debug("Attempting to connect to cluster (attempt %d/10)", attempt + 1)
+                session = cluster_driver.connect()
+                if attempt > 0:
+                    self.log.info("Successfully connected to cluster after %d attempts", attempt + 1)
+                break  # Success!
+            except (NoHostAvailable, ConnectionShutdown, DriverException) as exc:
+                if attempt < 9:  # Not the last attempt
+                    sleep_time = 2 * (2**attempt)  # Exponential backoff: 2, 4, 8, 16... seconds
+                    self.log.warning(
+                        "Connection attempt %d/10 failed with %s: %s. Retrying in %d seconds...",
+                        attempt + 1,
+                        type(exc).__name__,
+                        exc,
+                        sleep_time,
+                    )
+                    time.sleep(sleep_time)
+                    # Try to clean up the failed driver before retrying
+                    try:
+                        cluster_driver.shutdown()
+                    except (RuntimeError, OSError, DriverException) as shutdown_exc:
+                        self.log.debug("Error during cluster_driver shutdown (non-fatal): %s", shutdown_exc)
+
+                    # Recreate cluster driver for next attempt
+                    cluster_driver = ClusterDriver(**driver_config)
+                else:
+                    self.log.error("Failed to connect to cluster after 10 attempts. Last error: %s", exc)
+                    raise
+
+        if session is None:
+            raise RuntimeError("Failed to create CQL session - unknown error")
 
         # temporarily increase client-side timeout to 1m to determine
         # if the cluster is simply responding slowly to requests
