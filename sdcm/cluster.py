@@ -51,10 +51,10 @@ from paramiko import SSHException
 from tenacity import RetryError
 from invoke import Result
 from invoke.exceptions import UnexpectedExit, Failure
-from cassandra import ConsistencyLevel
+from cassandra import ConsistencyLevel, DriverException
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster as ClusterDriver
-from cassandra.cluster import NoHostAvailable
+from cassandra.cluster import NoHostAvailable, ConnectionShutdown
 from cassandra.policies import RetryPolicy
 from cassandra.policies import WhiteListRoundRobinPolicy, RackAwareRoundRobinPolicy, LoadBalancingPolicy
 from cassandra.query import SimpleStatement
@@ -4109,17 +4109,61 @@ class BaseCluster:
             )
         self.log.debug("ssl_context: %s", str(ssl_context))
 
-        kwargs = dict(contact_points=node_ips, port=port, ssl_context=ssl_context)
-        cluster_driver = ClusterDriver(
+        # Increase connect_timeout if not explicitly set to handle slow connections
+        connect_timeout = max(200, connect_timeout or 0)
+        self.log.debug("Using connect_timeout: %s seconds", connect_timeout)
+
+        # Driver configuration
+        driver_config = dict(
+            contact_points=node_ips,
+            port=port,
+            ssl_context=ssl_context,
             auth_provider=auth_provider,
             compression=compression,
             protocol_version=protocol_version,
             load_balancing_policy=load_balancing_policy,
             default_retry_policy=FlakyRetryPolicy(),
             connect_timeout=connect_timeout,
-            **kwargs,
         )
-        session = cluster_driver.connect()
+        cluster_driver = ClusterDriver(**driver_config)
+
+        # Retry connection with exponential backoff to handle transient driver errors
+        # This is a defense-in-depth approach in addition to the high-level retries
+        # See: https://github.com/scylladb/python-driver/issues/614
+        session = None
+
+        for attempt in range(10):  # max_connect_retries
+            try:
+                self.log.debug("Attempting to connect to cluster (attempt %d/10)", attempt + 1)
+                session = cluster_driver.connect()
+                if attempt > 0:
+                    self.log.info("Successfully connected to cluster after %d attempts", attempt + 1)
+                break  # Success!
+            except (NoHostAvailable, ConnectionShutdown, DriverException) as exc:
+                if attempt < 9:  # Not the last attempt
+                    sleep_time = 2 * (2**attempt)  # Exponential backoff: 2, 4, 8, 16... seconds
+                    self.log.warning(
+                        "Connection attempt %d/10 failed with %s: %s. Retrying in %d seconds...",
+                        attempt + 1,
+                        type(exc).__name__,
+                        exc,
+                        sleep_time,
+                    )
+                    time.sleep(sleep_time)
+                    # Try to clean up the failed driver before retrying
+                    try:
+                        cluster_driver.shutdown()
+                    except (RuntimeError, OSError, DriverException) as shutdown_exc:
+                        self.log.debug("Error during cluster_driver shutdown (non-fatal): %s", shutdown_exc)
+
+                    # Recreate cluster driver for next attempt
+                    cluster_driver = ClusterDriver(**driver_config)
+                else:
+                    self.log.error("Failed to connect to cluster after 10 attempts. Last error: %s", exc)
+                    raise
+
+        if session is None:
+            raise RuntimeError("Failed to create CQL session - unknown error")
 
         # temporarily increase client-side timeout to 1m to determine
         # if the cluster is simply responding slowly to requests
@@ -4270,7 +4314,7 @@ class BaseCluster:
             verbose=verbose,
         )
 
-    @retrying(n=8, sleep_time=15, allowed_exceptions=(NoHostAvailable,))
+    @retrying(n=30, sleep_time=10, allowed_exceptions=(NoHostAvailable, ConnectionShutdown, DriverException))
     def cql_connection_patient(
         self,
         node,
@@ -4307,12 +4351,17 @@ class BaseCluster:
         Raises:
         - Exception: If the timeout is exceeded and a connection cannot be established.
 
+        Note:
+        - Retries up to 30 times with 10 second intervals to handle transient connection issues (up to 5 minutes)
+        - Handles NoHostAvailable, ConnectionShutdown, and DriverException (e.g., bad file descriptor errors)
+        - See: https://github.com/scylladb/python-driver/issues/614
+
         """
         kwargs = locals()
         del kwargs["self"]
         return self.cql_connection(**kwargs)
 
-    @retrying(n=8, sleep_time=15, allowed_exceptions=(NoHostAvailable,))
+    @retrying(n=30, sleep_time=10, allowed_exceptions=(NoHostAvailable, ConnectionShutdown, DriverException))
     def cql_connection_patient_exclusive(
         self,
         node,
@@ -4327,9 +4376,17 @@ class BaseCluster:
         verbose=True,
     ):
         """
-        Returns a connection after it stops throwing NoHostAvailables.
+        Returns a connection after it stops throwing NoHostAvailables or ConnectionShutdown exceptions.
 
-        If the timeout is exceeded, the exception is raised.
+        This method establishes an exclusive connection to a single node with retry logic
+        to handle transient connection failures, including the "Bad file descriptor" error.
+
+        Note:
+        - Retries up to 30 times with 10 second intervals to handle transient connection issues (up to 5 minutes)
+        - Handles NoHostAvailable, ConnectionShutdown, and DriverException
+        - See: https://github.com/scylladb/python-driver/issues/614
+
+        If the maximum number of retries is exceeded, the exception is raised.
         """
 
         kwargs = locals()
