@@ -4123,61 +4123,17 @@ class BaseCluster:
             )
         self.log.debug("ssl_context: %s", str(ssl_context))
 
-        # Increase connect_timeout if not explicitly set to handle slow connections
-        connect_timeout = max(200, connect_timeout or 0)
-        self.log.debug("Using connect_timeout: %s seconds", connect_timeout)
-
-        # Driver configuration
-        driver_config = dict(
-            contact_points=node_ips,
-            port=port,
-            ssl_context=ssl_context,
+        kwargs = dict(contact_points=node_ips, port=port, ssl_context=ssl_context)
+        cluster_driver = ClusterDriver(
             auth_provider=auth_provider,
             compression=compression,
             protocol_version=protocol_version,
             load_balancing_policy=load_balancing_policy,
             default_retry_policy=FlakyRetryPolicy(),
             connect_timeout=connect_timeout,
+            **kwargs,
         )
-        cluster_driver = ClusterDriver(**driver_config)
-
-        # Retry connection with exponential backoff to handle transient driver errors
-        # This is a defense-in-depth approach in addition to the high-level retries
-        # See: https://github.com/scylladb/python-driver/issues/614
-        session = None
-
-        for attempt in range(10):  # max_connect_retries
-            try:
-                self.log.debug("Attempting to connect to cluster (attempt %d/10)", attempt + 1)
-                session = cluster_driver.connect()
-                if attempt > 0:
-                    self.log.info("Successfully connected to cluster after %d attempts", attempt + 1)
-                break  # Success!
-            except (NoHostAvailable, ConnectionShutdown, DriverException) as exc:
-                if attempt < 9:  # Not the last attempt
-                    sleep_time = 2 * (2**attempt)  # Exponential backoff: 2, 4, 8, 16... seconds
-                    self.log.warning(
-                        "Connection attempt %d/10 failed with %s: %s. Retrying in %d seconds...",
-                        attempt + 1,
-                        type(exc).__name__,
-                        exc,
-                        sleep_time,
-                    )
-                    time.sleep(sleep_time)
-                    # Try to clean up the failed driver before retrying
-                    try:
-                        cluster_driver.shutdown()
-                    except (RuntimeError, OSError, DriverException) as shutdown_exc:
-                        self.log.debug("Error during cluster_driver shutdown (non-fatal): %s", shutdown_exc)
-
-                    # Recreate cluster driver for next attempt
-                    cluster_driver = ClusterDriver(**driver_config)
-                else:
-                    self.log.error("Failed to connect to cluster after 10 attempts. Last error: %s", exc)
-                    raise
-
-        if session is None:
-            raise RuntimeError("Failed to create CQL session - unknown error")
+        session = cluster_driver.connect()
 
         # temporarily increase client-side timeout to 1m to determine
         # if the cluster is simply responding slowly to requests
@@ -4328,7 +4284,6 @@ class BaseCluster:
             verbose=verbose,
         )
 
-    @retrying(n=30, sleep_time=10, allowed_exceptions=(NoHostAvailable, ConnectionShutdown, DriverException))
     def cql_connection_patient(
         self,
         node,
@@ -4366,16 +4321,27 @@ class BaseCluster:
         - Exception: If the timeout is exceeded and a connection cannot be established.
 
         Note:
-        - Retries up to 30 times with 10 second intervals to handle transient connection issues (up to 5 minutes)
+        - Retries up to 60 times with 10 second intervals (up to 10 minutes total)
+        - If retrying for more than 2 minutes, restarts binary protocol on ALL nodes as workaround
         - Handles NoHostAvailable, ConnectionShutdown, and DriverException (e.g., bad file descriptor errors)
         - See: https://github.com/scylladb/python-driver/issues/614
 
         """
-        kwargs = locals()
-        del kwargs["self"]
-        return self.cql_connection(**kwargs)
+        return self._cql_connection_patient_with_workaround(
+            connection_method=self.cql_connection,
+            node=node,
+            keyspace=keyspace,
+            user=user,
+            password=password,
+            compression=compression,
+            protocol_version=protocol_version,
+            port=port,
+            ssl_context=ssl_context,
+            connect_timeout=connect_timeout,
+            verbose=verbose,
+            whitelist_nodes=whitelist_nodes,
+        )
 
-    @retrying(n=30, sleep_time=10, allowed_exceptions=(NoHostAvailable, ConnectionShutdown, DriverException))
     def cql_connection_patient_exclusive(
         self,
         node,
@@ -4396,16 +4362,117 @@ class BaseCluster:
         to handle transient connection failures, including the "Bad file descriptor" error.
 
         Note:
-        - Retries up to 30 times with 10 second intervals to handle transient connection issues (up to 5 minutes)
+        - Retries up to 60 times with 10 second intervals (up to 10 minutes total)
+        - If retrying for more than 2 minutes, restarts binary protocol on ALL nodes as workaround
         - Handles NoHostAvailable, ConnectionShutdown, and DriverException
         - See: https://github.com/scylladb/python-driver/issues/614
 
         If the maximum number of retries is exceeded, the exception is raised.
         """
+        return self._cql_connection_patient_with_workaround(
+            connection_method=self.cql_connection_exclusive,
+            node=node,
+            keyspace=keyspace,
+            user=user,
+            password=password,
+            compression=compression,
+            protocol_version=protocol_version,
+            port=port,
+            ssl_context=ssl_context,
+            connect_timeout=connect_timeout,
+            verbose=verbose,
+        )
 
-        kwargs = locals()
-        del kwargs["self"]
-        return self.cql_connection_exclusive(**kwargs)
+    def _cql_connection_patient_with_workaround(
+        self,
+        connection_method,
+        node,
+        max_retries: int = 60,
+        sleep_time: int = 10,
+        binary_restart_after: int = 120,
+        **kwargs,
+    ):
+        """
+        Internal method that implements patient CQL connection with workaround for persistent driver errors.
+
+        If connection failures persist for more than `binary_restart_after` seconds (default 2 minutes),
+        this method will restart the binary protocol (CQL interface) on ALL nodes in the cluster to clear
+        any stuck connections, then continue retrying.
+
+        This is a workaround for the "Bad file descriptor" error in the Python driver:
+        https://github.com/scylladb/python-driver/issues/614
+
+        Args:
+            connection_method: The connection method to use (cql_connection or cql_connection_exclusive)
+            node: The target node to connect to
+            max_retries: Maximum number of retry attempts (default 60 = 10 minutes with 10s sleep)
+            sleep_time: Seconds to sleep between retries (default 10)
+            binary_restart_after: Seconds after which to restart binary protocol (default 120 = 2 minutes)
+            **kwargs: Additional arguments passed to the connection method
+        """
+        start_time = time.time()
+        binary_restarted = False
+        last_exception = None
+
+        for attempt in range(max_retries):
+            try:
+                return connection_method(node=node, **kwargs)
+            except (NoHostAvailable, ConnectionShutdown, DriverException) as exc:
+                last_exception = exc
+                elapsed_time = time.time() - start_time
+
+                self.log.warning(
+                    "CQL connection attempt %d/%d failed after %.1fs with %s: %s",
+                    attempt + 1,
+                    max_retries,
+                    elapsed_time,
+                    type(exc).__name__,
+                    exc,
+                )
+
+                # If we've been failing for more than 2 minutes and haven't restarted binary yet,
+                # try restarting the binary protocol on ALL nodes as a workaround
+                # The "Bad file descriptor" error affects the driver's view of all hosts,
+                # so we need to restart binary on all nodes to clear the stuck state
+                if elapsed_time > binary_restart_after and not binary_restarted:
+                    self.log.warning(
+                        "CQL connection failures persisted for %.1f seconds. "
+                        "Attempting to restart binary protocol on ALL nodes as workaround for driver issue. "
+                        "See: https://github.com/scylladb/python-driver/issues/614",
+                        elapsed_time,
+                    )
+                    binary_restarted = True
+                    restart_success_count = 0
+                    for cluster_node in self.nodes:
+                        try:
+                            self.log.info("Restarting binary protocol on node %s...", cluster_node.name)
+                            cluster_node.restart_binary_protocol(verify_up=True)
+                            restart_success_count += 1
+                            self.log.info("Successfully restarted binary protocol on %s", cluster_node.name)
+                        except Exception as restart_exc:  # noqa: BLE001
+                            self.log.warning(
+                                "Failed to restart binary protocol on %s: %s",
+                                cluster_node.name,
+                                restart_exc,
+                            )
+                    self.log.info(
+                        "Restarted binary protocol on %d/%d nodes. Continuing connection attempts.",
+                        restart_success_count,
+                        len(self.nodes),
+                    )
+                    # Give the nodes a moment to stabilize after restart
+                    time.sleep(5)
+
+                if attempt < max_retries - 1:
+                    time.sleep(sleep_time)
+                else:
+                    self.log.error(
+                        "Failed to establish CQL connection after %d attempts over %.1f seconds. Last error: %s",
+                        max_retries,
+                        elapsed_time,
+                        exc,
+                    )
+                    raise
 
     def is_ks_rf_one(self, keyspace_name: str, node: BaseNode, **kwarg) -> bool:
         ks_rf = self.get_keyspace_info(keyspace_name, node)
