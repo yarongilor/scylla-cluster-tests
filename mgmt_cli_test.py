@@ -965,6 +965,17 @@ class ManagerHelperTests(ManagerTestFunctionsMixIn):
         self.log.info("Initialize Scylla Manager")
         mgr_cluster = self.db_cluster.get_cluster_manager()
 
+        self.log.info("Reduce disk_space_free_min_percent to allow backup on nearly-full disks")
+        manager_node = self.monitors.nodes[0]
+        reconfigure_scylla_manager(
+            manager_node=manager_node,
+            logger=self.log,
+            values_to_update=[
+                {"backup": {"disk_space_free_min_percent": 1}},
+                {"restore": {"disk_space_free_min_percent": 1}},
+            ]
+        )
+
         self.log.info("Define backup location")
         if is_cloud_manager:
             # Extract location from an automatically scheduled backup task
