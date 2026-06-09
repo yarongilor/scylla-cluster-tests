@@ -884,6 +884,7 @@ class ManagerTestFunctionsMixIn(
         restore_schema=False,
         restore_data=False,
         location_list=None,
+        keyspace_list=None,
         extra_params=None,
         manager_backup_restore_method=None,
     ):
@@ -895,6 +896,7 @@ class ManagerTestFunctionsMixIn(
             location_list=location_list,
             snapshot_tag=snapshot_tag,
             dc_mapping=dc_mapping,
+            keyspace_list=keyspace_list,
             extra_params=extra_params,
             manager_backup_restore_method=manager_backup_restore_method,
         )
