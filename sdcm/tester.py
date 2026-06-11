@@ -1074,11 +1074,26 @@ class ClusterTester(unittest.TestCase):
             logging.debug("Skip configuring AWS KMS, test is not running on AWS")
             return
         if not self.params.is_enterprise:
-            logging.debug("Skip configuring AWS KMS, not running enterprise version")
-            return
-        if ComparableScyllaVersion(self.params.artifact_scylla_version) < "2023.1.3":
-            logging.debug("Skip configuring AWS KMS, version does not support KMS")
-            return
+            # Workaround: if scylla_encryption_options is explicitly set with kms_host 'auto',
+            # proceed anyway — the AMI metadata may be broken (e.g. 'null' version in AMI name)
+            # but the user explicitly requested KMS encryption.
+            scylla_enc = self.params.get("scylla_encryption_options") or ""
+            if "auto" not in scylla_enc:
+                logging.debug("Skip configuring AWS KMS, not running enterprise version")
+                return
+            logging.debug(
+                "Proceeding with AWS KMS setup despite is_enterprise=False "
+                "(scylla_encryption_options with kms_host 'auto' explicitly configured)"
+            )
+        try:
+            if ComparableScyllaVersion(self.params.artifact_scylla_version) < "2023.1.3":
+                logging.debug("Skip configuring AWS KMS, version does not support KMS")
+                return
+        except (ValueError, TypeError):
+            logging.debug(
+                "Could not parse artifact_scylla_version '%s' for KMS version check, proceeding with KMS setup",
+                self.params.artifact_scylla_version,
+            )
         if self.params.get("enterprise_disable_kms"):
             logging.debug("Skip configuring AWS KMS, `enterprise_disable_kms` is set in the config")
             return
