@@ -61,6 +61,65 @@ class GeminiTest(ClusterTester):
 
         self.verify_results()
 
+    def test_load_random_with_nemesis_and_background_stress(self):
+        """
+        Data Resurrection - High CPU load scenario.
+
+        Run Gemini mixed workload (read/write/delete) alongside cassandra-stress
+        background load to achieve ~50% sustained CPU utilization, with nemesis.
+        Verifies ScyllaDB does not resurrect deleted data under CPU starvation
+        that can delay compaction and tombstone GC.
+
+        Ref: https://scylladb.atlassian.net/browse/SCYLLADB-1294
+        """
+        gemini_cmd = self.params.get("gemini_cmd")
+        stress_cmd = self.params.get("stress_cmd")
+
+        self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(), tester_obj=self)
+
+        # Run prepare_write_cmd to create keyspace1 and seed data for c-s
+        prepare_write_cmd = self.params.get("prepare_write_cmd")
+        if prepare_write_cmd:
+            if isinstance(prepare_write_cmd, str):
+                prepare_write_cmd = [prepare_write_cmd]
+            self.log.info("Running prepare write command to seed c-s keyspace")
+            prepare_queue = []
+            for cmd in prepare_write_cmd:
+                prepare_queue.append(self.run_stress_thread(stress_cmd=cmd))
+            for stress in prepare_queue:
+                self.verify_stress_thread(stress)
+
+        # Start cassandra-stress background load to drive CPU utilization
+        stress_queue = []
+        if stress_cmd:
+            if isinstance(stress_cmd, str):
+                stress_cmd = [stress_cmd]
+            for cmd in stress_cmd:
+                self.log.debug("Starting background c-s load: %s", cmd)
+                stress_queue.append(self.run_stress_thread(stress_cmd=cmd))
+
+        # Start gemini mixed workload (read/write/delete)
+        self.log.debug("Start gemini benchmark")
+        gemini_thread = self.run_gemini(cmd=gemini_cmd)
+        self.gemini_results["cmd"] = gemini_thread.gemini_commands
+
+        # Allow gemini to populate initial data before starting nemesis
+        self.log.info("Sleeping %s sec before starting nemesis", NEMESIS_START_DELAY_SEC)
+        time.sleep(NEMESIS_START_DELAY_SEC)
+
+        self.db_cluster.start_nemesis()
+
+        # Wait for gemini to complete and verify results
+        self.gemini_results.update(self.verify_gemini_results(queue=gemini_thread))
+
+        # Verify cassandra-stress results
+        for stress in stress_queue:
+            self.verify_stress_thread(stress)
+
+        self.db_cluster.stop_nemesis(timeout=1600)
+
+        self.verify_results()
+
     def test_load_random_with_nemesis_cdc_reader(self):
         cmd = self.params.get("gemini_cmd")
         cdc_stress = self.params.get("stress_cdclog_reader_cmd")
