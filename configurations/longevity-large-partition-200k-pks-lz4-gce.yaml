@@ -1,0 +1,65 @@
+# GCE-specific tuning for longevity-large-partition-200k-pks-4days (SMALLER INSTANCE)
+#
+# Overrides the base test-case to:
+#   - Retune partition count from 1250 to 1250 (5x250) targeting ~40% disk after MV build
+#   - Add LZ4 compression via post_prepare_cql_cmds
+#   - Reduce stress concurrency to ~25% of original to target ~50% CPU utilization
+#   - Set disk sizing for GCE n2-highmem-8 (~1500 GB NVMe, 4x375 GB)
+#
+# Disk utilization targets (RF=3, 6 nodes, n2-highmem-8, ~1500 GB NVMe per node):
+#   - Prepare (base table + LZ4): ~21% at prepare end
+#   - After MV build completes:   ~42% (~635 GB / 1500 GB per node)
+#   - Stress adds more data on top over the 4-day duration
+#
+# This variant uses a smaller instance than the z3-highmem-8-highlssd (3.2 TB) config,
+# with proportionally scaled dataset. Faster nemesis operations (repair, backup, bootstrap)
+# due to less data per node.
+
+# Writing 1250 partitions, 200k clustering rows each (1 write command per loader).
+prepare_write_cmd: [
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -partition-offset=1    -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=250 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -validate-data",
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -partition-offset=251  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=250 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -validate-data",
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -partition-offset=501  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=250 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -validate-data",
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -partition-offset=751  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=250 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -validate-data",
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=250 -partition-offset=1001 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=250 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -validate-data"
+]
+
+# Not verifying the entire range, only some partitions: 251-300, 501-550, 751-800, 1001-1050, 1201-1250
+prepare_verify_cmd: [
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -partition-offset=251  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=50 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations 1 -validate-data",
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -partition-offset=501  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=50 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations 1 -validate-data",
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -partition-offset=751  -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=50 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations 1 -validate-data",
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -partition-offset=1001 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=50 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations 1 -validate-data",
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=50 -partition-offset=1201 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=50 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations 1 -validate-data"
+]
+
+stress_cmd: [
+    # Write additional 750 partitions with 200k rows each (on top of prepare) - test total partitions is 2000
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=750 -partition-offset=1251 -clustering-row-count=200000 -clustering-row-size=uniform:100..8192 -concurrency=2 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations=0 -duration=6420m -retry-number=30 -retry-interval=500ms,5s",
+    # Rewrite partitions 251-750 to compensate for delete nemesis. Range 751-1250 remains as tombstones.
+    # First 250 partitions (data_validation range) won't be deleted, so no re-write needed.
+    "scylla-bench -workload=sequential -mode=write -replication-factor=3 -partition-count=500 -partition-offset=251 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=2 -connection-count=10 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations=0 -duration=6420m -retry-number=30 -retry-interval=500ms,5s"
+]
+
+stress_read_cmd: [
+    # Read the first 250 partitions with validate-data flag (never deleted during test)
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=250 -partition-offset=1 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -concurrency=12 -connection-count=100 -consistency-level=quorum -rows-per-request=10 -timeout=90s -iterations=0 -duration=6420m -validate-data -retry-number=30 -retry-interval=500ms,5s",
+    # Read partitions 251-1250 (1000 partitions)
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=1000 -partition-offset=251 -clustering-row-count=200000 -clustering-row-size=uniform:512..5120 -rows-per-request=10 -consistency-level=quorum -timeout=90s -concurrency=50 -connection-count=100 -iterations=0 -duration=6420m -retry-number=30 -retry-interval=500ms,5s",
+    # Read partitions 1251-2000 (750 partitions) written during test (different row size)
+    "scylla-bench -workload=sequential -mode=read -replication-factor=3 -partition-count=750 -partition-offset=1251 -clustering-row-count=200000 -clustering-row-size=uniform:100..8192 -rows-per-request=10 -consistency-level=quorum -timeout=90s -concurrency=37 -connection-count=100 -iterations=0 -duration=6420m -retry-number=30 -retry-interval=500ms,5s"
+]
+
+# Create MV, set tombstone_gc, and apply LZ4 compression to base table (MV inherits)
+post_prepare_cql_cmds: [
+    "CREATE MATERIALIZED VIEW scylla_bench.view_test AS SELECT * FROM scylla_bench.test where ck IS NOT NULL AND v is not null PRIMARY KEY (v, pk, ck) with comment = 'TEST VIEW'",
+    "ALTER TABLE scylla_bench.test with tombstone_gc = {'mode': 'repair', 'propagation_delay_in_seconds':'300'};",
+    "ALTER TABLE scylla_bench.test WITH compression = {'sstable_compression': 'LZ4Compressor'};"
+]
+
+sizing_db:
+  vcpu: 8
+  memory: '>=64'
+  local_disk_gb: '1400-2000'
+
+run_fullscan: ['{"mode": "partition", "ks_cf": "scylla_bench.test", "interval": 300, "pk_name":"pk", "rows_count": 200000, "validate_data": true}']
