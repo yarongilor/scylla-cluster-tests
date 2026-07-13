@@ -677,7 +677,6 @@ class ManagerCluster(ScyllaManagerBase):
         self.id = value
 
     # Temporary workaround for https://scylladb.atlassian.net/browse/SCT-363
-<<<<<<< HEAD
     # In Scylla >= 2026.2, system_distributed_everywhere.cdc_generation_descriptions_v2 was removed
     # (https://github.com/scylladb/scylladb/pull/29482), but it may still be present in backup snapshots
     # taken from older versions. Excluding it prevents SM from failing on restore.
@@ -714,12 +713,6 @@ class ManagerCluster(ScyllaManagerBase):
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning("Failed to get Scylla version from sctool status: %s", exc)
         return None
-=======
-    # Exclude CDC table that no longer exists in newer Scylla versions but may still be present in backup snapshots.
-    # Remove this once Scylla Manager excludes CDC tables from backup/restore automatically
-    # (in https://scylladb.atlassian.net/browse/CLOUD-1519).
-    DEFAULT_RESTORE_KEYSPACE_LIST = ["*", "!system_distributed_everywhere.cdc_generation_descriptions_v2"]
->>>>>>> 9712dbba4 (fix(mgmt-restore): exclude CDC table from restore keyspace list by default)
 
     def create_restore_task(
         self,
@@ -756,15 +749,6 @@ class ManagerCluster(ScyllaManagerBase):
             cmd += f" --dc-mapping {dc_mapping}"
         if manager_backup_restore_method:
             cmd += f" --method {manager_backup_restore_method.value} "
-<<<<<<< HEAD
-=======
-        if restore_data:
-            # --keyspace flag is only applicable for --restore-tables mode
-            if keyspace_list is None:
-                keyspace_list = self.DEFAULT_RESTORE_KEYSPACE_LIST
-            keyspaces_names = ",".join(keyspace_list)
-            cmd += f" --keyspace '{keyspaces_names}'"
->>>>>>> 9712dbba4 (fix(mgmt-restore): exclude CDC table from restore keyspace list by default)
         if extra_params:
             cmd += f" {extra_params}"
 
