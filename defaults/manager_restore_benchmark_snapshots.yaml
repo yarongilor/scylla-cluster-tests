@@ -4,7 +4,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260610173601UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.4.9-0.20260517.a5275bdbc9fa"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -24,7 +24,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260716183952UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.4.10-0.20260609.99f4121cd8e1"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -44,7 +44,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260527131216UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 6
     prohibit_verification_read: false
@@ -64,7 +64,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260511112244UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 6
     prohibit_verification_read: false
@@ -102,7 +102,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260524151758UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 6
     prohibit_verification_read: false
@@ -122,7 +122,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260524141757UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -142,7 +142,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260709180346UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev-0.20260612.91ada5517d59"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -162,7 +162,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260713171116UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev-0.20260712.ab2bb064ce5c"
     number_of_nodes: 6
     prohibit_verification_read: false
@@ -182,7 +182,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260713180556UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev-0.20260712.ab2bb064ce5c"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -202,7 +202,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260519223535UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -222,7 +222,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260715220619UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev-0.20260714.9c8de4887430"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -242,7 +242,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260511122336UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -262,7 +262,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260430122201UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2026.3.0~dev"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -282,7 +282,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251229140211UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.2.5"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -302,7 +302,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251223144206UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2024.2.13"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -322,7 +322,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251221164123UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.1.10"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -342,7 +342,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251221160803UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.1.10"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -362,7 +362,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251217120202UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.1.10"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -382,7 +382,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20260126110703UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.2.5"
     number_of_nodes: 3
     prohibit_verification_read: false
@@ -422,7 +422,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251218165735UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.1.10"
     number_of_nodes: 9
     prohibit_verification_read: false
@@ -442,7 +442,7 @@ sizes:  # size of backed up dataset in GB
     tag: "sm_20251224130504UTC"
     locations:
       - "s3:manager-backup-tests-permanent-snapshots-us-east-1"
-    exp_timeout: 28800  # 8 hours
+    exp_timeout: 144000  # 40 hours
     scylla_version: "2025.2.5"
     number_of_nodes: 9
     prohibit_verification_read: false
