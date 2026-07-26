@@ -5001,6 +5001,22 @@ class NemesisRunner:
         if new_node.db_up() and self.target_node.raft.is_cluster_topology_consistent():
             self.log.info("Wait 5 minutes with new topology")
             time.sleep(300)
+            # TEMPORARY WORKAROUND for SCT-681: the new node's bootstrap triggers tablet
+            # rebalancing; the subsequent decommission gets serialized behind that in-flight
+            # migration backlog on the topology coordinator, pushing it past the adaptive
+            # hard-timeout even though the decommission's own streaming is near-instant.
+            # Draining migrations first lets the decommission run from a quiesced topology.
+            # NOTE: this only masks the SCT-side symptom. It does NOT fix genuinely slow
+            # tablet migrations (see SCYLLADB-3151 and SCYLLADB-3298); if that is the real
+            # cause, the wait below will itself take long (bounded by its adaptive
+            # TABLET_MIGRATION timeout and non-fatal) and the underlying Scylla issue must
+            # be resolved separately.
+            self.log.info("Wait for tablets to balance before decommission (temporary workaround for SCT-681)")
+            with self.node_allocator.run_nemesis(
+                nemesis_label="BootstrapStreaminError", node_list=self.cluster.get_nodes_up_and_normal()
+            ) as verification_node:
+                wait_tablets_balanced(verification_node)
+
             self.log.info("Decommission added node")
             decommission_timeout = 7200
             monitoring_decommission_timeout = decommission_timeout + 100
