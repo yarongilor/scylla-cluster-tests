@@ -367,6 +367,73 @@ class SstableUtils:
                 raise
         return None  # No deletion_time found
 
+    def sstable_has_tombstones(self, sstable: str) -> bool:
+        """
+        Check whether an sstable contains any tombstones (or expiring cells) using the sstable
+        statistics dump.
+
+        This reads only the tiny "Statistics.db" component (a few KBs, independent of the "Data.db"
+        size) and inspects the "estimated_tombstone_drop_time" histogram: an empty histogram reliably
+        means the sstable has no tombstones/deletions.
+
+        The check is intentionally conservative - whenever tombstone presence cannot be proven
+        (missing file, dump/parse failure, missing histogram field) it returns
+        ``True`` so that such an sstable is never treated as safe to delete.
+
+        :param sstable: The sstable "-Data.db" file path.
+        :return: True if the sstable contains (or may contain) tombstones, False only if proven clean.
+        """
+        if self.db_node.remoter.run(f"sudo test -f {sstable}", verbose=False, ignore_status=True).exit_status != 0:
+            self.log.debug("SSTable %s does not exist. Treating as containing tombstones.", sstable)
+            return True
+
+        dump_cmd = get_sstable_statistics_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
+        result = self.db_node.remoter.run(
+            f'sudo bash -c "{dump_cmd} {sstable}"', verbose=False, ignore_status=True
+        )
+        if not result.ok or not result.stdout:
+            self.log.warning(
+                "Failed to dump statistics for %s (%s). Treating as containing tombstones.", sstable, result.stderr
+            )
+            return True
+
+        try:
+            statistics = json.loads(result.stdout, strict=False)
+        except json.JSONDecodeError as exc:
+            self.log.warning(
+                "Failed to parse statistics dump for %s: %s. Treating as containing tombstones.", sstable, exc
+            )
+            return True
+
+        histogram = _find_json_value(statistics, "estimated_tombstone_drop_time")
+        if histogram is None:
+            self.log.warning(
+                "No 'estimated_tombstone_drop_time' found in statistics dump for %s. "
+                "Treating as containing tombstones.",
+                sstable,
+            )
+            return True
+
+        has_tombstones = not _tombstone_histogram_is_empty(histogram)
+        self.log.debug("SSTable %s contains tombstones: %s", sstable, has_tombstones)
+        return has_tombstones
+
+    def filter_out_sstables_with_tombstones(self, sstables: list) -> list:
+        """
+        Return only the sstables that are proven to contain no tombstones.
+
+        Deleting an sstable that holds a tombstone can resurrect the data it shadows, so such sstables
+        must be excluded from any destroy/corruption selection that is followed by a repair.
+
+        :param sstables: List of sstable "-Data.db" file paths.
+        :return: The subset of ``sstables`` with no tombstones.
+        """
+        filtered = [sstable for sstable in sstables if not self.sstable_has_tombstones(sstable)]
+        self.log.debug(
+            "Filtered sstables without tombstones for %s: %s of %s", self.ks_cf, len(filtered), len(sstables)
+        )
+        return filtered
+
     def corrupt_sstables(self, sstables_to_corrupt_count: int = 1):
         """
         Corrupts sstables by replace it's content with random data.
@@ -439,3 +506,64 @@ def get_sstable_data_dump_command(node, keyspace: str, table: str) -> str:
     if not is_new_sstable_dump_supported(node):
         return "sstabledump"
     return _generate_sstable_dump_command(node, "dump-data", keyspace, table)
+
+
+def get_sstable_statistics_dump_command(node, keyspace: str, table: str) -> str:
+    """
+    Constructs the command for dumping sstable statistics using the "scylla sstable" tool.
+
+    The statistics dump reads only the small "Statistics.db" component (a few KBs, independent of
+    the "Data.db" size), which holds the tombstone/deletion metadata (e.g. the
+    "estimated_tombstone_drop_time" histogram). It is only available with the new "scylla sstable"
+    tool - callers must guard with `is_new_sstable_dump_supported(node)`.
+
+    :param node: A DB node object to provide Scylla version.
+    :param keyspace: Keyspace name.
+    :param table: Table name.
+    :return: Command string for statistics dump.
+    """
+    return _generate_sstable_dump_command(node, "dump-statistics", keyspace, table)
+
+
+def _find_json_value(obj, key: str):
+    """
+    Recursively search a decoded-JSON structure for the first value of ``key``.
+
+    Returns the value (which may itself be an empty container) or ``None`` if the key is not found.
+    Used to locate the tombstone histogram regardless of the exact statistics-dump nesting.
+    """
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for value in obj.values():
+            found = _find_json_value(value, key)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for value in obj:
+            found = _find_json_value(value, key)
+            if found is not None:
+                return found
+    return None
+
+
+def _tombstone_histogram_is_empty(histogram) -> bool:
+    """
+    Determine whether an "estimated_tombstone_drop_time" histogram carries any entries.
+
+    The histogram is only populated for actual tombstones/deletions (and expiring cells), so an empty
+    histogram reliably means the sstable has no tombstones. The exact serialization can be a plain
+    ``{deletion_time: count}`` map or a wrapped streaming-histogram such as ``{"bin": {...}}`` /
+    ``{"elements": [...]}`` - all are handled here.
+    """
+    if not histogram:
+        return True
+    if isinstance(histogram, dict):
+        for wrapper_key in ("bin", "elements"):
+            if wrapper_key in histogram:
+                return _tombstone_histogram_is_empty(histogram[wrapper_key])
+        return all(_tombstone_histogram_is_empty(value) for value in histogram.values())
+    if isinstance(histogram, list):
+        return len(histogram) == 0
+    # scalar leaf (a count/timestamp): a zero count means "no entry"
+    return not histogram
