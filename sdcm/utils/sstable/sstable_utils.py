@@ -247,6 +247,9 @@ class SstableUtils:
         return True  # Successfully dumped SSTable
 
     def _are_tombstones_in_sstabledump(self, sstable: str, remote_json_path: str = REMOTE_SSTABLEDUMP_PATH) -> bool:
+        # Operates on an already-dumped "Data.db" JSON (see `_run_sstabledump`); it exists for the
+        # data-dump callers that also need the tombstone contents. For a cheap standalone yes/no check
+        # (no full data dump), prefer `sstable_has_tombstones`, which reads only "Statistics.db".
         # Check if tombstones exist in the dumped sstable JSON
         check_tombstones_cmd = f"sudo jq -e '.. | .tombstone? | select(. != null)' {remote_json_path} > /dev/null"
         result = self.db_node.remoter.run(check_tombstones_cmd, verbose=False, ignore_status=True)
@@ -375,6 +378,19 @@ class SstableUtils:
         This reads only the tiny "Statistics.db" component (a few KBs, independent of the "Data.db"
         size) and inspects the "estimated_tombstone_drop_time" histogram: an empty histogram reliably
         means the sstable has no tombstones/deletions.
+
+        Note on the (intentional) overlap with the other tombstone helpers in this class:
+        ``count_sstable_tombstones``, ``_are_tombstones_in_sstabledump`` and
+        ``get_compacted_tombstone_deletion_info`` also answer tombstone-related questions, but they do
+        so by dumping the full "Data.db" (``dump-data`` / ``sstabledump``) because they need the actual
+        tombstone *count* or per-tombstone *deletion dates/keys*. ``sstable_has_tombstones`` is
+        deliberately kept separate and reads only the statistics metadata, so it is the preferred check
+        when a plain yes/no answer is needed over many/large sstables (e.g. selecting sstables to
+        destroy) - do NOT reroute it onto the expensive data-dump path.
+        Semantic note: the statistics histogram (like ``count_sstable_tombstones``) also accounts for
+        TTL/expiring cells, which is broader than ``_are_tombstones_in_sstabledump`` (tombstone objects
+        only). That broader definition is intended here - TTL cells past gc_grace can also resurrect
+        data when their sstable is deleted.
 
         The check is intentionally conservative - whenever tombstone presence cannot be proven
         (missing file, dump/parse failure, missing histogram field) it returns
