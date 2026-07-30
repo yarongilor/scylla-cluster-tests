@@ -143,11 +143,88 @@ def test_filter_out_sstables_with_tombstones(monkeypatch):
     clean = "/data/clean-Data.db"
     dirty = "/data/dirty-Data.db"
 
-    monkeypatch.setattr(sstable_utils, "sstable_has_tombstones", lambda sstable: sstable == dirty)
+    monkeypatch.setattr(
+        sstable_utils,
+        "_get_sstables_tombstone_status",
+        lambda sstables: {s: (s == dirty) for s in sstables},
+    )
 
     assert sstable_utils.filter_out_sstables_with_tombstones([clean, dirty]) == [clean]
     assert sstable_utils.filter_out_sstables_with_tombstones([dirty]) == []
     assert sstable_utils.filter_out_sstables_with_tombstones([clean]) == [clean]
+    assert sstable_utils.filter_out_sstables_with_tombstones([]) == []
+
+
+def _batch_statistics_json(status_by_sstable):
+    """Build a batched dump-statistics JSON: empty histogram = clean, populated = tombstones."""
+    return json.dumps(
+        {
+            "sstables": {
+                sstable: {"statistics": {"estimated_tombstone_drop_time": ({"1739112345": 5} if dirty else {})}}
+                for sstable, dirty in status_by_sstable.items()
+            }
+        }
+    )
+
+
+def test_batch_status_single_process_for_many_sstables():
+    node = _make_node()
+    clean = ["/data/c1-Data.db", "/data/c2-Data.db"]
+    dirty = ["/data/d1-Data.db"]
+    node.remoter.run.return_value = _result(
+        ok=True,
+        stdout=_batch_statistics_json({clean[0]: False, clean[1]: False, dirty[0]: True}),
+    )
+
+    sstable_utils = _make_sstable_utils(node)
+    status = sstable_utils._get_sstables_tombstone_status(clean + dirty)
+
+    assert status == {clean[0]: False, clean[1]: False, dirty[0]: True}
+    # A single batched process handled all three sstables.
+    assert node.remoter.run.call_count == 1
+
+
+def test_batch_status_chunks_respect_batch_size(monkeypatch):
+    node = _make_node()
+    sstable_utils = _make_sstable_utils(node)
+    monkeypatch.setattr(type(sstable_utils), "SSTABLE_DUMP_BATCH_SIZE", 2)
+    sstables = [f"/data/{i}-Data.db" for i in range(5)]
+    node.remoter.run.side_effect = lambda cmd, **kw: _result(
+        ok=True, stdout=_batch_statistics_json({s: False for s in sstables if s in cmd})
+    )
+
+    status = sstable_utils._get_sstables_tombstone_status(sstables)
+
+    assert status == {s: False for s in sstables}
+    assert node.remoter.run.call_count == 3  # ceil(5 / 2)
+
+
+def test_batch_status_missing_entry_is_conservative():
+    node = _make_node()
+    present = "/data/present-Data.db"
+    missing = "/data/missing-Data.db"
+    node.remoter.run.return_value = _result(ok=True, stdout=_batch_statistics_json({present: False}))
+
+    status = _make_sstable_utils(node)._get_sstables_tombstone_status([present, missing])
+
+    assert status[present] is False
+    assert status[missing] is True  # not in dump -> treated as containing tombstones
+
+
+def test_batch_status_falls_back_to_per_sstable_on_dump_failure():
+    node = _make_node()
+    s1 = "/data/s1-Data.db"
+    s2 = "/data/s2-Data.db"
+    node.remoter.run.side_effect = [
+        _result(ok=False, stderr="boom"),  # batch dump fails
+        _result(exit_status=0),  # s1 test -f
+        _result(ok=True, stdout=_statistics_json({})),  # s1 dump (clean)
+        _result(exit_status=0),  # s2 test -f
+        _result(ok=True, stdout=_statistics_json({"1": 1})),  # s2 dump (dirty)
+    ]
+    status = _make_sstable_utils(node)._get_sstables_tombstone_status([s1, s2])
+    assert status == {s1: False, s2: True}
+
 
 
 # ---------------------------------------------------------------------------

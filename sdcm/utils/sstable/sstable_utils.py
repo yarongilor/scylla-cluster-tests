@@ -22,6 +22,11 @@ class SstableUtils:
 
     REMOTE_SSTABLEDUMP_PATH = "/var/tmp/sstabledump.json"
 
+    # How many sstables to pass to a single "scylla sstable dump-statistics --sstables ..." call.
+    # Bounds the command-line length and the size of the returned JSON while still amortizing the
+    # process/SSH startup cost across many sstables.
+    SSTABLE_DUMP_BATCH_SIZE = 100
+
     def __init__(
         self,
         propagation_delay_in_seconds: int = 0,
@@ -441,14 +446,100 @@ class SstableUtils:
         Deleting an sstable that holds a tombstone can resurrect the data it shadows, so such sstables
         must be excluded from any destroy/corruption selection that is followed by a repair.
 
+        The tombstone status is resolved in batches (see ``_get_sstables_tombstone_status``) to avoid
+        starting a separate ``scylla sstable`` process per sstable - large longevity tables can hold
+        thousands of sstables and the per-process/SSH overhead would otherwise make the nemesis
+        prohibitively slow.
+
         :param sstables: List of sstable "-Data.db" file paths.
         :return: The subset of ``sstables`` with no tombstones.
         """
-        filtered = [sstable for sstable in sstables if not self.sstable_has_tombstones(sstable)]
+        if not sstables:
+            return []
+        status_by_sstable = self._get_sstables_tombstone_status(sstables)
+        filtered = [sstable for sstable in sstables if status_by_sstable.get(sstable) is False]
         self.log.debug(
             "Filtered sstables without tombstones for %s: %s of %s", self.ks_cf, len(filtered), len(sstables)
         )
         return filtered
+
+    def _get_sstables_tombstone_status(self, sstables: list) -> dict:
+        """
+        Resolve, for each sstable, whether it contains tombstones - batching the statistics dump.
+
+        ``scylla sstable dump-statistics --sstables`` accepts multiple paths and returns a per-sstable
+        entry, so the whole table is processed with a handful of processes instead of one per sstable.
+        Sstables are chunked (``SSTABLE_DUMP_BATCH_SIZE``) to bound the command-line length and the
+        size of the dumped JSON. On any batch failure the chunk falls back to per-sstable checks so a
+        single problematic file never taints the rest.
+
+        :param sstables: List of sstable "-Data.db" file paths.
+        :return: Mapping of sstable path -> bool (True if it contains, or may contain, tombstones).
+        """
+        status = {}
+        for start in range(0, len(sstables), self.SSTABLE_DUMP_BATCH_SIZE):
+            chunk = sstables[start:start + self.SSTABLE_DUMP_BATCH_SIZE]
+            status.update(self._dump_statistics_chunk(chunk))
+        return status
+
+    def _dump_statistics_chunk(self, sstables: list) -> dict:
+        """Run a single batched ``dump-statistics`` for ``sstables`` and parse per-sstable status."""
+        dump_cmd = get_sstable_statistics_dump_command(node=self.db_node, keyspace=self.keyspace, table=self.table)
+        result = self.db_node.remoter.run(
+            f"sudo bash -c \"{dump_cmd} {' '.join(sstables)}\"", verbose=False, ignore_status=True
+        )
+        if not result.ok or not result.stdout:
+            self.log.warning(
+                "Failed to batch-dump statistics for %s sstables of %s (%s). "
+                "Falling back to per-sstable checks.",
+                len(sstables),
+                self.ks_cf,
+                result.stderr,
+            )
+            return {sstable: self.sstable_has_tombstones(sstable) for sstable in sstables}
+
+        try:
+            statistics = json.loads(result.stdout, strict=False)
+        except json.JSONDecodeError as exc:
+            self.log.warning(
+                "Failed to parse batch statistics dump for %s: %s. Falling back to per-sstable checks.",
+                self.ks_cf,
+                exc,
+            )
+            return {sstable: self.sstable_has_tombstones(sstable) for sstable in sstables}
+
+        dumped = statistics.get("sstables") if isinstance(statistics, dict) else None
+        if not isinstance(dumped, dict) or not dumped:
+            self.log.warning(
+                "Unexpected batch statistics dump structure for %s. Falling back to per-sstable checks.", self.ks_cf
+            )
+            return {sstable: self.sstable_has_tombstones(sstable) for sstable in sstables}
+
+        # Index dumped entries by basename too, in case the tool normalizes the sstable paths.
+        dumped_by_basename = {Path(key).name: value for key, value in dumped.items()}
+        status = {}
+        for sstable in sstables:
+            entry = dumped.get(sstable)
+            if entry is None:
+                entry = dumped_by_basename.get(Path(sstable).name)
+            if entry is None:
+                self.log.warning(
+                    "No statistics entry for %s in batch dump. Treating as containing tombstones.", sstable
+                )
+                status[sstable] = True
+                continue
+            histogram = _find_json_value(entry, "estimated_tombstone_drop_time")
+            if histogram is None:
+                self.log.warning(
+                    "No 'estimated_tombstone_drop_time' for %s in batch dump. Treating as containing tombstones.",
+                    sstable,
+                )
+                status[sstable] = True
+                continue
+            has_tombstones = not _tombstone_histogram_is_empty(histogram)
+            self.log.debug("SSTable %s contains tombstones: %s", sstable, has_tombstones)
+            status[sstable] = has_tombstones
+        return status
 
     def corrupt_sstables(self, sstables_to_corrupt_count: int = 1):
         """

@@ -1046,7 +1046,8 @@ class NemesisRunner:
                     )
                 ):
                     raise UnsupportedNemesis(
-                        "All sstables contain tombstones - none is safe to destroy. The nemesis can't be run"
+                        "No sstables could be proven tombstone-free - none is safe to destroy. "
+                        "The nemesis can't be run"
                     )
                 sstables_amount_to_destroy = min(sstables_amount_to_destroy, len(all_files_to_destroy))
 
