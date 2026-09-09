@@ -11,6 +11,7 @@
 #
 # Copyright (c) 2022 ScyllaDB
 
+import json
 from typing import Optional
 
 from fabric.runners import Result
@@ -53,3 +54,10 @@ class StorageServiceClient(RemoteCurlClient):
     def get_local_hostid(self):
         path = "hostid/local"
         return self.run_remoter_curl(method="GET", path=path, params=None, retry=3)
+
+    def active_repairs(self) -> list[int]:
+        result = self.run_remoter_curl(method="GET", path="active_repair/", params=None)
+        return json.loads(result.stdout.strip() or "[]")
+
+    def force_terminate_repair(self) -> Result:
+        return self.run_remoter_curl(method="POST", path="force_terminate_repair", params=None)

@@ -146,7 +146,7 @@ from sdcm.nemesis.utils.indexes import (
     is_cf_a_view,
 )
 from sdcm.nemesis.utils.node_allocator import NemesisNodeAllocator
-from sdcm.utils.node import build_node_api_command
+from sdcm.rest.storage_service_client import StorageServiceClient
 from sdcm.utils.sstable.load_utils import SstableLoadUtils
 from sdcm.utils.sstable.sstable_utils import SstableUtils
 from sdcm.utils.tablets.common import wait_tablets_balanced
@@ -3227,22 +3227,45 @@ class NemesisRunner:
 
     def disrupt_abort_repair(self):
         """
-        Start repair target_node in background, then try to abort the repair streaming.
+        Start repair of a single user keyspace on target_node in background, then abort the repair streaming.
+
+        force_terminate_repair aborts only the currently running vnode-based repair job, so the repair
+        is scoped to one keyspace - aborting its single job stops the whole nodetool repair command.
         """
-        self.log.debug("Start repair target_node in background")
+        ks_cfs = self.cluster.get_non_system_ks_cf_list(db_node=self.target_node, filter_func=self.cluster.is_ks_rf_one)
+        keyspaces = {ks_cf.split(".")[0] for ks_cf in ks_cfs}
+        if is_tablets_feature_enabled(self.target_node):
+            keyspaces -= {
+                ks_cf.split(".")[0]
+                for ks_cf in self.cluster.get_non_system_ks_cf_with_tablets_list(db_node=self.target_node)
+            }
+        if not keyspaces:
+            raise UnsupportedNemesis(
+                "No vnode-based non-empty keyspace with RF > 1 found - "
+                "force_terminate_repair only aborts vnode repair jobs"
+            )
+        keyspace = random.choice(sorted(keyspaces))
+        storage_service_client = StorageServiceClient(node=self.target_node)
+
+        self.log.debug("Start repair of keyspace '%s' on target_node in background", keyspace)
 
         @raise_event_on_failure
         def silenced_nodetool_repair_to_fail():
             try:
-                self.actions_log.info(f"Starting nodetool repair on {self.target_node.name} expected to be aborted")
+                self.actions_log.info(
+                    f"Starting nodetool repair of keyspace '{keyspace}' on {self.target_node.name} "
+                    "expected to be aborted"
+                )
                 self.target_node.run_nodetool(
                     "repair",
+                    args=keyspace,
                     verbose=True,
                     warning_event_on_exception=(UnexpectedExit, Libssh2UnexpectedExit),
                     error_message="Repair failed as expected. ",
                     publish_event=False,
                     long_running=True,
                     retry=0,
+                    timeout=600,
                 )
             except UnexpectedExit, Libssh2UnexpectedExit:
                 self.actions_log.info("Repair failed as expected")
@@ -3251,19 +3274,17 @@ class NemesisRunner:
                 raise
 
         def repair_streaming_exists():
-            path = "/storage_service/active_repair/"
-            active_repair_cmd = build_node_api_command(path_url=path)
-            result = self.target_node.remoter.run(active_repair_cmd)
-            active_repairs = re.match(r".*\[(\d)+\].*", result.stdout)
-            if active_repairs:
-                self.log.debug("Found '%s' active repairs", active_repairs.group(1))
-                return True
-            return False
+            return bool(storage_service_client.active_repairs())
 
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="NodeToolRepairThread") as thread_pool:
+        thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="NodeToolRepairThread")
+        try:
             thread = thread_pool.submit(silenced_nodetool_repair_to_fail)
             wait.wait_for(
-                func=repair_streaming_exists, timeout=300, step=1, throw_exc=True, text="Wait for repair starts"
+                func=repair_streaming_exists,
+                timeout=300,
+                step=1,
+                throw_exc=True,
+                text=f"Wait for repair of keyspace '{keyspace}' to start",
             )
 
             self.log.debug("Abort repair streaming by storage_service/force_terminate_repair API")
@@ -3290,19 +3311,27 @@ class NemesisRunner:
                         [r"repair - Started to abort repair jobs=\{\}, nr_jobs=0"]
                     )
 
-                    self.target_node.remoter.run(
-                        "curl -X POST --header 'Content-Type: application/json' --header 'Accept: application/json'"
-                        " http://127.0.0.1:10000/storage_service/force_terminate_repair"
-                    )
+                    storage_service_client.force_terminate_repair()
 
+                wait.wait_for(
+                    func=lambda: not storage_service_client.active_repairs(),
+                    timeout=60,
+                    step=2,
+                    throw_exc=False,
+                    text="Wait for the aborted repair jobs to drain",
+                )
                 try:
                     thread.result(timeout=120)
                 except TimeoutError:
                     if list(zero_jobs_log):
                         raise UnsupportedNemesis("No repair jobs running when terminate was called")
-                    else:
-                        raise
+                    # the repair kept running past the abort - kill the detached nodetool client so
+                    # neither the background thread nor the remote process outlives the nemesis
+                    self.target_node.remoter.run("pkill -9 -f 'nodetool.*repair|NodeTool.*repair'", ignore_status=True)
+                    raise
                 time.sleep(10)  # to make sure all failed logs/events, are ignored correctly
+        finally:
+            thread_pool.shutdown(wait=False, cancel_futures=True)
 
         self.log.debug("Execute a complete repair for target node")
         self.run_repair()
