@@ -244,6 +244,7 @@ uv run python -m pytest unit_tests/unit/test_config.py --cov=sdcm.sct_config --c
 |------|---------|
 | [common-pitfalls.md](references/common-pitfalls.md) | Pitfalls P-1 through P-16 with before/after fixes |
 | [anti-patterns.md](references/anti-patterns.md) | Anti-patterns AP-1 through AP-6 with before/after fixes |
+| [unit-test-comments.md](references/unit-test-comments.md) | Conventions C-1 through C-28 distilled from maintainer PR review comments: what not to test, parametrization, fixtures, naming, mocks, assertions |
 
 | Workflow | Purpose |
 |----------|---------|
