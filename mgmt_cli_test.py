@@ -1351,6 +1351,12 @@ class ManagerRestoreBenchmarkTests(ManagerTestFunctionsMixIn):
         are ever executed in the same session, earlier tablet-aware entries could
         cause false positives.
 
+        SM master (3.13.0-dev, Sep 2026+) always logs "Started/Finished tablet aware
+        restore" banner lines from the 'restore.tablet_restore' stage, even when the
+        stage does nothing and the restore proceeds via the native API. To avoid a
+        false "Tablet" report, the per-table "Use native restore API" line takes
+        precedence: if SM logged it, the restore was native.
+
         Once SM fully supports exposing the actual method via its CLI or task
         properties, this log-parsing workaround can be replaced with a simpler
         getter from the task/progress output.
@@ -1360,14 +1366,23 @@ class ManagerRestoreBenchmarkTests(ManagerTestFunctionsMixIn):
         """
         monitor_node = self.monitors.nodes[0]
         sm_log_path = os.path.join(monitor_node.logdir, "scylla_manager.log")
+        tablet_pattern = re.compile(r"tablet aware restore")
+        native_pattern = re.compile(r"Use native restore API")
+        tablet_lines, native_lines = [], []
         try:
             with File(sm_log_path) as sm_log:
-                tablet_lines = list(sm_log.read_lines_filtered(re.compile(r"tablet aware restore")))
+                for line in sm_log.read_lines_filtered(tablet_pattern, native_pattern):
+                    (native_lines if native_pattern.search(line) else tablet_lines).append(line)
         except OSError as err:
             self.log.warning("Could not read SM log at %s: %s", sm_log_path, err)
-            tablet_lines = []
 
-        if tablet_lines:
+        if native_lines:
+            self.log.info(
+                "SM log has %d 'Use native restore API' lines (and %d tablet-aware lines); reporting Native",
+                len(native_lines),
+                len(tablet_lines),
+            )
+        elif tablet_lines:
             return "Tablet"
 
         method_value = manager_backup_restore_method.value if manager_backup_restore_method else None
