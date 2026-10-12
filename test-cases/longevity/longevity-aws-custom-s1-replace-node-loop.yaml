@@ -86,6 +86,9 @@ sizing_loader:
 
 user_prefix: 'long-custom-s1-replace-loop'
 use_preinstalled_scylla: true
+# Every replace creates a fresh i8ge.2xlarge; spot capacity for it is not reliable (a replace failed
+# with 'capacity-not-available'), and a day-long loop cannot afford a missing replacement.
+instance_provision: 'on_demand'
 
 # --- Scylla configuration mirroring the customer's scylla.yaml -------------------------------
 # Encryption at rest with KMS stays on (the default for enterprise runs on AWS); the customer has

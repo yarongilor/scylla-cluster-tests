@@ -4,12 +4,14 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from sdcm.exceptions import UnsupportedNemesis
 from sdcm.nemesis.monkey.replace_node import DEFAULT_DEAD_NODE_DELAY, GracefulStopTerminateAndReplaceMonkey
 
 MODULE = "sdcm.nemesis.monkey.replace_node"
 OLD_IP = "10.0.0.1"
 NEW_IP = "10.0.0.9"
 HOST_ID = "aaaa-bbbb-cccc"
+ALL_UP = {"dc1": {OLD_IP: {"state": "UN"}, "10.0.0.2": {"state": "UN"}}}
 
 pytestmark = pytest.mark.usefixtures("events")
 
@@ -26,8 +28,8 @@ def new_node():
 def runner(base_runner, new_node):
     """``base_runner`` whose target node is dead after termination and gone after the replace.
 
-    ``get_nodetool_status`` first reports the old IP as DN, then no longer lists it; ``sleep``
-    is patched out so the dead-node delay does not run for real.
+    ``get_nodetool_status`` reports every node UN before the disruption, then the old IP as DN,
+    then no longer lists it; ``sleep`` is patched out so the dead-node delay does not run for real.
     """
     base_runner.target_node.ip_address = OLD_IP
     base_runner.target_node.host_id = HOST_ID
@@ -35,7 +37,7 @@ def runner(base_runner, new_node):
     base_runner.target_node._is_zero_token_node = False
     base_runner.target_node.is_seed = False
     base_runner.cluster.params = {"nemesis_dead_node_delay": 7}
-    base_runner.cluster.get_nodetool_status.side_effect = [{"dc1": {OLD_IP: {"state": "DN"}}}, {"dc1": {}}]
+    base_runner.cluster.get_nodetool_status.side_effect = [ALL_UP, {"dc1": {OLD_IP: {"state": "DN"}}}, {"dc1": {}}]
     base_runner.terminate_node = MagicMock()
     base_runner.replace_node = MagicMock(return_value=new_node)
     with patch(f"{MODULE}.time.sleep") as sleep:
@@ -84,12 +86,24 @@ def test_disrupt_uses_default_delay_when_option_unset(runner):
 
 def test_disrupt_fails_when_terminated_node_is_not_down(runner):
     """A node still reported UN after termination means nothing was terminated, so the replace must not start."""
-    runner.cluster.get_nodetool_status.side_effect = [{"dc1": {OLD_IP: {"state": "UN"}}}]
+    runner.cluster.get_nodetool_status.side_effect = [ALL_UP, {"dc1": {OLD_IP: {"state": "UN"}}}]
 
     with pytest.raises(AssertionError, match="should be DN"):
         GracefulStopTerminateAndReplaceMonkey(runner).disrupt()
 
     runner.replace_node.assert_not_called()
+
+
+def test_disrupt_skips_when_a_node_is_already_down(runner):
+    """With a node already DN (a previous replace that never created its node) the nemesis is skipped
+    before stopping anything, so the cluster does not lose a second node and its quorum."""
+    runner.cluster.get_nodetool_status.side_effect = [{"dc1": {OLD_IP: {"state": "UN"}, "10.0.0.2": {"state": "DN"}}}]
+
+    with pytest.raises(UnsupportedNemesis, match="10.0.0.2"):
+        GracefulStopTerminateAndReplaceMonkey(runner).disrupt()
+
+    runner.target_node.stop_scylla_server.assert_not_called()
+    runner.terminate_node.assert_not_called()
 
 
 def test_disrupt_restores_seed_flag_on_replacement(runner, new_node):
@@ -106,10 +120,11 @@ def test_disrupt_accepts_new_node_reusing_old_ip(runner, new_node):
     """When the replacement gets the old IP back, that IP must show up as UN instead of disappearing."""
     new_node.ip_address = OLD_IP
     runner.cluster.get_nodetool_status.side_effect = [
+        ALL_UP,
         {"dc1": {OLD_IP: {"state": "DN"}}},
         {"dc1": {OLD_IP: {"state": "UN"}}},
     ]
 
     GracefulStopTerminateAndReplaceMonkey(runner).disrupt()
 
-    assert runner.cluster.get_nodetool_status.call_count == 2
+    assert runner.cluster.get_nodetool_status.call_count == 3

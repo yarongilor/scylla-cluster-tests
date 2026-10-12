@@ -8,6 +8,8 @@ longevityPipeline(
     backend: 'aws',
     region: 'us-east-1',
     availability_zone: 'b',
+    // Spot capacity for i8ge.2xlarge ran out mid-run and the replace could not create its node.
+    provision_type: 'on_demand',
     test_name: 'longevity_test.LongevityTest.test_custom_time',
     test_config: '''["test-cases/longevity/longevity-aws-custom-s1-replace-node-loop.yaml", "configurations/auth_cassandra.yaml"]''',
 )

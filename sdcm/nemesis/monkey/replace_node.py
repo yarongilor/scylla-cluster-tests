@@ -15,6 +15,7 @@
 
 import time
 
+from sdcm.exceptions import UnsupportedNemesis
 from sdcm.nemesis import NemesisBaseClass, target_all_nodes
 from sdcm.sct_events.group_common_events import suppress_expected_unavailability_errors
 from sdcm.sct_events.system import InfoEvent
@@ -50,9 +51,19 @@ class GracefulStopTerminateAndReplaceMonkey(NemesisBaseClass):
         states = [val["state"] for dc in status.values() for ip, val in dc.items() if ip == node_ip]
         return states[0] if states else None
 
+    def _nodes_not_up(self) -> list[str]:
+        status = self.runner.cluster.get_nodetool_status()
+        return [ip for dc in status.values() for ip, val in dc.items() if val["state"] != "UN"]
+
     def disrupt(self):
         runner = self.runner
         target_node = runner.target_node
+        # A replace that failed (no capacity, for example) leaves the cluster one node short; taking
+        # another node down on top of that loses quorum and kills the load instead of testing the replace.
+        if nodes_not_up := self._nodes_not_up():
+            raise UnsupportedNemesis(
+                f"Cluster already has nodes that are not UN, not taking another one down: {nodes_not_up}"
+            )
         old_node_ip = target_node.ip_address
         host_id = target_node.host_id
         is_old_node_seed = target_node.is_seed
