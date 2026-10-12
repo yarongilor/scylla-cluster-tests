@@ -1,0 +1,193 @@
+# Reproducer for https://scylladb.atlassian.net/browse/CUSTOMER-750
+#
+# A 3-node tablets cluster (one node per rack, all racks in one AZ, like the Cloud "virtual racks")
+# holding billions of tiny rows in three IncrementalCompactionStrategy tables. A repair-based node
+# replacement (tablet 'rebuild_v2') took ~39 hours for ~3 TB per node: each tablet is fully repaired
+# between the two surviving replicas at ~20-35 MiB/s (small-row overhead dominates), with only one
+# rebuild per shard in flight.
+#
+# The test:
+#   1. creates the customer schema and populates it with the customer's row shape via latte
+#      ('scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn'),
+#   2. runs a light mixed load (point reads, upserts, list<uuid> appends) for the whole run,
+#   3. loops 'GracefulStopTerminateAndReplaceMonkey': stop Scylla cleanly, terminate the instance,
+#      leave the cluster one node short for 2h40m (the customer's gap), then replace by host id.
+#
+# What to compare with the customer (survivor node logs, 'repair - repair[...]: stats:' lines):
+#   row_from_disk_bytes_per_sec per tablet (customer: ~22-34 MiB/s), per-tablet duration
+#   (customer: 17-57 min median by table) and the overall replace time.
+#
+# Scale: 'device_count' drives everything. The default (540M devices, ~2.7G rows, ~330 GB per
+# node) is ~1/10 of the customer cluster and keeps one replace in the ~4h range so several cycles
+# fit in a day. For a full-scale run set device_count=5400000000 and the three per-loader slices
+# to 1800000000 (prepare then needs ~2 days and a replace fits the customer's ~39h only when
+# 'adaptive_timeout_multipliers' and MAX_TIME_WAIT_FOR_NEW_NODE_UP allow it).
+
+test_metadata:
+  description: >-
+    Customer-profile reproducer for CUSTOMER-750: a 3-node, 3-rack tablets cluster on i8ge.2xlarge
+    is populated by latte with the customer's attribution schema (three ICS tables, Zstd 4 KiB
+    chunks, tiny rows, growing list<uuid> cells), then GracefulStopTerminateAndReplaceMonkey runs in a
+    loop under a light mixed load to measure how long repair-based tablet rebuilds take per replaced node.
+  test_type: longevity
+  tier: ondemand
+  duration_class: long
+  supported_backends:
+    - aws
+  stress_tools:
+    - latte
+  workload: mixed
+  features:
+    - tablets
+    - rack-aware
+    - authorization
+    - tls-ssl
+    - kms
+    - large-collections
+    - sla
+    - tombstone-gc
+  team_ownership: core-test-infra
+
+test_duration: 1980  # 6h prepare + 24h stress + spare
+prepare_stress_duration: 360
+stress_duration: 1440
+
+n_db_nodes: 3
+n_loaders: 3
+# Three racks inside a single AZ, one node per rack - the Cloud "virtual rack" layout of the customer.
+simulated_racks: 3
+rack_aware_loader: false
+
+sizing_db:  # i8ge.2xlarge: 8 vCPU (7 shards), 64 GB, 2x2.5 TB local NVMe, arm64 - the customer's instance
+  vcpu: 8
+  memory: '>=64'
+  local_disk_gb: '>=4000'
+sizing_loader:
+  vcpu: 8
+  memory: '>=16'
+
+user_prefix: 'long-custom-s1-replace-loop'
+use_preinstalled_scylla: true
+
+# --- Scylla configuration mirroring the customer's scylla.yaml -------------------------------
+# Encryption at rest with KMS stays on (the default for enterprise runs on AWS); the customer has
+# user_info_encryption/system_info_encryption with a KMS key.
+client_encrypt: true
+server_encrypt: false
+hinted_handoff: 'disabled'
+internode_compression: 'rack'
+append_scylla_yaml:
+  internode_compression_enable_advanced: true
+  rpc_dict_training_when: 'when_leader'
+  tablets_mode_for_new_keyspaces: 'enforced'
+  enable_repair_based_node_ops: true
+  allowed_repair_based_node_ops: 'replace,removenode,rebuild'
+  rf_rack_valid_keyspaces: false
+  enforce_rack_list: true
+  auto_snapshot: false
+  commitlog_segment_size_in_mb: 32
+  column_index_size_in_kb: 1
+  # Siren sets this to 75% of the instance network baseline; customer value for i8ge.2xlarge.
+  maintenance_io_throughput_mb_per_sec: 751
+  # Customer defaults (2 each). Raising both to 4 on all nodes is the mitigation suggested in the
+  # ticket; keep the defaults for the reproduction run and bump them for the comparison run.
+  # tablet_streaming_read_concurrency_per_shard: 2
+  # tablet_streaming_write_concurrency_per_shard: 2
+
+# --- Nemesis: graceful stop, dead period, replace - in a loop ---------------------------------
+# The customer's node sent a gossip shutdown message (clean Scylla stop), the instance went away,
+# and the Cloud "replace dead node" workflow started the replacement by host id ~2h40m later.
+# GracefulStopTerminateAndReplaceMonkey does exactly that; SisyphusMonkey cycles the single
+# selected nemesis forever, with 'nemesis_interval' minutes between cycles.
+nemesis_class_name: 'SisyphusMonkey'
+nemesis_selector: 'GracefulStopTerminateAndReplaceMonkey'
+nemesis_interval: 15
+nemesis_dead_node_delay: 9600  # 2h40m, as on the customer cluster
+nemesis_during_prepare: false
+nemesis_filter_seeds: false
+# The replace waits in 'wait_for_init' for up to MAX_TIME_WAIT_FOR_NEW_NODE_UP (8h). The adaptive
+# tablet-migration timeout is derived from disk size; stretch it so a slow rebuild raises soft/hard
+# timeout events (visible in Argus) instead of being killed before the rebuild finishes.
+adaptive_timeout_multipliers:
+  tablet_migration: 4
+
+# --- Workload --------------------------------------------------------------------------------
+# 'latte schema' runs once before the first command and creates the keyspace, the three tables and
+# the 'driver' service level (200 shares, workload_type 'batch', attached to the latte login role,
+# which is why the auth overlay is part of the pipeline's test_config).
+latte_schema_parameters:
+  replication_factor: 3
+  tablets: true
+
+round_robin: true
+# Populate: every command covers one third of the device range for one table (-P offset + -d).
+# device_event gets EVENTS_PER_DEVICE(3) cycles per device, hence 3x the cycles. With round_robin
+# the 9 commands spread as 3 per loader, so each loader writes all three tables for its slice.
+# Expected rows: device_app 540M, device_attribution 540M, device_event 1.62G (~330 GB per node).
+prepare_write_cmd:
+  - >-
+    latte run --tag latte-prepare-app-1 -f device_app__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-attr-1 -f device_attribution__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-event-1 -f device_event__insert -d 540000000
+    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-app-2 -f device_app__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-attr-2 -f device_attribution__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-event-2 -f device_event__insert -d 540000000
+    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-app-3 -f device_app__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-attr-3 -f device_attribution__insert -d 180000000
+    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-event-3 -f device_event__insert -d 540000000
+    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+
+# Steady state: the customer's user load is light next to the rebuild (Grafana shows ~1-20 user
+# sstable reads/s per node vs a flat streaming read stream). 'mixed' is ~60% point reads, ~35%
+# device touches (device_app update + device_event upsert) and ~5% re-attributions (list<uuid>
+# append + new device_attribution row). One command per loader, ~4k cycles/s each.
+stress_cmd:
+  - >-
+    latte run --tag latte-main-1 -f mixed -d 1440m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-main-2 -f mixed -d 1440m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-main-3 -f mixed -d 1440m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn

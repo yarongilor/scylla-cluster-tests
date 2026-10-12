@@ -1,0 +1,13 @@
+#!groovy
+
+// trick from https://github.com/jenkinsci/workflow-cps-global-lib-plugin/pull/43
+def lib = library identifier: 'sct@snapshot', retriever: legacySCM(scm)
+
+// CUSTOMER-750 reproducer: 3 racks in one AZ, i8ge.2xlarge (available in us-east-1 b/c/d).
+longevityPipeline(
+    backend: 'aws',
+    region: 'us-east-1',
+    availability_zone: 'b',
+    test_name: 'longevity_test.LongevityTest.test_custom_time',
+    test_config: '''["test-cases/longevity/longevity-aws-custom-s1-replace-node-loop.yaml", "configurations/auth_cassandra.yaml"]''',
+)
