@@ -312,7 +312,6 @@ def call(Map pipelineParams) {
 	 }
         options {
             timestamps()
-            disableConcurrentBuilds()
             buildDiscarder(logRotator(numToKeepStr: '20'))
         }
         stages {
