@@ -17,6 +17,9 @@
 #      cleanly, terminate the instance, leave the cluster one node short for a while (the customer's
 #      gap was 2h40m; during it each survivor purges the repaired tombstones at its own compaction
 #      pace), then replace by host id. The rebuild's full repair then has replica differences to stream.
+#      Every other replace first major-compacts one surviving replica, so that replica has purged
+#      all its repaired tombstones while the other still holds them (ticket comment by Botond
+#      Denes, 2026-10-12: does that raise the number of repair slow paths during the rebuild?).
 #
 # The tombstone angle (ticket comment by Botond Denes, 2026-10-12): with tombstone_gc mode 'repair'
 # the replicas drift apart as each purges repaired tombstones on its own schedule, and repair
@@ -135,9 +138,14 @@ nemesis_class_name: 'FixedOrderMonkey'
 nemesis_selector: 'MgmtRepair, GracefulStopTerminateAndReplaceMonkey'
 nemesis_interval: 10
 # Customer gap: 9600 (2h40m). Ten minutes under ~25k writes/s gives the survivors a few flushes
-# and small-tier ICS compactions to purge repaired tombstones at different paces; raise it, or add
-# MajorCompactionMonkey before the replace, if the rebuild repair keeps finding no differences.
+# and small-tier ICS compactions to purge repaired tombstones at different paces; raise it if the
+# rebuild repair keeps finding no differences.
 nemesis_dead_node_delay: 600
+# Every 2nd replace (the 1st, 3rd, ...) runs 'nodetool compact' on one surviving replica before the
+# target is stopped, so the replicas differ by every repaired tombstone that replica has purged. The
+# cycles without it are the control: compare their rebuild repair stats (differing rows, slow-path
+# rounds) with the compacted ones. 0 disables it.
+nemesis_replace_major_compact_every: 2
 # The scenario starts right away: the first repair lands inside the ~20 minute populate.
 nemesis_during_prepare: true
 nemesis_filter_seeds: false

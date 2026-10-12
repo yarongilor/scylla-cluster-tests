@@ -19,6 +19,7 @@ from sdcm.exceptions import UnsupportedNemesis
 from sdcm.nemesis import NemesisBaseClass, target_all_nodes
 from sdcm.sct_events.group_common_events import suppress_expected_unavailability_errors
 from sdcm.sct_events.system import InfoEvent
+from sdcm.utils.adaptive_timeouts import Operations, adaptive_timeout
 from sdcm.utils.decorators import retrying
 
 # Fallback when 'nemesis_dead_node_delay' is unset: the same 5 minutes NodeTerminateAndReplace waits.
@@ -35,6 +36,12 @@ class GracefulStopTerminateAndReplaceMonkey(NemesisBaseClass):
     by host id. The dead period is ``nemesis_dead_node_delay`` seconds (the customer's was
     ~2h40m), during which writes keep flowing to the two surviving replicas.
 
+    With ``nemesis_replace_major_compact_every`` set to N > 0, every N-th run (starting with the
+    first) major-compacts one surviving replica right before the target is stopped. That replica
+    purges its repaired tombstones at once while the other keeps them, so the rebuild's full repair
+    between the two survivors finds replica differences and takes the slow (row-level) path.
+    The counter belongs to this instance; FixedOrderMonkey keeps one instance per class.
+
     ``NodeTerminateAndReplace`` covers the same replace path but kills the instance cold and
     waits a fixed 5 minutes. The replacement itself is identical: a new instance boots with
     ``replace_node_first_boot`` and, with repair-based node operations, rebuilds every tablet
@@ -45,6 +52,24 @@ class GracefulStopTerminateAndReplaceMonkey(NemesisBaseClass):
     kubernetes = False
     topology_changes = True
     zero_node_changes = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.replace_count = 0
+
+    def _major_compact_one_survivor(self):
+        """Run 'nodetool compact' on one replica that stays up, picked in turn across the runs."""
+        runner = self.runner
+        survivors = [node for node in runner.cluster.data_nodes if node is not runner.target_node]
+        if not survivors:
+            return
+        node = survivors[self.replace_count % len(survivors)]
+        InfoEvent(message=f"Major compaction on {node.name} before replacing {runner.target_node.name}").publish()
+        with (
+            adaptive_timeout(Operations.MAJOR_COMPACT, node, timeout=8000),
+            runner.action_log_scope(f"Major compaction on {node.name} node before the replace"),
+        ):
+            node.run_nodetool("compact")
 
     def _node_state(self, node_ip: str) -> str | None:
         status = self.runner.cluster.get_nodetool_status()
@@ -70,6 +95,10 @@ class GracefulStopTerminateAndReplaceMonkey(NemesisBaseClass):
         rack = target_node.rack
         is_zero_node = target_node._is_zero_token_node
         dead_node_delay = int(runner.cluster.params.get("nemesis_dead_node_delay") or DEFAULT_DEAD_NODE_DELAY)
+        compact_every = int(runner.cluster.params.get("nemesis_replace_major_compact_every") or 0)
+        if compact_every > 0 and self.replace_count % compact_every == 0:
+            self._major_compact_one_survivor()
+        self.replace_count += 1
 
         InfoEvent(
             message=f"StartEvent - Gracefully stop {target_node.name}, terminate it and keep it dead "

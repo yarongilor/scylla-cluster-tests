@@ -47,6 +47,7 @@ nemesis_class_name: 'NoOpMonkey'
 nemesis_during_prepare: true
 nemesis_interval: 5
 nemesis_dead_node_delay: 300
+nemesis_replace_major_compact_every: 0
 nemesis_add_node_cnt: 3
 
 nemesis_filter_seeds: false

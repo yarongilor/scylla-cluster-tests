@@ -57,6 +57,11 @@ class NemesisConfigMixin(BaseModel):
                 its replacement. Models the gap between a Cloud node going down and the 'replace dead node'
                 workflow starting (default 300).""",
     )
+    nemesis_replace_major_compact_every: int = SctField(
+        description="""Every N-th GracefulStopTerminateAndReplaceMonkey run (starting with the first) major-compacts
+                one surviving replica before stopping the target, so that replica purges its repaired
+                tombstones ahead of the others and the rebuild repair finds differences. 0 (default) disables it.""",
+    )
     nemesis_during_prepare: Boolean = SctField(
         description="""Run nemesis during prepare stage of the test""",
     )

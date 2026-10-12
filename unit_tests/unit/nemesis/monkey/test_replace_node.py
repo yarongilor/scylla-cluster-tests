@@ -36,7 +36,7 @@ def runner(base_runner, new_node):
     base_runner.target_node.rack = 2
     base_runner.target_node._is_zero_token_node = False
     base_runner.target_node.is_seed = False
-    base_runner.cluster.params = {"nemesis_dead_node_delay": 7}
+    base_runner.cluster.params = {"nemesis_dead_node_delay": 7, "nemesis_replace_major_compact_every": 0}
     base_runner.cluster.get_nodetool_status.side_effect = [ALL_UP, {"dc1": {OLD_IP: {"state": "DN"}}}, {"dc1": {}}]
     base_runner.terminate_node = MagicMock()
     base_runner.replace_node = MagicMock(return_value=new_node)
@@ -46,9 +46,24 @@ def runner(base_runner, new_node):
 
 
 @pytest.fixture()
-def parent(runner):
-    """Attach the stop, terminate and replace mocks to one parent so their order can be asserted."""
+def survivor(runner):
+    """The data node that stays up while the target is replaced."""
+    return runner.cluster.data_nodes[1]
+
+
+@pytest.fixture()
+def compacting_runner(runner):
+    """``runner`` with the survivor major compaction enabled on every other replace."""
+    runner.cluster.params["nemesis_replace_major_compact_every"] = 2
+    with patch(f"{MODULE}.adaptive_timeout"):
+        yield runner
+
+
+@pytest.fixture()
+def parent(runner, survivor):
+    """Attach the compact, stop, terminate and replace mocks to one parent so their order can be asserted."""
     parent = MagicMock()
+    parent.attach_mock(survivor.run_nodetool, "compact_survivor")
     parent.attach_mock(runner.target_node.stop_scylla_server, "stop_scylla_server")
     parent.attach_mock(runner.terminate_node, "terminate_node")
     parent.attach_mock(runner.sleep, "sleep")
@@ -128,3 +143,35 @@ def test_disrupt_accepts_new_node_reusing_old_ip(runner, new_node):
     GracefulStopTerminateAndReplaceMonkey(runner).disrupt()
 
     assert runner.cluster.get_nodetool_status.call_count == 3
+
+
+def test_disrupt_major_compacts_a_survivor_before_the_stop_on_the_first_run(compacting_runner, parent, survivor):
+    """With the option set to 2 the first replace compacts a node other than the target, and does so
+    before the target is stopped, so one replica has purged its repaired tombstones when the rebuild starts."""
+    GracefulStopTerminateAndReplaceMonkey(compacting_runner).disrupt()
+
+    assert parent.mock_calls[:2] == [call.compact_survivor("compact"), call.stop_scylla_server(verify_down=True)]
+    compacting_runner.target_node.run_nodetool.assert_not_called()
+
+
+def test_disrupt_skips_the_survivor_compaction_on_every_other_run(compacting_runner, survivor, new_node):
+    """The second run of the same instance is the control cycle: no survivor is compacted before the replace."""
+    nemesis = GracefulStopTerminateAndReplaceMonkey(compacting_runner)
+    nemesis.disrupt()
+    survivor.run_nodetool.reset_mock()
+    compacting_runner.cluster.get_nodetool_status.side_effect = [
+        ALL_UP,
+        {"dc1": {OLD_IP: {"state": "DN"}}},
+        {"dc1": {}},
+    ]
+
+    nemesis.disrupt()
+
+    survivor.run_nodetool.assert_not_called()
+
+
+def test_disrupt_never_compacts_when_option_is_zero(runner, survivor):
+    """The default of 0 keeps the replace as it was: no node is compacted before the target is stopped."""
+    GracefulStopTerminateAndReplaceMonkey(runner).disrupt()
+
+    survivor.run_nodetool.assert_not_called()
