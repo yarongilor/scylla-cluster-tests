@@ -52,6 +52,11 @@ class NemesisConfigMixin(BaseModel):
     nemesis_double_load_during_grow_shrink_duration: int = SctField(
         description="After growing (and before shrink) in GrowShrinkCluster nemesis it will double the load for provided duration.",
     )
+    nemesis_dead_node_delay: int = SctField(
+        description="""Seconds a terminated node stays dead before GracefulStopTerminateAndReplaceMonkey starts
+                its replacement. Models the gap between a Cloud node going down and the 'replace dead node'
+                workflow starting (default 300).""",
+    )
     nemesis_during_prepare: Boolean = SctField(
         description="""Run nemesis during prepare stage of the test""",
     )
