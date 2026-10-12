@@ -14,9 +14,9 @@
 #      carries row, partition and collection tombstones,
 #   3. loops 'MgmtRepair' then 'GracefulStopTerminateAndReplaceMonkey': a manager repair (the
 #      customer's daily tablet repair) marks the tombstones repaired and GC-able; then stop Scylla
-#      cleanly, terminate the instance, leave the cluster one node short for 2h40m (the customer's
-#      gap, during which each survivor purges the repaired tombstones at its own compaction pace),
-#      then replace by host id. The rebuild's full repair then has replica differences to stream.
+#      cleanly, terminate the instance, leave the cluster one node short for a while (the customer's
+#      gap was 2h40m; during it each survivor purges the repaired tombstones at its own compaction
+#      pace), then replace by host id. The rebuild's full repair then has replica differences to stream.
 #
 # The tombstone angle (ticket comment by Botond Denes, 2026-10-12): with tombstone_gc mode 'repair'
 # the replicas drift apart as each purges repaired tombstones on its own schedule, and repair
@@ -29,22 +29,25 @@
 #   row_from_disk_bytes_per_sec per tablet (customer: ~22-34 MiB/s), per-tablet duration
 #   (customer: 17-57 min median by table) and the overall replace time.
 #
-# Scale: 'device_count' drives everything. The default (540M devices, ~2.7G rows, ~330 GB per
-# node) is ~1/10 of the customer cluster and keeps one replace in the ~4h range so several cycles
-# fit in a day. For a full-scale run set device_count=5400000000 and the three per-loader slices
-# to 1800000000 (prepare then needs ~2 days and a replace fits the customer's ~39h only when
-# 'adaptive_timeout_multipliers' and MAX_TIME_WAIT_FOR_NEW_NODE_UP allow it).
+# Scale: sized for a fast reproduction of the tombstone-drift mechanism, not of the 39-hour rebuild.
+# The prepare writes 21M devices (105M rows, ~12 GB per node) in ~20 minutes at ~2/3 of the cluster's
+# ingest capacity. The stress phase then keeps growing the dataset (three insert streams on fresh
+# device ranges, ~15k rows/s) while the mixed load, the deletion stream and the repair/replace loop
+# run for 3 hours, enough for about three cycles. The schema's tombstone_gc propagation delay is
+# lowered to 5 minutes (customer: 1 hour) so tombstones written during the run become collectible
+# within the same cycle. 'device_count' and the per-loader slices scale everything; the previous
+# revision of this file holds the customer-scale variant (540M devices, 6h prepare, 24h stress).
 
 test_metadata:
   description: >-
     Customer-profile reproducer for CUSTOMER-750: a 3-node, 3-rack tablets cluster on i8ge.2xlarge
     is populated by latte with the customer's attribution schema (three ICS tables, Zstd 4 KiB
     chunks, tiny rows, growing list<uuid> cells), then MgmtRepair and GracefulStopTerminateAndReplaceMonkey
-    alternate under a light mixed load with a deletion stream, to measure how long repair-based tablet
-    rebuilds take per replaced node and how many tombstone-GC replica differences the rebuild repair finds.
+    alternate under a mixed load, a dataset-growing insert stream and a deletion stream, to check how
+    many tombstone-GC replica differences the rebuild repair finds and how long the rebuilds take.
   test_type: longevity
   tier: ondemand
-  duration_class: long
+  duration_class: short
   supported_backends:
     - aws
   stress_tools:
@@ -61,9 +64,9 @@ test_metadata:
     - tombstone-gc
   team_ownership: core-test-infra
 
-test_duration: 1980  # 6h prepare + 24h stress + spare
-prepare_stress_duration: 360
-stress_duration: 1440
+test_duration: 300  # ~20m prepare + 3h stress + spare for the last replace to finish
+prepare_stress_duration: 30
+stress_duration: 180
 
 n_db_nodes: 3
 n_loaders: 3
@@ -119,8 +122,10 @@ append_scylla_yaml:
 # ('use_mgmt: true'); MgmtRepair repairs the whole cluster through it.
 nemesis_class_name: 'FixedOrderMonkey'
 nemesis_selector: 'MgmtRepair, GracefulStopTerminateAndReplaceMonkey'
-nemesis_interval: 15
-nemesis_dead_node_delay: 9600  # 2h40m, as on the customer cluster
+nemesis_interval: 10
+# Customer gap: 9600 (2h40m). 20 minutes is enough for the survivors to compact a ~12 GB dataset
+# under load and purge the repaired tombstones at different paces.
+nemesis_dead_node_delay: 1200
 nemesis_during_prepare: false
 nemesis_filter_seeds: false
 # The replace waits in 'wait_for_init' for up to MAX_TIME_WAIT_FOR_NEW_NODE_UP (8h). The adaptive
@@ -136,85 +141,113 @@ adaptive_timeout_multipliers:
 latte_schema_parameters:
   replication_factor: 3
   tablets: true
+  # Customer: 3600. With a 3-hour run, tombstones must become collectible within one cycle.
+  tombstone_gc_propagation_delay: 300
 
 round_robin: true
-# Populate: every command covers one third of the device range for one table (-P offset + -d).
-# device_event gets EVENTS_PER_DEVICE(3) cycles per device, hence 3x the cycles. With round_robin
-# the 9 commands spread as 3 per loader, so each loader writes all three tables for its slice.
-# Expected rows: device_app 540M, device_attribution 540M, device_event 1.62G (~330 GB per node).
+# Populate (~20 min): 21M devices = 105M rows (~12 GB per node). Every command covers one third of
+# the device range for one table (-P offset + -d); device_event gets EVENTS_PER_DEVICE(3) cycles per
+# device, hence 3x the cycles. With round_robin the commands spread over the three loaders. The rates
+# sum to ~90k inserts/s, about 2/3 of what the three nodes sustain, so the prepare neither runs the
+# cluster at 100% nor leaves a large compaction backlog behind. The last command deletes at the
+# steady-state rate so the first repair already finds collectible tombstones.
 prepare_write_cmd:
   - >-
-    latte run --tag latte-prepare-app-1 -f device_app__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    latte run --tag latte-prepare-app-1 -f device_app__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=0 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-attr-1 -f device_attribution__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    latte run --tag latte-prepare-attr-1 -f device_attribution__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=0 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-event-1 -f device_event__insert -d 540000000
-    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=0 -P device_count=540000000
+    latte run --tag latte-prepare-event-1 -f device_event__insert -d 21000000
+    --threads 8 --connections 3 --concurrency 128 --rate 18000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=0 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-app-2 -f device_app__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    latte run --tag latte-prepare-app-2 -f device_app__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=7000000 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-attr-2 -f device_attribution__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    latte run --tag latte-prepare-attr-2 -f device_attribution__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=7000000 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-event-2 -f device_event__insert -d 540000000
-    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=180000000 -P device_count=540000000
+    latte run --tag latte-prepare-event-2 -f device_event__insert -d 21000000
+    --threads 8 --connections 3 --concurrency 128 --rate 18000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=7000000 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-app-3 -f device_app__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    latte run --tag latte-prepare-app-3 -f device_app__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=14000000 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-attr-3 -f device_attribution__insert -d 180000000
-    --threads 8 --connections 3 --concurrency 128 --rate 15000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    latte run --tag latte-prepare-attr-3 -f device_attribution__insert -d 7000000
+    --threads 8 --connections 3 --concurrency 128 --rate 6000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=14000000 -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-prepare-event-3 -f device_event__insert -d 540000000
-    --threads 8 --connections 3 --concurrency 128 --rate 40000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P offset=360000000 -P device_count=540000000
+    latte run --tag latte-prepare-event-3 -f device_event__insert -d 21000000
+    --threads 8 --connections 3 --concurrency 128 --rate 18000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=14000000 -P device_count=21000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-prepare-deletes -f deletes -d 18m
+    --threads 2 --connections 3 --concurrency 16 --rate 300 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P device_count=21000000
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
 
-# Steady state: the customer's user load is light next to the rebuild (Grafana shows ~1-20 user
-# sstable reads/s per node vs a flat streaming read stream). 'mixed' is ~60% point reads, ~35%
-# device touches (device_app update + device_event upsert) and ~5% re-attributions (list<uuid>
-# append + new device_attribution row). One command per loader, ~4k cycles/s each.
-# The fourth command is the deletion stream ('deletes': 50% single event rows, 30% whole devices =
-# three partition tombstones, 20% list<uuid> rewrites = collection tombstones). At 300 cycles/s it
-# leaves ~40M tombstones a day, ~1.5% of the rows, the same order as the customer's ~1% differing
-# rows per tablet. Deleted devices are re-created by the mixed load, so tombstones shadow live data.
+# Steady state (3h), seven commands over three loaders:
+#   - 'mixed' x3 on the prepared devices: ~60% point reads, ~35% device touches (device_app update +
+#     device_event upsert), ~5% re-attributions (list<uuid> append + new device_attribution row).
+#     ~4k cycles/s each, ~10k writes/s in total, the customer's order of magnitude.
+#   - growth x3: the populate functions on fresh device ranges (offset beyond the prepared set, one
+#     range per loader), ~1k new devices/s each, so the dataset keeps growing for the whole run.
+#   - 'deletes' x1: 50% single event rows, 30% whole devices (three partition tombstones), 20%
+#     list<uuid> rewrites (collection tombstones). At 300 cycles/s that is ~3M tombstones an hour.
+#     Deleted devices are re-created by the mixed load, so tombstones shadow live data.
 stress_cmd:
   - >-
-    latte run --tag latte-main-1 -f mixed -d 1440m
-    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    latte run --tag latte-main-1 -f mixed -d 180m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P device_count=21000000 -P print_applied_func_names=2
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-main-2 -f mixed -d 1440m
-    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    latte run --tag latte-main-2 -f mixed -d 180m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P device_count=21000000 -P print_applied_func_names=2
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-main-3 -f mixed -d 1440m
-    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    latte run --tag latte-main-3 -f mixed -d 180m
+    --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P device_count=21000000 -P print_applied_func_names=2
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
   - >-
-    latte run --tag latte-deletes -f deletes -d 1440m
-    --threads 2 --connections 3 --concurrency 16 --rate 300 --request-timeout 60
-    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    latte run --tag latte-growth-1 -f device_app__insert -f device_event__insert:3
+    -f device_attribution__insert -d 180m
+    --threads 4 --connections 3 --concurrency 64 --rate 5000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=21000000 -P device_count=100000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-growth-2 -f device_app__insert -f device_event__insert:3
+    -f device_attribution__insert -d 180m
+    --threads 4 --connections 3 --concurrency 64 --rate 5000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=121000000 -P device_count=100000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-growth-3 -f device_app__insert -f device_event__insert:3
+    -f device_attribution__insert -d 180m
+    --threads 4 --connections 3 --concurrency 64 --rate 5000 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P offset=221000000 -P device_count=100000000
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-deletes -f deletes -d 180m
+    --threads 2 --connections 3 --concurrency 16 --rate 300 --request-timeout 60 --retry-interval '2s,10s' --sampling 5s
+    -P device_count=21000000 -P print_applied_func_names=2
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
