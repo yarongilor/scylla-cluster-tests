@@ -89,6 +89,12 @@ use_preinstalled_scylla: true
 # Every replace creates a fresh i8ge.2xlarge; spot capacity for it is not reliable (a replace failed
 # with 'capacity-not-available'), and a day-long loop cannot afford a missing replacement.
 instance_provision: 'on_demand'
+# Hold the capacity for the whole run: SCT reserves n_db_nodes + nemesis_add_node_cnt instances of the
+# DB type (plus the loaders) in an AZ that has them, tries the other AZs of the region when the
+# configured one is out, and every replace draws its node from that reservation. The one spare is
+# all a replace needs: the old instance is terminated before the new one is requested.
+use_capacity_reservation: true
+nemesis_add_node_cnt: 1
 
 # --- Scylla configuration mirroring the customer's scylla.yaml -------------------------------
 # Encryption at rest with KMS stays on (the default for enterprise runs on AWS); the customer has
