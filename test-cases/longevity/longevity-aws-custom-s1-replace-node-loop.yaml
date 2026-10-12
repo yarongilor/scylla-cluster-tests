@@ -9,9 +9,21 @@
 # The test:
 #   1. creates the customer schema and populates it with the customer's row shape via latte
 #      ('scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn'),
-#   2. runs a light mixed load (point reads, upserts, list<uuid> appends) for the whole run,
-#   3. loops 'GracefulStopTerminateAndReplaceMonkey': stop Scylla cleanly, terminate the instance,
-#      leave the cluster one node short for 2h40m (the customer's gap), then replace by host id.
+#   2. runs a light mixed load (point reads, upserts, list<uuid> appends) for the whole run, plus a
+#      low-rate deletion stream (event rows, whole devices, list rewrites) so the repaired data
+#      carries row, partition and collection tombstones,
+#   3. loops 'MgmtRepair' then 'GracefulStopTerminateAndReplaceMonkey': a manager repair (the
+#      customer's daily tablet repair) marks the tombstones repaired and GC-able; then stop Scylla
+#      cleanly, terminate the instance, leave the cluster one node short for 2h40m (the customer's
+#      gap, during which each survivor purges the repaired tombstones at its own compaction pace),
+#      then replace by host id. The rebuild's full repair then has replica differences to stream.
+#
+# The tombstone angle (ticket comment by Botond Denes, 2026-10-12): with tombstone_gc mode 'repair'
+# the replicas drift apart as each purges repaired tombstones on its own schedule, and repair
+# re-streams the collectible tombstones to replicas that already dropped them. That would explain
+# the ~1% differing rows per tablet the rebuild's full repair reported one day after an incremental
+# repair had found only a few thousand. 'enable_tombstone_gc_for_streaming_and_repair: true' (default
+# false) is the suggested fix; it stays off here and is the knob for the comparison run.
 #
 # What to compare with the customer (survivor node logs, 'repair - repair[...]: stats:' lines):
 #   row_from_disk_bytes_per_sec per tablet (customer: ~22-34 MiB/s), per-tablet duration
@@ -27,8 +39,9 @@ test_metadata:
   description: >-
     Customer-profile reproducer for CUSTOMER-750: a 3-node, 3-rack tablets cluster on i8ge.2xlarge
     is populated by latte with the customer's attribution schema (three ICS tables, Zstd 4 KiB
-    chunks, tiny rows, growing list<uuid> cells), then GracefulStopTerminateAndReplaceMonkey runs in a
-    loop under a light mixed load to measure how long repair-based tablet rebuilds take per replaced node.
+    chunks, tiny rows, growing list<uuid> cells), then MgmtRepair and GracefulStopTerminateAndReplaceMonkey
+    alternate under a light mixed load with a deletion stream, to measure how long repair-based tablet
+    rebuilds take per replaced node and how many tombstone-GC replica differences the rebuild repair finds.
   test_type: longevity
   tier: ondemand
   duration_class: long
@@ -93,14 +106,19 @@ append_scylla_yaml:
   # ticket; keep the defaults for the reproduction run and bump them for the comparison run.
   # tablet_streaming_read_concurrency_per_shard: 2
   # tablet_streaming_write_concurrency_per_shard: 2
+  # Customer default (false): repaired tombstones are purged per replica and re-streamed by the next
+  # repair. Set to true for the comparison run (the fix suggested in the ticket).
+  # enable_tombstone_gc_for_streaming_and_repair: false
 
-# --- Nemesis: graceful stop, dead period, replace - in a loop ---------------------------------
-# The customer's node sent a gossip shutdown message (clean Scylla stop), the instance went away,
-# and the Cloud "replace dead node" workflow started the replacement by host id ~2h40m later.
-# GracefulStopTerminateAndReplaceMonkey does exactly that; SisyphusMonkey cycles the single
-# selected nemesis forever, with 'nemesis_interval' minutes between cycles.
-nemesis_class_name: 'SisyphusMonkey'
-nemesis_selector: 'GracefulStopTerminateAndReplaceMonkey'
+# --- Nemesis: manager repair, then graceful stop, dead period, replace - in a loop -------------
+# The customer runs a daily manager tablet repair; with tombstone_gc mode 'repair' that is what
+# makes tombstones eligible for GC on each replica. The customer's node then sent a gossip shutdown
+# message (clean Scylla stop), the instance went away, and the Cloud "replace dead node" workflow
+# started the replacement by host id ~2h40m later. FixedOrderMonkey runs the two nemeses in that
+# order and repeats, with 'nemesis_interval' minutes between them. Manager is installed by default
+# ('use_mgmt: true'); MgmtRepair repairs the whole cluster through it.
+nemesis_class_name: 'FixedOrderMonkey'
+nemesis_selector: 'MgmtRepair, GracefulStopTerminateAndReplaceMonkey'
 nemesis_interval: 15
 nemesis_dead_node_delay: 9600  # 2h40m, as on the customer cluster
 nemesis_during_prepare: false
@@ -175,6 +193,10 @@ prepare_write_cmd:
 # sstable reads/s per node vs a flat streaming read stream). 'mixed' is ~60% point reads, ~35%
 # device touches (device_app update + device_event upsert) and ~5% re-attributions (list<uuid>
 # append + new device_attribution row). One command per loader, ~4k cycles/s each.
+# The fourth command is the deletion stream ('deletes': 50% single event rows, 30% whole devices =
+# three partition tombstones, 20% list<uuid> rewrites = collection tombstones). At 300 cycles/s it
+# leaves ~40M tombstones a day, ~1.5% of the rows, the same order as the customer's ~1% differing
+# rows per tablet. Deleted devices are re-created by the mixed load, so tombstones shadow live data.
 stress_cmd:
   - >-
     latte run --tag latte-main-1 -f mixed -d 1440m
@@ -189,5 +211,10 @@ stress_cmd:
   - >-
     latte run --tag latte-main-3 -f mixed -d 1440m
     --threads 8 --connections 3 --concurrency 64 --rate 4000 --request-timeout 60
+    --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
+    scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
+  - >-
+    latte run --tag latte-deletes -f deletes -d 1440m
+    --threads 2 --connections 3 --concurrency 16 --rate 300 --request-timeout 60
     --retry-interval '2s,10s' --sampling 5s -P device_count=540000000 -P print_applied_func_names=2
     scylla-qa-internal/custom_s1/workload1/latte/custom_s1_workload1.rn
