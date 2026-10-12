@@ -125,9 +125,10 @@ append_scylla_yaml:
 nemesis_class_name: 'FixedOrderMonkey'
 nemesis_selector: 'MgmtRepair, GracefulStopTerminateAndReplaceMonkey'
 nemesis_interval: 10
-# Customer gap: 9600 (2h40m). 20 minutes is enough for the survivors to compact a ~12 GB dataset
-# under load and purge the repaired tombstones at different paces.
-nemesis_dead_node_delay: 1200
+# Customer gap: 9600 (2h40m). Ten minutes under ~25k writes/s gives the survivors a few flushes
+# and small-tier ICS compactions to purge repaired tombstones at different paces; raise it, or add
+# MajorCompactionMonkey before the replace, if the rebuild repair keeps finding no differences.
+nemesis_dead_node_delay: 600
 # The scenario starts right away: the first repair lands inside the ~20 minute populate.
 nemesis_during_prepare: true
 nemesis_filter_seeds: false
