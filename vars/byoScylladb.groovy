@@ -75,6 +75,10 @@ def call(Map params, boolean build_image){
     } catch(Exception) {
         copyAmiToRegions = params.region
     }
+    // The BYO job loads its own pipeline code from RELENG_REPO/RELENG_BRANCH, so a patched
+    // scylla-pkg fork can be used for the build without touching the Jenkins job.
+    def relengRepo = params.byo_releng_repo ?: "git@github.com:scylladb/${params.byo_default_product}-pkg.git"
+    def relengBranch = params.byo_releng_branch ?: params.byo_default_branch
     byoParameterList = [
         string(name: 'DEFAULT_BRANCH', value: params.byo_default_branch),
         string(name: 'SCYLLA_REPO', value: "git@github.com:scylladb/${params.byo_default_product}.git"),
@@ -85,8 +89,8 @@ def call(Map params, boolean build_image){
         string(name: 'MACHINE_IMAGE_REPO',
                value: "git@github.com:scylladb/${params.byo_default_product}-machine-image.git"),
         string(name: 'MACHINE_IMAGE_BRANCH', value: params.byo_default_branch),
-        string(name: 'RELENG_REPO', value: "git@github.com:scylladb/${params.byo_default_product}-pkg.git"),
-        string(name: 'RELENG_BRANCH', value: params.byo_default_branch),
+        string(name: 'RELENG_REPO', value: relengRepo),
+        string(name: 'RELENG_BRANCH', value: relengBranch),
         //
         string(name: 'BUILD_MODE', value: 'release'),
         booleanParam(name: 'TEST_DEBUG_INFO', value: false),

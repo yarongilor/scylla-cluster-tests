@@ -309,6 +309,15 @@ def call(Map pipelineParams) {
                        'Build both x86_64 and ARM, not only the architecture the test needs (detected from the DB instance type). ' +
                        'Useful for reusing BYO artifacts across multiple test runs. ARM images are built only for AWS and Azure.'),
                    name: 'byo_build_both_arch')
+            string(defaultValue: '',
+                   description: (
+                       'scylla-pkg repo the BYO job runs its pipeline from (RELENG_REPO). Empty uses ' +
+                       'git@github.com:scylladb/PRODUCT-pkg.git. Set it to a fork to run the BYO job with a patched pipeline.'),
+                   name: 'byo_releng_repo')
+            string(defaultValue: '',
+                   description: (
+                       'Branch of "byo_releng_repo" (RELENG_BRANCH). Empty uses "byo_default_branch".'),
+                   name: 'byo_releng_branch')
 	 }
         options {
             timestamps()
