@@ -38,6 +38,12 @@ nemesis_during_prepare: false
 
 user_prefix: 'longevity-auto-repair-scopes-4h'
 
+# Debug only, not for merge: keyserver.ubuntu.com is degraded and the node setup fails when any of the
+# 6 default keys can't be fetched. Fetch only the key that signs the Scylla Manager 3.12 repo, by its
+# full fingerprint
+scylla_apt_keys:
+  - '6C6ECC84F42AF147BD2A65AEC503C686B007F39E'  # ScyllaDB Package Signing Key 2026 (RSA)
+
 # The narrowest scope that stores a value wins:
 #   ks_auto.t          follows the cluster value: auto repair every 15 minutes
 #   ks_manual.t        keyspace scope false: no auto repair
