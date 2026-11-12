@@ -1,0 +1,16 @@
+#!groovy
+
+// trick from https://github.com/jenkinsci/workflow-cps-global-lib-plugin/pull/43
+def lib = library identifier: 'sct@snapshot', retriever: legacySCM(scm)
+
+// new_scylla_repo is a job parameter: the release with CQL cluster config, e.g.
+// https://downloads.scylladb.com/deb/debian/scylla-2026.4.list
+rollingUpgradePipeline(
+    backend: 'aws',
+    region: 'eu-west-1',
+    base_versions: '2026.3',
+    linux_distro: 'ubuntu-noble',
+    use_preinstalled_scylla: true,
+    test_name: 'upgrade_test.UpgradeTest.test_auto_repair_yaml_to_cluster_config_migration',
+    test_config: 'test-cases/features/auto-repair/upgrade-auto-repair-yaml-to-cluster-config.yaml',
+)

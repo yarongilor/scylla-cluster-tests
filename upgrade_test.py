@@ -33,6 +33,7 @@ from sdcm import argus_results
 from sdcm import wait
 from sdcm.cluster import BaseNode
 from sdcm.utils.apt import apt_cmd
+from sdcm.utils.cluster_config import set_cluster_config
 from sdcm.utils.issues import SkipPerIssues
 from sdcm.fill_db_data import FillDatabaseData
 from sdcm.sct_events import Severity
@@ -1185,6 +1186,57 @@ class UpgradeTest(FillDatabaseData, loader_utils.LoaderUtilsMixin):
             self.verify_stress_thread(stress_thread_pool)
 
         self._run_stress_workload("stress_after_cluster_upgrade", wait_for_finish=True)
+
+    def test_auto_repair_yaml_to_cluster_config_migration(self):
+        """Move the auto repair settings of the base release from scylla.yaml to CQL cluster config.
+
+        The base release runs auto repair from the deprecated scylla.yaml options that `append_scylla_yaml`
+        sets. After the rolling upgrade, the documented migration sets the same values with ALTER CLUSTER,
+        then removes the yaml options from every node with a rolling restart. Each phase lasts one repair
+        period. Auto repair continuity is checked offline from the
+        "Finished tablet repair ... request_type=auto_repair" DB log lines.
+
+        https://docs.scylladb.com/manual/master/features/automatic-repair.html#deprecated-scylla-yaml-options
+        """
+        yaml_options = self.params.get("append_scylla_yaml")
+        repair_period = yaml_options["auto_repair_threshold_default_in_seconds"]
+        cluster_config = {
+            "auto_repair_enabled": yaml_options["auto_repair_enabled_default"],
+            "auto_repair_threshold_in_seconds": repair_period,
+        }
+        step = itertools_count(start=1)
+
+        self._pre_create_keyspace()
+        self.actions_log.info(f"Step {next(step)} - Auto repair from scylla.yaml on the base version")
+        time.sleep(repair_period)
+
+        for node in self.db_cluster.nodes:
+            self._start_and_wait_for_node_upgrade(node, step=next(step))
+        self.actions_log.info(f"Step {next(step)} - Auto repair from scylla.yaml after the upgrade")
+        time.sleep(repair_period)
+
+        self.actions_log.info(f"Step {next(step)} - Set the auto repair settings with ALTER CLUSTER")
+        for option, value in cluster_config.items():
+            # ALTER CLUSTER is rejected until the cluster enables the feature, after the last node is upgraded
+            wait_for(
+                set_cluster_config,
+                step=10,
+                timeout=300,
+                text=f"Setting {option} at CLUSTER scope",
+                db_cluster=self.db_cluster,
+                option=option,
+                value=value,
+            )
+        time.sleep(repair_period)
+
+        self.actions_log.info(f"Step {next(step)} - Remove the auto repair options from scylla.yaml and restart")
+        for node in self.db_cluster.nodes:
+            with node.remote_scylla_yaml() as scylla_yaml:
+                scylla_yaml.auto_repair_enabled_default = None
+                scylla_yaml.auto_repair_threshold_default_in_seconds = None
+        self.db_cluster.restart_scylla()
+        self.actions_log.info(f"Step {next(step)} - Auto repair from cluster config only")
+        time.sleep(repair_period)
 
     def test_cluster_upgrade_latency_regression(self):
         """Check latency regression after a ScyllaDB cluster upgrade using latte stress commands.
