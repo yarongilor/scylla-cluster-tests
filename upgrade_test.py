@@ -1193,8 +1193,8 @@ class UpgradeTest(FillDatabaseData, loader_utils.LoaderUtilsMixin):
         The base release runs auto repair from the deprecated scylla.yaml options that `append_scylla_yaml`
         sets. After the rolling upgrade, the documented migration sets the same values with ALTER CLUSTER,
         then removes the yaml options from every node with a rolling restart. Each phase lasts one repair
-        period. Auto repair continuity is checked offline from the
-        "Finished tablet repair ... request_type=auto_repair" DB log lines.
+        period, under the `stress_during_entire_upgrade` load. Auto repair continuity is checked offline
+        from the "Finished tablet repair ... request_type=auto_repair" DB log lines.
 
         https://docs.scylladb.com/manual/master/features/automatic-repair.html#deprecated-scylla-yaml-options
         """
@@ -1207,6 +1207,8 @@ class UpgradeTest(FillDatabaseData, loader_utils.LoaderUtilsMixin):
         step = itertools_count(start=1)
 
         self._pre_create_keyspace()
+        self._run_stress_workload("stress_before_upgrade", wait_for_finish=True)
+        stress_thread_pools = self._run_stress_workload("stress_during_entire_upgrade")
         self.actions_log.info(f"Step {next(step)} - Auto repair from scylla.yaml on the base version")
         time.sleep(repair_period)
 
@@ -1237,6 +1239,10 @@ class UpgradeTest(FillDatabaseData, loader_utils.LoaderUtilsMixin):
         self.db_cluster.restart_scylla()
         self.actions_log.info(f"Step {next(step)} - Auto repair from cluster config only")
         time.sleep(repair_period)
+
+        self.actions_log.info("Waiting for stress_during_entire_upgrade to finish")
+        for stress_thread_pool in stress_thread_pools:
+            self.verify_stress_thread(stress_thread_pool)
 
     def test_cluster_upgrade_latency_regression(self):
         """Check latency regression after a ScyllaDB cluster upgrade using latte stress commands.
