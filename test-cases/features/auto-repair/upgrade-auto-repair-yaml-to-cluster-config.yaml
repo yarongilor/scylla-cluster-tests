@@ -33,6 +33,9 @@ sizing_db:
 
 user_prefix: 'upgrade-auto-repair-yaml-migration'
 
+# The node upgrade truncates and checks tables of truncate_ks, which only the generic upgrade tests create
+enable_truncate_checks_on_node_upgrade: false
+
 # Auto repair of the base release, from the deprecated scylla.yaml options. The test sets the same values with
 # ALTER CLUSTER after the upgrade, and waits one repair period in each phase
 append_scylla_yaml:
