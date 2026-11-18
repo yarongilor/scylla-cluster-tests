@@ -50,7 +50,7 @@ More arguments to append to scylla_setup command line
 
 More configuration to append to /etc/scylla/scylla.yaml
 
-**default:** {'rf_rack_valid_keyspaces': True}
+**default:** {'rf_rack_valid_keyspaces': True, 'auto_snapshot_ttl': 30}
 
 **type:** dict | str | pydantic.main.BaseModel
 

@@ -18,6 +18,7 @@
   "experimental_features": [],
   "prometheus_address": "::",
   "rf_rack_valid_keyspaces": true,
+  "auto_snapshot_ttl": 30,
   "enable_ipv6_dns_lookup": true,
   "alternator_enforce_authorization": false,
   "auto_bootstrap": true,

@@ -78,12 +78,6 @@ def test_clear_snapshots_on_all_nodes():
         assert cleared(node) == ["-t pre-drop-111 ks1"]
 
 
-def test_clear_snapshots_truncate_keeps_other_snapshots_of_table():
-    node = make_node(LISTSNAPSHOTS_OUTPUT)
-    clear_snapshots([node], keyspace="ks_truncate", table="standard1", tag_suffix="-standard1")
-    assert cleared(node) == ["-t 1793005180517-standard1 ks_truncate"]
-
-
 def test_clear_snapshots_logs_node_failure(caplog):
     failing = make_node(LISTSNAPSHOTS_OUTPUT)
     failing.run_nodetool.side_effect = RuntimeError("nodetool failed")

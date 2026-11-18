@@ -27,6 +27,8 @@ scylla_setup_no_raid: false
 append_scylla_node_exporter_args: ''
 append_scylla_yaml:
   rf_rack_valid_keyspaces: true
+  # Scylla deletes the DROP/TRUNCATE auto-snapshots after 30s, so they don't fill the disks
+  auto_snapshot_ttl: 30
 experimental_features: []
 
 db_nodes_shards_selection: 'default'
