@@ -210,19 +210,6 @@ class NoCorruptRepairMonkey(NemesisBaseClass):
         self.runner.disrupt_no_corrupt_repair()
 
 
-class MajorCompactionMonkey(NemesisBaseClass):
-    """Run nodetool compact on the target node."""
-
-    disruptive = False
-    kubernetes = True
-    xcloud = True
-    limited = True
-
-    def disrupt(self):
-        """Run major compaction."""
-        self.runner.disrupt_major_compaction()
-
-
 @target_all_nodes
 class RefreshMonkey(NemesisBaseClass):
     """Upload a small pre-built sstable to every data node and load it with nodetool refresh, verifying resharding."""
@@ -612,18 +599,6 @@ class RepairStreamingErrMonkey(NemesisBaseClass):
         self.runner.disrupt_repair_streaming_err()
 
 
-@target_data_nodes
-class CorruptThenScrubMonkey(NemesisBaseClass):
-    """Run nodetool scrub --skip-corrupted on every test keyspace of the target node and clear the snapshots."""
-
-    disruptive = False
-    supports_high_disk_utilization = False  # Failed for: https://github.com/scylladb/scylladb/issues/22088
-
-    def disrupt(self):
-        """Corrupt data, then scrub."""
-        self.runner.disrupt_corrupt_then_scrub()
-
-
 @target_all_nodes
 class MemoryStressMonkey(NemesisBaseClass):
     """Run stress-ng on the target node to allocate 90% of its memory and push Scylla into swapping."""
@@ -634,47 +609,6 @@ class MemoryStressMonkey(NemesisBaseClass):
     def disrupt(self):
         """Run a memory stress on the node."""
         self.runner.disrupt_memory_stress()
-
-
-class StartStopMajorCompaction(NemesisBaseClass):
-    """Start a major compaction on a non-system table and stop it with nodetool stop COMPACTION once it is logged."""
-
-    disruptive = False
-
-    def disrupt(self):
-        """Start and stop a major compaction."""
-        self.runner.disrupt_start_stop_major_compaction()
-
-
-class StartStopScrubCompaction(NemesisBaseClass):
-    """Start a scrub compaction on a non-system table and stop it with nodetool stop SCRUB once it is logged."""
-
-    disruptive = False
-
-    def disrupt(self):
-        """Start and stop a scrub compaction."""
-        self.runner.disrupt_start_stop_scrub_compaction()
-
-
-class StartStopCleanupCompaction(NemesisBaseClass):
-    """Start a cleanup compaction on a non-system table and stop it with nodetool stop CLEANUP once it is logged."""
-
-    disruptive = False
-
-    def disrupt(self):
-        """Start and stop a cleanup compaction."""
-        self.runner.disrupt_start_stop_cleanup_compaction()
-
-
-class StartStopValidationCompaction(NemesisBaseClass):
-    """Start a validation compaction on a non-system table and stop it with nodetool stop SCRUB once it is logged."""
-
-    disruptive = False
-    supports_high_disk_utilization = False  # Failed for: https://github.com/scylladb/scylladb/issues/22088
-
-    def disrupt(self):
-        """Start and stop a validation compaction."""
-        self.runner.disrupt_start_stop_validation_compaction()
 
 
 class ToggleAuditNemesisSyslog(NemesisBaseClass):

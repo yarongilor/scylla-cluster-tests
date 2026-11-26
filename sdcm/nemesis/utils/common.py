@@ -11,6 +11,7 @@ from sdcm.sct_events.group_common_events import (
     decorate_with_context,
     suppress_expected_unavailability_errors,
 )
+from sdcm.utils.adaptive_timeouts import Operations, adaptive_timeout
 from sdcm.utils.context_managers import DbNodeLogger
 
 LOGGER = logging.getLogger(__name__)
@@ -141,3 +142,20 @@ def destroy_data_and_restart_scylla(
     finally:
         with runner.action_log_scope(f"Start Scylla on {runner.target_node.name} node"):
             runner.target_node.start_scylla_server(verify_up=True, verify_down=False)
+
+
+def major_compaction(runner):
+    """Run a major compaction on the target node.
+
+    This is a cross-group utility used by the compaction and the
+    disable-binary-gossip nemesis.  It was originally a ``NemesisRunner`` method.
+
+    Args:
+        runner: A ``NemesisRunner`` instance (provides ``target_node`` and
+            ``action_log_scope``).
+    """
+    with (
+        adaptive_timeout(Operations.MAJOR_COMPACT, runner.target_node, timeout=8000),
+        runner.action_log_scope(f"Major compaction on {runner.target_node.name} node"),
+    ):
+        runner.target_node.run_nodetool("compact")

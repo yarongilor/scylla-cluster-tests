@@ -70,7 +70,6 @@ from sdcm.exceptions import (
     QuotaConfigurationFailure,
     UnsupportedNemesis,
     WaitForTimeoutError,
-    WatcherCallableException,
 )
 from sdcm.log import SDCMAdapter
 from sdcm.logcollector import save_kallsyms_map
@@ -79,6 +78,7 @@ from sdcm.nemesis.registry import NemesisRegistry
 from sdcm.nemesis.utils import NEMESIS_TARGET_POOLS, DefaultValue, node_operations, unique_disruption_name
 from sdcm.nemesis.utils.common import (
     destroy_data_and_restart_scylla,
+    major_compaction,
     nemesis_stress_failure_handler,
     prepare_test_table,
 )
@@ -104,7 +104,6 @@ from sdcm.sct_events.group_common_events import (
     ignore_raft_applier_gate_closed_errors,
     ignore_raft_topology_cmd_failing,
     ignore_reactor_stall_errors,
-    ignore_scrub_invalid_errors,
     suppress_expected_unavailability_errors,
 )
 from sdcm.sct_events.loaders import CassandraStressLogEvent
@@ -122,7 +121,6 @@ from sdcm.utils.common import (
     reach_enospc_on_node,
     update_authenticator,
 )
-from sdcm.utils.compaction_ops import CompactionOps, StartStopCompactionArgs
 from sdcm.utils.context_managers import DbNodeLogger, nodetool_context
 from sdcm.utils.decorators import (
     critical_on_capacity_issues,
@@ -146,7 +144,7 @@ from sdcm.utils.k8s.chaos_mesh import (
 )
 from sdcm.utils.ldap import SASLAUTHD_AUTHENTICATOR, LdapServerType
 from sdcm.utils.node import build_node_api_command
-from sdcm.utils.parallel_object import ParallelObject, ParallelObjectResult
+from sdcm.utils.parallel_object import ParallelObject
 from sdcm.utils.quota import (
     configure_quota_on_node_for_scylla_user_context,
     enable_quota_on_node,
@@ -511,247 +509,6 @@ class NemesisRunner:
             self.target_node.stop_scylla_server(verify_up=False, verify_down=True)
         with self.action_log_scope(f"Start Scylla on  {self.target_node.name}"):
             self.target_node.start_scylla_server(verify_up=True, verify_down=False)
-
-    @staticmethod
-    def _handle_start_stop_compaction_results(
-        trigger_and_watcher_futures: dict[str, ParallelObjectResult], allow_trigger_exceptions: bool = True
-    ):
-        """
-        Handle the results from running in parallel a compaction
-        trigger and watcher / stop-compaction functions.
-        """
-        if trigger_and_watcher_futures["trigger"].exc:
-            LOGGER.warning("Trigger function failed with:\n%s", trigger_and_watcher_futures["trigger"].exc)
-
-        if trigger_and_watcher_futures["watcher"].exc:
-            raise WatcherCallableException from trigger_and_watcher_futures["watcher"].exc
-        return trigger_and_watcher_futures
-
-    def _get_random_non_system_ks_cf(self, filter_empty_tables: bool = True) -> tuple[str, str] | None:
-        """
-        Get a random (ks, cf) from the target node.
-        The get_non_system_ks_cf_list returns a list of strings
-        in the format 'keyspace_name.cf_name' so we need to
-        call split() on the output to get keyspace_name and
-        cf_name separately.
-        """
-        if ks_cf_list := self.cluster.get_non_system_ks_cf_list(
-            db_node=self.target_node, filter_empty_tables=filter_empty_tables
-        ):
-            return self.random.choice(ks_cf_list).split(".")
-        else:
-            return None, None
-
-    def _prepare_start_stop_compaction(self) -> StartStopCompactionArgs:
-        ks, cf = self._get_random_non_system_ks_cf()
-
-        if not ks or not cf:
-            raise UnsupportedNemesis("No non-system keyspaces to run the nemesis with. Skipping.")
-
-        return StartStopCompactionArgs(
-            keyspace=ks,
-            columnfamily=cf,
-            timeout=360,
-            target_node=self.target_node,
-            compaction_ops=CompactionOps(cluster=self.cluster, node=self.target_node),
-        )
-
-    def disrupt_start_stop_major_compaction(self):
-        """
-        Start and stop a major compaction on a non-system columnfamily.
-
-        1. Query the target node for a non-system cf. If no cf is
-        found, skip the nemesis.
-
-        In parallel:
-        2.1 Start a major compaction using a REST API call (via a Remoter
-        curl call on the target node).
-        2.2. Watch for the major compaction to show up in logs.
-        3. Stop the running major compaction by issuing a <nodetool stop
-        COMPACTION> command after the watcher picks up the compaction
-        started.
-
-        The REST API call starting the compaction may not return, since
-        it returns on completing the compaction task (which we attempt
-        to interrupt). We ignore such timeouts and validate only the
-        success of the command in (4).
-        """
-        compaction_args = self._prepare_start_stop_compaction()
-        trigger_func = partial(
-            compaction_args.compaction_ops.trigger_major_compaction,
-            keyspace=compaction_args.keyspace,
-            cf=compaction_args.columnfamily,
-        )
-        watch_func = partial(
-            compaction_args.compaction_ops.stop_on_user_compaction_logged,
-            node=compaction_args.target_node,
-            mark=compaction_args.target_node.mark_log(),
-            watch_for="User initiated compaction started on behalf of",
-            timeout=compaction_args.timeout,
-            stop_func=compaction_args.compaction_ops.stop_major_compaction,
-        )
-        ks_cf = f"{compaction_args.keyspace}.{compaction_args.columnfamily}"
-        with (
-            DbNodeLogger(
-                self.cluster.nodes,
-                "start and stop major compaction",
-                target_node=self.target_node,
-                additional_info=f"on {ks_cf}",
-            ),
-            self.action_log_scope(f"start and stop major compaction on {ks_cf} table on {self.target_node.name} node"),
-        ):
-            results = ParallelObject.run_named_tasks_in_parallel(
-                tasks={"trigger": trigger_func, "watcher": watch_func},
-                timeout=compaction_args.timeout + 5,
-                ignore_exceptions=True,
-            )
-
-        self._handle_start_stop_compaction_results(trigger_and_watcher_futures=results, allow_trigger_exceptions=True)
-
-    def disrupt_start_stop_scrub_compaction(self):
-        """
-        Start and stop a scrub compaction on a non-system columnfamily.
-
-        1. Query the target node for a non-system cf. If no cf is found,
-        skip the nemesis.
-
-        In parallel:
-        2.1 Start a scrub compaction using a REST API call (via a Remoter
-        curl call on the target node).
-        2.2. Watch for the scrub compaction to show up in logs.
-        3. Stop the running scrub compaction by issuing a <nodetool stop
-        SCRUB> command after the watcher picks up the compaction started.
-
-        The REST API call starting the compaction may not return, since it
-        returns on completing the compaction task (which we attempt to
-        interrupt). We ignore such timeouts and validate only the success
-        of the command in (4).
-        """
-        compaction_args = self._prepare_start_stop_compaction()
-        trigger_func = partial(
-            compaction_args.compaction_ops.trigger_scrub_compaction,
-            keyspace=compaction_args.keyspace,
-            cf=compaction_args.columnfamily,
-        )
-        watch_func = partial(
-            compaction_args.compaction_ops.stop_on_user_compaction_logged,
-            node=compaction_args.target_node,
-            mark=compaction_args.target_node.mark_log(),
-            watch_for="Scrubbing",
-            timeout=compaction_args.timeout,
-            stop_func=compaction_args.compaction_ops.stop_scrub_compaction,
-        )
-        ks_cf = f"{compaction_args.keyspace}.{compaction_args.columnfamily}"
-        with (
-            DbNodeLogger(self.cluster.nodes, "start and stop scrub compaction", target_node=self.target_node),
-            self.action_log_scope(f"start and stop scrub compaction on {ks_cf} table on {self.target_node.name} node"),
-        ):
-            results = ParallelObject.run_named_tasks_in_parallel(
-                tasks={"trigger": trigger_func, "watcher": watch_func},
-                timeout=compaction_args.timeout + 5,
-                ignore_exceptions=True,
-            )
-
-        self._handle_start_stop_compaction_results(trigger_and_watcher_futures=results, allow_trigger_exceptions=True)
-
-        with self.action_log_scope(f"Clear {ks_cf} pre-scrub snapshots on {self.target_node.name} node"):
-            clear_snapshots([self.target_node], "pre-scrub-", compaction_args.keyspace, compaction_args.columnfamily)
-
-    def disrupt_start_stop_cleanup_compaction(self):
-        """
-        Start and stop a cleanup compaction on a non-system columnfamily.
-
-        1. Query the target node for a non-system cf. If no cf is found,
-        skip the nemesis.
-
-        In parallel:
-        2.1 Start a cleanup compaction using a REST API call (via a Remoter
-        curl call on the target node).
-        2.2. Watch for the cleanup compaction to show up in logs.
-        3. Stop the running cleanup compaction by issuing a <nodetool stop
-        CLEANUP> command after the watcher picks up the compaction started.
-
-        The REST API call starting the compaction may not return, since it
-        returns on  completing the compaction task (which we attempt to
-        interrupt). We ignore such timeouts and validate only the success
-        of the command in (4).
-        """
-        compaction_args = self._prepare_start_stop_compaction()
-        trigger_func = partial(compaction_args.compaction_ops.trigger_cleanup_compaction, timeout=600)
-        watch_func = partial(
-            compaction_args.compaction_ops.stop_on_user_compaction_logged,
-            node=compaction_args.target_node,
-            mark=compaction_args.target_node.mark_log(),
-            timeout=compaction_args.timeout,
-            watch_for="Cleaning",
-            stop_func=compaction_args.compaction_ops.stop_cleanup_compaction,
-        )
-
-        ks_cf = f"{compaction_args.keyspace}.{compaction_args.columnfamily}"
-        with (
-            DbNodeLogger(self.cluster.nodes, "start and stop cleanup compaction", target_node=self.target_node),
-            self.action_log_scope(
-                f"start and stop cleanup compaction on {ks_cf} table on {self.target_node.name} node"
-            ),
-        ):
-            results = ParallelObject.run_named_tasks_in_parallel(
-                tasks={"trigger": trigger_func, "watcher": watch_func},
-                timeout=compaction_args.timeout + 5,
-                ignore_exceptions=True,
-            )
-
-        self._handle_start_stop_compaction_results(trigger_and_watcher_futures=results, allow_trigger_exceptions=True)
-
-    def disrupt_start_stop_validation_compaction(self):
-        """
-        Start and stop a validation compaction on a non-system columnfamily.
-
-        1. Query the target node for a non-system cf. If no cf is found,
-        skip the nemesis.
-
-        In parallel:
-        2.1 Start a validation compaction using a REST API call (via a
-        Remoter curl call on the target node).
-        2.2. Watch for the validation compaction to show up in logs.
-        3. Stop the running validation compaction by issuing a <nodetool
-        stop SCRUB> command after the watcher picks up the compaction
-        started.
-
-        The REST API call starting the compaction may not return, since
-        it returns on completing the compaction task (which we attempt
-        to interrupt). We ignore such timeouts and validate only the
-        success of the command in (4).
-        """
-        compaction_args = self._prepare_start_stop_compaction()
-        trigger_func = partial(
-            compaction_args.compaction_ops.trigger_validation_compaction,
-            keyspace=compaction_args.keyspace,
-            cf=compaction_args.columnfamily,
-        )
-        watch_func = partial(
-            compaction_args.compaction_ops.stop_on_user_compaction_logged,
-            node=compaction_args.target_node,
-            mark=compaction_args.target_node.mark_log(),
-            watch_for="Scrubbing ",
-            timeout=compaction_args.timeout,
-            stop_func=compaction_args.compaction_ops.stop_validation_compaction,
-        )
-
-        ks_cf = f"{compaction_args.keyspace}.{compaction_args.columnfamily}"
-        with (
-            DbNodeLogger(self.cluster.nodes, "start and stop validation compaction", target_node=self.target_node),
-            self.action_log_scope(f"start and stop validation compaction on {ks_cf} on {self.target_node.name} node"),
-        ):
-            results = ParallelObject.run_named_tasks_in_parallel(
-                tasks={"trigger": trigger_func, "watcher": watch_func},
-                timeout=compaction_args.timeout + 5,
-                ignore_exceptions=True,
-            )
-
-        self._handle_start_stop_compaction_results(trigger_and_watcher_futures=results, allow_trigger_exceptions=True)
-
-        with self.action_log_scope(f"Clear {ks_cf} pre-scrub snapshots on {self.target_node.name} node"):
-            clear_snapshots([self.target_node], "pre-scrub-", compaction_args.keyspace, compaction_args.columnfamily)
 
     # This nemesis should be run with "private" ip_ssh_connections till the issue #665 is not fixed
 
@@ -1621,16 +1378,6 @@ class NemesisRunner:
                         )
             finally:
                 thread.result()
-
-    def _major_compaction(self):
-        with (
-            adaptive_timeout(Operations.MAJOR_COMPACT, self.target_node, timeout=8000),
-            self.action_log_scope(f"Major compaction on {self.target_node.name} node"),
-        ):
-            self.target_node.run_nodetool("compact")
-
-    def disrupt_major_compaction(self):
-        self._major_compaction()
 
     def disrupt_load_and_stream(self):
         # Checking the columns number of keyspace_refresh.standard1
@@ -3055,25 +2802,6 @@ class NemesisRunner:
             self.target_node.remoter.run(f"sudo dd if=/dev/urandom of={sstable_file} count=1024")
             self.log.debug(f"File {sstable_file} was corrupted by dd")
 
-    def disrupt_corrupt_then_scrub(self):
-        """
-        Try to rebuild the sstables of all test keyspaces by scrub, the corrupted partitions
-        will be skipped.
-        """
-        self.log.debug("Rebuild sstables by scrub with `--skip-corrupted`, corrupted partitions will be skipped.")
-        test_keyspaces = self.cluster.get_test_keyspaces()
-        with (
-            ignore_scrub_invalid_errors(),
-            adaptive_timeout(Operations.SCRUB, self.target_node, timeout=HOUR_IN_SEC * 48),
-        ):
-            for ks in test_keyspaces:
-                with self.action_log_scope(f"Scrub {ks} keyspace on {self.target_node.name} node"):
-                    self.target_node.run_nodetool("scrub", args=f"--skip-corrupted {ks}")
-
-        for ks in test_keyspaces:
-            with self.action_log_scope(f"Clear {ks} pre-scrub snapshots on {self.target_node.name} node"):
-                clear_snapshots([self.target_node], "pre-scrub-", ks)
-
     @latency_calculator_decorator(legend="Adding new nodes")
     def add_new_nodes(self, count, rack=None, instance_type: str = None) -> list[BaseNode]:
         nodes = self._add_and_init_new_cluster_nodes(count, rack=rack, instance_type=instance_type)
@@ -3592,7 +3320,7 @@ class NemesisRunner:
                 self.target_node.run_nodetool("statusgossip")
                 self.target_node.run_nodetool("status", ignore_status=True)
                 time.sleep(30)
-                self._major_compaction()
+                major_compaction(self)
                 self.actions_log.info("Executing enablegossip")
             self.actions_log.info("Executing enablebinary")
         self.target_node.run_nodetool("statusgossip")
